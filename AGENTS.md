@@ -1,9 +1,10 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# missura — engineering rules (agents included)
 
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- TDD non-negotiable: failing test first, minimal code, green, commit. No code without a test.
+- TypeScript strict everywhere (`tsconfig.base.json`). `any` is a lint error. Explicit return types in packages/.
+- Files stay under 300 lines; one responsibility per file; packages never import from apps.
+- Security invariants (docs/SPEC.md §2): agents never mint missions; vendor credentials never cross into agent-facing code paths; deny by default — an uncataloged endpoint must fail closed, and a failing policy check must never fall through to PASS.
+- No new runtime dependencies without a written reason in the PR/commit body.
+- Never log secrets or full request/response bodies. Redact by default.
+- Verify before done: `pnpm lint && pnpm test && pnpm build` green locally is the definition of done for every task.
+- Commits: conventional (`feat:`, `fix:`, `chore:`), authored by the repo owner only.

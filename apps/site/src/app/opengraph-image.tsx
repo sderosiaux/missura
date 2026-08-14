@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og";
 
+// Required by `output: "export"` — the OG image is rendered once at build time.
+export const dynamic = "force-static";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt =

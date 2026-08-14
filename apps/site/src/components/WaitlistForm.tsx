@@ -5,24 +5,46 @@ import { useId, useState } from "react";
 
 type Status = "idle" | "loading" | "success" | "error";
 
+const ENDPOINT = process.env.NEXT_PUBLIC_WAITLIST_ENDPOINT;
+
 export function WaitlistForm({ id }: { id: string }) {
   const inputId = useId();
   const [status, setStatus] = useState<Status>("idle");
   const [email, setEmail] = useState("");
+
+  if (!ENDPOINT) {
+    return (
+      <p
+        className="label-mono max-w-xl border-t border-line pt-3 text-ink-soft"
+        id={id}
+      >
+        Waitlist opens soon — the endpoint isn&apos;t wired yet.
+      </p>
+    );
+  }
+
+  // Narrowed above; a local const keeps the type inside the closure.
+  const endpoint = ENDPOINT;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (status === "loading") return;
     setStatus("loading");
     const form = new FormData(e.currentTarget);
+    if ((form.get("company") as string)?.length > 0) {
+      setStatus("success"); // honeypot: pretend, submit nothing
+      return;
+    }
+    const email = (form.get("email") as string)?.trim() ?? "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      setStatus("error");
+      return;
+    }
     try {
-      const res = await fetch("/api/waitlist", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: form.get("email"),
-          company: form.get("company"),
-        }),
+        body: JSON.stringify({ email, source: "missura-landing" }),
       });
       setStatus(res.ok ? "success" : "error");
     } catch {

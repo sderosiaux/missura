@@ -1,33 +1,35 @@
-# Semantic Access Proxy — landing page
+# missura
 
-Waitlist landing page for Missura (Semantic Access Proxy) (see `../spec.md`).
-Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · no other runtime deps.
+Same API. Smaller permissions. For every agent.
 
-## Run
+A local proxy that speaks the vendor's API but only inside the boundary of a
+short-lived mission a human created — so an agent never holds the credential and
+never sees more than the task needs.
+
+## Status
+
+v0, in progress. Currently at **M0**: monorepo scaffolding, the mission token
+primitive, and the landing page. Nothing here is production-ready yet.
+
+## Layout
+
+```
+apps/site       Next.js static landing page (waitlist)
+packages/core   mission tokens and shared primitives — no app imports
+docs/SPEC.md    source of truth for the v0 implementation
+```
+
+## Dev
 
 ```bash
 pnpm install
-pnpm dev        # http://localhost:3000
-pnpm build      # production build
-pnpm start
+pnpm lint
+pnpm test
+pnpm build
 ```
 
-## Email capture
+All three green is the bar for any change.
 
-`POST /api/waitlist` validates server-side (format, honeypot `company` field, in-memory rate limit 5/min/IP) and forwards to a provider adapter (`src/lib/waitlist.ts`), tried in order:
+## License
 
-1. **Resend audience** — set `RESEND_API_KEY` + `RESEND_AUDIENCE_ID`
-2. **Generic webhook** — set `WAITLIST_WEBHOOK_URL` (receives `{email, source}`)
-3. **Dev fallback** — appends to `.waitlist/signups.jsonl` (non-production only)
-
-In production with no provider configured, the API returns 502 — it never fakes success. Copy `.env.example` to `.env.local` and fill one option.
-
-## Deploy (Vercel)
-
-- Import the repo, set root directory to `site/`.
-- Env vars: `NEXT_PUBLIC_SITE_URL` + one provider option above.
-- Note: the in-memory rate limit is per-instance; good enough for a waitlist page.
-
-## Design system
-
-See `../DESIGN.md` (brand thesis, tokens, typography, forbidden patterns) and `../artifacts/landing-page/` for positioning, direction studies, page plan, copy, and QA report.
+Apache-2.0 — see [LICENSE](LICENSE).
