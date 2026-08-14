@@ -1,7 +1,16 @@
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["apps/**", "**/dist/**", "**/node_modules/**"] },
+  {
+    ignores: [
+      "apps/**",
+      "**/dist/**",
+      "**/node_modules/**",
+      // Build/test config files live outside the packages' tsconfig `include`,
+      // so the typed project service cannot resolve them.
+      "**/*.config.ts",
+    ],
+  },
   {
     files: ["packages/**/*.ts"],
     extends: [
