@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export const LEARN_LINKS = [
+  { href: "/agent-governance", label: "Agent governance" },
   { href: "/mcp-gateway", label: "MCP gateways" },
   { href: "/non-human-identity", label: "Non-human identity" },
   { href: "/oauth-token-exchange-ai-agents", label: "Token exchange" },

@@ -91,7 +91,9 @@ function Problem() {
               all of them authenticate the old way: a long-lived token, scoped
               to the whole workspace, shared across missions and customers.
               One prompt injection, one bad filter — and the agent reads
-              everything the app could ever reach.
+              everything the app could ever reach. Security teams have a name
+              for where this ends: agent sprawl — credentials nobody tracks,
+              powering agents nobody owns.
             </p>
             <ul className="mt-8">
               {WAVE_FACTS.map((f) => (
@@ -441,10 +443,10 @@ function TrustModel() {
         image={<PassExpires className="mx-auto w-full max-w-[520px]" />}
       >
         <p className="max-w-[54ch] text-[0.95rem] text-ink-soft">
-          The pass carries its own end. It expires with the mission, you can
-          revoke it in seconds, and outside Missura it opens nothing — the
-          vendor API has never heard of it. Nothing to rotate, nothing worth
-          stealing.
+          The pass carries its own end. It expires with the mission, it has a
+          kill switch — revoked in seconds, mid-run — and outside Missura it
+          opens nothing: the vendor API has never heard of it. Nothing to
+          rotate, nothing worth stealing.
         </p>
         <ul className="mt-4 max-w-[54ch] font-mono text-[0.8rem]">
           <li className="rule flex justify-between gap-4 py-2 first:border-t-0">
@@ -545,7 +547,7 @@ function Standards() {
 const GUARANTEES = [
   {
     label: "No credentials in the agent",
-    body: "Vendor secrets are injected server-side, after the decision.",
+    body: "The agent holds a short-lived, ephemeral credential. Vendor secrets stay vaulted, injected server-side after the decision.",
   },
   {
     label: "Deny by default",
@@ -560,8 +562,12 @@ const GUARANTEES = [
     body: "Requests checked before the call, responses filtered after.",
   },
   {
-    label: "Full decision log",
-    body: "Every allow, narrow, and deny is recorded and explainable.",
+    label: "Provenance built in",
+    body: "Every allow, narrow, and deny lands in an audit trail — explainable to auditors and incident responders alike.",
+  },
+  {
+    label: "A kill switch on every mission",
+    body: "Revoke in seconds; access dies mid-run. Nothing to rotate afterward.",
   },
   {
     label: "Audit mode first",
