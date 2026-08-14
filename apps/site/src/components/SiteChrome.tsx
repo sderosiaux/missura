@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { asset } from "@/lib/asset";
 import Link from "next/link";
 
 export const LEARN_LINKS = [
@@ -17,7 +18,7 @@ export function Nav() {
           className="flex items-center gap-2.5 font-mono text-[0.95rem] font-semibold tracking-tight"
         >
           <Image
-            src="/logo-mark.png"
+            src={asset("/logo-mark.png")}
             alt=""
             aria-hidden
             width={30}
