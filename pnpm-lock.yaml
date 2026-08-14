@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/site:
     dependencies:
       next:
         specifier: 16.3.1
