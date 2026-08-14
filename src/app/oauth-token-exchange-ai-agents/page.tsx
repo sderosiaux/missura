@@ -70,17 +70,17 @@ export default function TokenExchangePage() {
           <div className="lg:col-span-5">
             <div className="artefact" aria-label="Mission token request and response">
               <div className="head">
-                <span>POST /v1/missions</span>
-                <span className="ml-auto">
-                  <span className="stamp stamp-allow">Mission token</span>
-                </span>
+                <span>POST /v1/token</span>
+                <span className="ml-auto text-[#86d4b2]">● ephemeral</span>
               </div>
               <pre>
                 <span className="code-line">{"{"}</span>
-                <span className="code-line">  &quot;agent_id&quot;: &quot;support-investigator&quot;,</span>
-                <span className="code-line">  &quot;template&quot;: &quot;customer-support-read&quot;,</span>
-                <span className="code-line">  &quot;business_scope&quot;: {"{ \"customer\": \"acme\" }"},</span>
-                <span className="code-line">  &quot;expires_in&quot;: 1800</span>
+                <span className="code-line">  &quot;grant_type&quot;: &quot;client_credentials&quot;,</span>
+                <span className="code-line">  &quot;authorization_details&quot;: [{"{"}   <span className="code-dim">{"//"} RFC 9396</span></span>
+                <span className="code-line">    &quot;type&quot;: &quot;mission&quot;,</span>
+                <span className="code-line">    &quot;scope&quot;: {"{ \"customer\": \"acme\" }"},</span>
+                <span className="code-line">    &quot;ttl&quot;: 1800</span>
+                <span className="code-line">  {"}"}]</span>
                 <span className="code-line">{"}"}</span>
                 <span className="code-line code-dim">─ response ───────────────────────</span>
                 <span className="code-line">{"{"}</span>
@@ -132,10 +132,10 @@ export default function TokenExchangePage() {
                 <p className="text-[0.95rem] text-ink-soft sm:col-span-6">
                   {r.body}
                 </p>
-                <p className="sm:col-span-2 sm:text-right">
-                  <span className={`stamp ${r.ok ? "stamp-allow" : "stamp-deny"}`}>
-                    {r.verdict}
-                  </span>
+                <p
+                  className={`label-mono sm:col-span-2 sm:text-right ${r.ok ? "text-bound" : "text-deny"}`}
+                >
+                  {r.verdict}
                 </p>
               </div>
             </li>

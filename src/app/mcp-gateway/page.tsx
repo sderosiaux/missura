@@ -55,9 +55,7 @@ export default function McpGatewayPage() {
             <div className="artefact" aria-label="Tool call passing a gateway but returning every customer">
               <div className="head">
                 <span>through an mcp gateway</span>
-                <span className="ml-auto">
-                  <span className="stamp stamp-deny">App-wide</span>
-                </span>
+                <span className="ml-auto text-[#e39287]">● app-wide</span>
               </div>
               <pre>
                 <span className="code-line code-dim">agent → gateway</span>
@@ -105,10 +103,10 @@ export default function McpGatewayPage() {
             <li key={r.q} className="rule first:border-t-0">
               <div className="grid grid-cols-1 gap-1 py-4 sm:grid-cols-12 sm:items-baseline">
                 <p className="font-semibold sm:col-span-4">{r.q}</p>
-                <p className="sm:col-span-3">
-                  <span className={`stamp ${r.ok ? "stamp-allow" : "stamp-deny"}`}>
-                    {r.a}
-                  </span>
+                <p
+                  className={`label-mono sm:col-span-3 ${r.ok ? "text-bound" : "text-deny"}`}
+                >
+                  {r.a}
                 </p>
                 <p className="text-[0.95rem] text-ink-soft sm:col-span-5">
                   {r.note}
@@ -146,9 +144,7 @@ export default function McpGatewayPage() {
             <div className="artefact" aria-label="Same tool call through Missura, limited to one customer">
               <div className="head">
                 <span>with missura underneath</span>
-                <span className="ml-auto">
-                  <span className="stamp stamp-allow">Acme only</span>
-                </span>
+                <span className="ml-auto text-[#86d4b2]">● acme only</span>
               </div>
               <pre>
                 <span className="code-line code-dim">mcp server → missura</span>

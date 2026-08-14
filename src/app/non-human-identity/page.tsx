@@ -33,7 +33,8 @@ export default function NhiPage() {
               buy a good answer today.
             </p>
             <p>
-              AI agents break the layer underneath. A service account for a
+              AI agents break the layer underneath — at the scale security teams
+              now call agent sprawl. A service account for a
               nightly sync job needs one static set of permissions forever. An
               agent&apos;s legitimate scope changes{" "}
               <strong className="text-ink">per task</strong>: this run
@@ -54,9 +55,7 @@ export default function NhiPage() {
             <div className="artefact" aria-label="Decision log entry showing identity known, permissions unbounded">
               <div className="head">
                 <span>the incident, with perfect NHI</span>
-                <span className="ml-auto">
-                  <span className="stamp stamp-deny">Audit ≠ control</span>
-                </span>
+                <span className="ml-auto text-[#e39287]">● audit ≠ control</span>
               </div>
               <pre>
                 <span className="code-line">{"{"}</span>
