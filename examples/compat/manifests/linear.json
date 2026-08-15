@@ -1,0 +1,73 @@
+{
+  "connector": "linear",
+  "manifestVersion": 1,
+  "observed": false,
+  "operations": [
+    {
+      "operation": "issue",
+      "request": "POST /graphql — query { issue(id: {issue}) { id identifier title } }",
+      "classification": "not_observed",
+      "narrowed": [
+        "nothing: an issue id says nothing about a customer before the call, so the answer is proven instead"
+      ],
+      "filtered": [
+        "an issue whose needs name no mission customer comes back as a GraphQL error, not as data"
+      ],
+      "refused": []
+    },
+    {
+      "operation": "issues",
+      "request": "POST /graphql — query { issues(first: 2, filter: {needs:{some:{customer:{id:{eq:{customer}}}}}}) { nodes { id identifier title createdAt url } pageInfo { hasNextPage } } }",
+      "classification": "not_observed",
+      "narrowed": [
+        "`needs.some.customer.id.eq` is ANDed into the filter — the agent's own filter is kept, never widened"
+      ],
+      "filtered": [
+        "`needs { nodes { customer { id } } }` is added to prove ownership and taken back before the agent sees it",
+        "issues whose needs name no mission customer are dropped"
+      ],
+      "refused": []
+    },
+    {
+      "operation": "refused.customers",
+      "request": "POST /graphql — query { customers(first: 1) { nodes { id } } }",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "`customers` is catalogued but cannot be narrowed: a filtered connection still carries the vendor's `pageInfo`, so an agent could count the workspace's customers without receiving one — `customer(id:)` is the narrowed read"
+      ]
+    },
+    {
+      "operation": "refused.introspection",
+      "request": "POST /graphql — query { __schema { types { name } } }",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "introspection fields are refused by name — the catalog serves data, not the schema"
+      ]
+    },
+    {
+      "operation": "refused.uncatalogued-root",
+      "request": "POST /graphql — query { teams { nodes { id } } }",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "`teams` is not in the Linear read catalog — deny by default"
+      ]
+    },
+    {
+      "operation": "viewer",
+      "request": "POST /graphql — query { viewer { id name } }",
+      "classification": "not_observed",
+      "narrowed": [
+        "nothing: the caller's own identity is metadata, owned by no customer"
+      ],
+      "filtered": [],
+      "refused": []
+    }
+  ],
+  "assumptions": []
+}

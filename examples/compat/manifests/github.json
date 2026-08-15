@@ -1,0 +1,120 @@
+{
+  "connector": "github",
+  "manifestVersion": 1,
+  "observed": false,
+  "operations": [
+    {
+      "operation": "refused.identity",
+      "request": "GET /user",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "the authenticated-user endpoint is not in the GitHub read catalog"
+      ]
+    },
+    {
+      "operation": "refused.uncatalogued",
+      "request": "GET /repos/{owner}/{repo}/collaborators",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "a route absent from the catalog fails closed — deny by default"
+      ]
+    },
+    {
+      "operation": "repos.contents.get",
+      "request": "GET /repos/{owner}/{repo}/contents",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.contents.get (encoded separator)",
+      "request": "GET /repos/{owner}/{repo}/contents/{dir}%2F{file}",
+      "classification": "not_observed",
+      "narrowed": [
+        "the path is DECODED before the scope check and re-encoded before it travels, so `..%2f..%2f` cannot leave the repository"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.get",
+      "request": "GET /repos/{owner}/{repo}",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.issues.comments.list",
+      "request": "GET /repos/{owner}/{repo}/issues/{number}/comments?per_page=2",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.issues.get",
+      "request": "GET /repos/{owner}/{repo}/issues/{number}",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.issues.list",
+      "request": "GET /repos/{owner}/{repo}/issues?per_page=2&state=all",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.pulls.get",
+      "request": "GET /repos/{owner}/{repo}/pulls/{number}",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "repos.pulls.list",
+      "request": "GET /repos/{owner}/{repo}/pulls?per_page=2&state=all",
+      "classification": "not_observed",
+      "narrowed": [
+        "refused unless {owner}/{repo} is a repository the mission covers"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
+      "operation": "search.issues",
+      "request": "GET /search/issues?q=repo:{owner}/{repo} is:issue&per_page=2",
+      "classification": "not_observed",
+      "narrowed": [
+        "the agent's own `repo:` / `org:` / `user:` qualifiers are replaced by the mission's repositories"
+      ],
+      "filtered": [
+        "results outside the mission's repositories are dropped, and the `total_count` beside them with it"
+      ],
+      "refused": []
+    }
+  ],
+  "assumptions": []
+}
