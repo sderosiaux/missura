@@ -135,8 +135,47 @@ function emitEvent(
   });
 }
 
+/** Reason for every request target that would leave the connector's origin. */
+const ESCAPE_REASON = "path escapes upstream origin";
+const CONNECTION_REASON = "connection not in mission";
+const ACTION_REASON = "action not allowed by mission";
+
+/** A claims denial keeps the catalog's operation/action so the log stays readable. */
+function claimsDenial(
+  verdict: CatalogDecision,
+  reason: string,
+): CatalogDecision {
+  return { ...verdict, decision: "deny", reason };
+}
+
+const UNKNOWN_VERDICT: CatalogDecision = {
+  decision: "deny",
+  operation: "unknown",
+  action: "unknown",
+  reason: "unknown",
+};
+
+/**
+ * Resolves the request target against the upstream base instead of
+ * concatenating it. A client may send an absolute (`https://evil.com/x`) or
+ * protocol-relative (`//evil.com/x`) request target; string concatenation
+ * would hand that origin the injected vendor credential. Anything that does
+ * not resolve back onto the upstream origin is refused.
+ */
+function upstreamTarget(deps: PipelineDeps, path: string): URL | undefined {
+  let url: URL;
+  try {
+    url = new URL(path, deps.upstreamBase);
+    if (url.origin !== new URL(deps.upstreamBase).origin) return undefined;
+  } catch {
+    return undefined;
+  }
+  return url;
+}
+
 async function forward(
   deps: PipelineDeps,
+  target: URL,
   req: IncomingShape,
   verdict: CatalogDecision,
   missionId: string,
@@ -144,7 +183,10 @@ async function forward(
 ): Promise<ResponseShape> {
   let response: Response;
   try {
-    response = await deps.fetchImpl(`${deps.upstreamBase}${req.path}`, {
+    // Origin + the normalized target only: never the raw client path, and
+    // never a fragment (which does not belong on the wire).
+    const url = `${target.origin}${target.pathname}${target.search}`;
+    response = await deps.fetchImpl(url, {
       method: req.method,
       headers: upstreamHeaders(deps, req),
       ...(hasBody(req.method) && req.body.length > 0 ? { body: req.body } : {}),
@@ -207,6 +249,18 @@ export async function handle(
       return jsonError(401, "missura_unauthorized");
     }
 
+    // The mission decides which connections it may touch. Separate ports are a
+    // convenience, not a boundary: a token minted for one connection must not
+    // work against another listener just because the agent aimed at its port.
+    if (!claims.connections.includes(deps.provider)) {
+      emitEvent(deps, {
+        decision: claimsDenial(UNKNOWN_VERDICT, CONNECTION_REASON),
+        missionId: claims.id,
+        startedAt,
+      });
+      return jsonError(403, "missura_denied", CONNECTION_REASON);
+    }
+
     const verdict = deps.decide({
       method: req.method,
       path: req.path,
@@ -217,7 +271,28 @@ export async function handle(
       return jsonError(403, "missura_denied", verdict.reason);
     }
 
-    return await forward(deps, req, verdict, claims.id, startedAt);
+    // The catalog says what the connector can serve; the mission says what
+    // this agent may do with it. An ALLOW the mission does not cover is a deny.
+    if (!claims.allow.includes(verdict.action)) {
+      emitEvent(deps, {
+        decision: claimsDenial(verdict, ACTION_REASON),
+        missionId: claims.id,
+        startedAt,
+      });
+      return jsonError(403, "missura_denied", ACTION_REASON);
+    }
+
+    const target = upstreamTarget(deps, req.path);
+    if (target === undefined) {
+      emitEvent(deps, {
+        decision: { ...verdict, decision: "deny", reason: ESCAPE_REASON },
+        missionId: claims.id,
+        startedAt,
+      });
+      return jsonError(403, "missura_denied", ESCAPE_REASON);
+    }
+
+    return await forward(deps, target, req, verdict, claims.id, startedAt);
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.
     return jsonError(500, "missura_internal");

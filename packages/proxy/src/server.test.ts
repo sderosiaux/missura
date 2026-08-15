@@ -6,7 +6,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import type { AddressInfo } from "node:net";
-import { signDevToken, type DecisionEvent } from "@missura/core";
+import {
+  signDevToken,
+  signMissionToken,
+  type DecisionEvent,
+} from "@missura/core";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createServers,
@@ -229,6 +233,30 @@ describe("proxy server — github listener", () => {
     expect(upstream?.received).toHaveLength(0);
   });
 
+  it("denies a token whose mission does not carry the github connection", async () => {
+    const { githubUrl } = await boot();
+    const linearOnly = signMissionToken(
+      {
+        id: "msn_linear_only",
+        purpose: "test",
+        scope: {},
+        connections: ["linear"],
+        allow: ["read", "search"],
+      },
+      { key: SIGNING_KEY, ttlSeconds: 60 },
+    );
+    const res = await fetch(`${githubUrl}/repos/octocat/hello-world`, {
+      headers: { authorization: `Bearer ${linearOnly}` },
+    });
+    const payload = (await res.json()) as {
+      error: { code: string; reason: string };
+    };
+
+    expect(res.status).toBe(403);
+    expect(payload.error.reason).toBe("connection not in mission");
+    expect(upstream?.received).toHaveLength(0);
+  });
+
   it("denies GET /user with 403", async () => {
     const { githubUrl } = await boot();
     const res = await fetch(`${githubUrl}/user`, {
@@ -256,6 +284,10 @@ describe("proxy server — limits and lifecycle", () => {
     expect(res.status).toBe(413);
     expect(payload.error.code).toBe("missura_request_too_large");
     expect(upstream?.received).toHaveLength(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.decision).toBe("deny");
+    expect(events[0]?.reason).toBe("request too large");
+    expect(events[0]?.provider).toBe("github");
   }, 30_000);
 
   it("logs one decision event per request", async () => {

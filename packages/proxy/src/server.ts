@@ -87,14 +87,34 @@ function send(
   res.end(body);
 }
 
+/**
+ * The cap is a policy decision like any other, so it lands in the audit log
+ * too — an oversized request that left no trace would be a blind spot.
+ */
+function emitTooLarge(deps: PipelineDeps, startedAt: number): void {
+  const now = deps.now?.() ?? Date.now();
+  deps.emit({
+    ts: new Date(now).toISOString(),
+    provider: deps.provider,
+    operation: "unknown",
+    action: "unknown",
+    decision: "deny",
+    reason: "request too large",
+    missionId: "unknown",
+    latencyMs: Math.max(0, now - startedAt),
+  });
+}
+
 function listener(
   deps: PipelineDeps,
 ): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
     void (async (): Promise<void> => {
+      const startedAt = deps.now?.() ?? Date.now();
       try {
         const body = await readBody(req);
         if (body === undefined) {
+          emitTooLarge(deps, startedAt);
           send(
             res,
             413,
@@ -171,8 +191,10 @@ function shutdown(server: Server): Promise<void> {
 
 /**
  * One listener per connector: an agent points a vendor SDK at a port and gets
- * that vendor's catalog, its credential and nothing else. Ports are separate
- * so a token for one connection can never be replayed against the other.
+ * that vendor's catalog, its credential and nothing else. Separate ports are
+ * an addressing convenience, not the boundary — a token aimed at the wrong
+ * port is refused by the pipeline's `claims.connections` check, which is what
+ * actually stops the replay.
  */
 export async function createServers(
   config: ProxyConfig,
