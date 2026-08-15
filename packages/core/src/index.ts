@@ -5,6 +5,7 @@ export * from "./events";
 export * from "./filter-plan";
 export * from "./keys";
 export * from "./missions";
+export * from "./parent-proof";
 export * from "./remediation";
 export * from "./remediation-envelope";
 export * from "./remediation-types";
