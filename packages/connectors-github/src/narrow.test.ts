@@ -98,3 +98,89 @@ describe("narrowGithub — defense in depth for non-catalog shapes", () => {
     expect(result.denyShape).toBe("github404");
   });
 });
+
+/**
+ * api.github.com decodes `%2F` as a path separator: a live
+ * `GET /repos/octokit/octokit.js/contents/src%2Findex.ts` answers 200 with
+ * `"path": "src/index.ts"`. `URL` does not — it normalizes `..` and `%2e%2e`
+ * but leaves `..%2f` untouched — so a decision taken on the raw segments and a
+ * vendor acting on the decoded ones can disagree about which repo is addressed.
+ *
+ * The decision is therefore taken on the fully decoded, dot-collapsed view of
+ * the path, while the path forwarded upstream stays the client's original:
+ * `src%2Findex.ts` keeps meaning exactly what GitHub says it means.
+ */
+describe("narrowGithub — encoded path separators", () => {
+  it("denies an encoded traversal out of a mission repo", () => {
+    const result = narrowGithub(
+      "/repos/acme-corp/product/..%2f..%2fglobex/secret",
+      SCOPE,
+    );
+    expect(result.decision).toBe("deny");
+    expect(result.denyShape).toBe("github404");
+    expect(result.reason).toContain("repo not in mission");
+  });
+
+  it("denies an encoded traversal under a cataloged contents path", () => {
+    const result = narrowGithub(
+      "/repos/acme-corp/product/contents/..%2F..%2F..%2Fglobex/secret",
+      SCOPE,
+    );
+    expect(result.decision).toBe("deny");
+    expect(result.denyShape).toBe("github404");
+  });
+
+  it("denies a backslash-encoded traversal (%5C, either case)", () => {
+    for (const path of [
+      "/repos/acme-corp/product/..%5c..%5cglobex/secret",
+      "/repos/acme-corp/product/..%5C..%5Cglobex/secret",
+    ]) {
+      const result = narrowGithub(path, SCOPE);
+      expect(result.decision).toBe("deny");
+      expect(result.denyShape).toBe("github404");
+    }
+  });
+
+  it("denies a double-encoded traversal (%252f)", () => {
+    const result = narrowGithub(
+      "/repos/acme-corp/product/..%252f..%252fglobex/secret",
+      SCOPE,
+    );
+    expect(result.decision).toBe("deny");
+    expect(result.denyShape).toBe("github404");
+  });
+
+  it("allows a legitimate encoded path and forwards it verbatim", () => {
+    // Pinned deliberately: GitHub serves this exact spelling, so refusing every
+    // `%2F` would break a request the vendor considers ordinary. Decoding is
+    // for the decision only — rewriting the path would change what the vendor
+    // is asked for.
+    const result = narrowGithub(
+      "/repos/acme-corp/product/contents/src%2Findex.ts",
+      SCOPE,
+    );
+    expect(result.decision).toBe("allow");
+    expect(result.path).toBe("/repos/acme-corp/product/contents/src%2Findex.ts");
+  });
+
+  it("keeps the unencoded spelling of the same path working", () => {
+    const result = narrowGithub(
+      "/repos/acme-corp/product/contents/src/index.ts",
+      SCOPE,
+    );
+    expect(result.decision).toBe("allow");
+    expect(result.path).toBe("/repos/acme-corp/product/contents/src/index.ts");
+  });
+
+  it("denies a path whose percent-encoding is malformed", () => {
+    const result = narrowGithub("/repos/acme-corp/product/%zz", SCOPE);
+    expect(result.decision).toBe("deny");
+    expect(result.denyShape).toBe("github404");
+  });
+
+  it("resolves an encoded owner/repo against the mission scope", () => {
+    const result = narrowGithub("/repos/acme%2Dcorp/product/issues", SCOPE);
+    expect(result.decision).toBe("allow");
+    expect(result.path).toBe("/repos/acme%2Dcorp/product/issues");
+  });
+});

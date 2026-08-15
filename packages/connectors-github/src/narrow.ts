@@ -14,17 +14,66 @@ export interface GithubNarrowResult {
 
 const REPO_NOT_IN_MISSION = "repo not in mission";
 const NOT_IN_CATALOG_SCOPE = "path not narrowable under a mission scope";
+const UNDECODABLE_PATH = "path is not decodable";
 
 /** Dummy base so `URL` can parse pathname + query safely. */
 const DUMMY_BASE = "https://vendor.invalid";
+
+/** Enough to see through `%252f`; a bound, so a crafted path cannot spin here. */
+const MAX_DECODE_PASSES = 3;
 
 function deny(reason: string): GithubNarrowResult {
   return { decision: "deny", denyShape: "github404", reason };
 }
 
-function pathSegments(path: string): string[] {
+/** Decodes until stable, so a double-encoded separator cannot hide one pass deep. */
+function decodeFully(value: string): string | undefined {
+  let current = value;
+  for (let pass = 0; pass < MAX_DECODE_PASSES; pass += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      // Malformed percent-encoding: we cannot say what the vendor would read,
+      // so we do not guess.
+      return undefined;
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * The segments the VENDOR will act on, not the ones the client typed.
+ *
+ * `URL` normalizes `..` and `%2e%2e` but leaves `..%2f` alone, while
+ * api.github.com decodes `%2F` as a path separator — a live
+ * `/repos/octokit/octokit.js/contents/src%2Findex.ts` answers 200. Deciding on
+ * the raw segments would therefore let `/repos/acme/product/..%2f..%2fglobex/x`
+ * read as a path inside acme/product. GitHub does not collapse the `..` today,
+ * so the mismatch is not currently exploitable — which is exactly the kind of
+ * agreement an allowlist must not depend on.
+ *
+ * So: decode, treat `\` as a separator too (some normalizers do), then remove
+ * dot segments by hand. Undecodable input is refused rather than guessed at.
+ * The path forwarded upstream stays the client's original — decoding is for
+ * the decision only, never for the request.
+ */
+function pathSegments(path: string): string[] | undefined {
   const { pathname } = new URL(path, DUMMY_BASE);
-  return pathname.split("/").filter((segment) => segment.length > 0);
+  const decoded = decodeFully(pathname);
+  if (decoded === undefined) return undefined;
+  const segments: string[] = [];
+  for (const segment of decoded.split(/[/\\]/)) {
+    if (segment.length === 0 || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments;
 }
 
 /** `owner/repo` in scope, case-insensitive. */
@@ -83,6 +132,7 @@ export function narrowGithub(
   scope: { githubRepos: string[] },
 ): GithubNarrowResult {
   const segments = pathSegments(path);
+  if (segments === undefined) return deny(UNDECODABLE_PATH);
   const [first, second] = segments;
 
   if (first === "repos" && second !== undefined) {
