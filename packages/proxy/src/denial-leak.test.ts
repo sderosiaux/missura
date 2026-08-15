@@ -40,7 +40,9 @@ const SCOPED: MissionClaims = {
 };
 
 const githubNarrow: NarrowFn = (req) =>
-  narrowGithub(req.path, { githubRepos: [...MISSION_REPOS] });
+  narrowGithub(req.path, {
+    githubRepos: MISSION_REPOS.map((repo) => ({ repo })),
+  });
 
 const linearNarrow: NarrowFn = (req) =>
   narrowLinear(req.body, { linearCustomerId: MISSION_CUSTOMER });

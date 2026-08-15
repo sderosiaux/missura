@@ -3,6 +3,7 @@ export * from "./cursor";
 export * from "./entities";
 export * from "./events";
 export * from "./filter-plan";
+export * from "./github-scope";
 export * from "./keys";
 export * from "./missions";
 export * from "./parent-proof";

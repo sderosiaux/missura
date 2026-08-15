@@ -83,7 +83,7 @@ function narrows(credentials: Credentials): Record<Vendor, NarrowFn> {
       github === undefined
         ? DENY_NO_CREDENTIAL
         : (req): NarrowResult =>
-            narrowGithub(req.path, { githubRepos: [github.repo] }),
+            narrowGithub(req.path, { githubRepos: [{ repo: github.repo }] }),
     zendesk:
       zendesk === undefined
         ? DENY_NO_CREDENTIAL

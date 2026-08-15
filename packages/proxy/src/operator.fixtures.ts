@@ -28,7 +28,7 @@ export const OPERATOR_BEARER = `Bearer ${OPERATOR_HEX}`;
 export const ENTITIES = new Map<string, EntityMapping>([
   [
     "customer:acme",
-    { linearCustomerId: "c_18", githubRepos: ["acme-corp/product"] },
+    { linearCustomerId: "c_18", githubRepos: [{ repo: "acme-corp/product" }] },
   ],
 ]);
 

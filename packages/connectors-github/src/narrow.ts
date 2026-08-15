@@ -1,5 +1,7 @@
+import type { GithubRepoScope } from "@missura/core";
 import { decideGithub } from "./catalog";
 import { canonicalize, isVendorName, type CanonicalRequest } from "./narrow-path";
+import { narrowPathScoped } from "./narrow-contents";
 import {
   deny,
   NOT_IN_CATALOG_SCOPE,
@@ -13,10 +15,16 @@ export type { GithubNarrowResult } from "./narrow-result";
 
 const NOT_A_REPO_NAME = "owner/repo outside GitHub's own naming charset";
 
-/** `owner/repo` in scope, case-insensitive. */
-function inScope(owner: string, repo: string, githubRepos: readonly string[]): boolean {
+/** The mission's entries for `owner/repo`, case-insensitive as GitHub resolves it. */
+function entriesFor(
+  owner: string,
+  repo: string,
+  githubRepos: readonly GithubRepoScope[],
+): GithubRepoScope[] {
   const target = `${owner}/${repo}`.toLowerCase();
-  return githubRepos.some((candidate) => candidate.toLowerCase() === target);
+  return githubRepos.filter(
+    (candidate) => candidate.repo.toLowerCase() === target,
+  );
 }
 
 /**
@@ -36,17 +44,30 @@ function allowCanonical(canonical: CanonicalRequest): GithubNarrowResult {
   return { decision: "allow", path: target };
 }
 
+/**
+ * A repository the mission covers, then WHICH of it.
+ *
+ * A bare entry is the whole repository, exactly as before — and it wins over a
+ * prefixed entry for the same repository, because an operator who wrote both
+ * granted the wider of the two. Otherwise every entry carries a path prefix,
+ * and only `contents` at or below one of them is served: see
+ * `narrow-contents.ts` for why nothing else on that repository can be bounded.
+ */
 function narrowRepoPath(
   canonical: CanonicalRequest,
-  githubRepos: readonly string[],
+  githubRepos: readonly GithubRepoScope[],
 ): GithubNarrowResult {
   const owner = canonical.segments[1];
   const repo = canonical.segments[2];
   if (owner === undefined || repo === undefined) return deny(REPO_NOT_IN_MISSION);
   if (githubRepos.length === 0) return deny(REPO_NOT_IN_MISSION);
   if (!isVendorName(owner) || !isVendorName(repo)) return deny(NOT_A_REPO_NAME);
-  if (!inScope(owner, repo, githubRepos)) return deny(REPO_NOT_IN_MISSION);
-  return allowCanonical(canonical);
+  const entries = entriesFor(owner, repo, githubRepos);
+  if (entries.length === 0) return deny(REPO_NOT_IN_MISSION);
+  if (entries.some((entry) => entry.pathPrefix === undefined)) {
+    return allowCanonical(canonical);
+  }
+  return narrowPathScoped(canonical, entries, () => allowCanonical(canonical));
 }
 
 /**
@@ -62,14 +83,14 @@ function narrowRepoPath(
  */
 export function narrowGithub(
   path: string,
-  scope: { githubRepos: string[] },
+  scope: { githubRepos: readonly GithubRepoScope[] },
 ): GithubNarrowResult {
   return withScopeSize(decide(path, scope.githubRepos), scope.githubRepos.length);
 }
 
 function decide(
   path: string,
-  githubRepos: readonly string[],
+  githubRepos: readonly GithubRepoScope[],
 ): GithubNarrowResult {
   const canonical = canonicalize(path);
   if (canonical === undefined) return deny(UNDECODABLE_PATH, "missura_invalid_target");

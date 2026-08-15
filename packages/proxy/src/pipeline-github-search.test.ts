@@ -10,7 +10,7 @@ import { bodyText, harness, request } from "./pipeline.fixtures";
  * globex out — plus the vendor headers an SDK needs to retry, minus the one
  * our filtering invalidates.
  */
-const SCOPE = ["acme-corp/product", "acme-corp/infra"];
+const SCOPE = [{ repo: "acme-corp/product" }, { repo: "acme-corp/infra" }];
 
 const narrow: NarrowFn = (req) =>
   narrowGithub(req.path, { githubRepos: SCOPE });

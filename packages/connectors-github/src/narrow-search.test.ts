@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { narrowGithub } from "./narrow";
 
-const SCOPE = { githubRepos: ["acme-corp/product", "acme-corp/infra"] };
+const SCOPE = { githubRepos: [{ repo: "acme-corp/product" }, { repo: "acme-corp/infra" }] };
 
 function q(path: string | undefined): string {
   return (
@@ -107,7 +107,7 @@ describe("narrowGithub — the /search/issues filter plan", () => {
   });
 
   it("denies rather than plan against a repo GitHub could not name", () => {
-    const result = search("bug", { githubRepos: ["acme corp/product"] });
+    const result = search("bug", { githubRepos: [{ repo: "acme corp/product" }] });
 
     expect(result.decision).toBe("deny");
     expect(result.denyShape).toBe("github404");

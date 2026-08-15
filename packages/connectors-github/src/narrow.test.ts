@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { narrowGithub, type GithubNarrowResult } from "./narrow";
 
-const SCOPE = { githubRepos: ["acme-corp/product", "acme-corp/infra"] };
+const SCOPE = { githubRepos: [{ repo: "acme-corp/product" }, { repo: "acme-corp/infra" }] };
 
 describe("narrowGithub — /repos/{owner}/{repo}/... allowlist", () => {
   it("allows a path on a mission repo, unchanged", () => {

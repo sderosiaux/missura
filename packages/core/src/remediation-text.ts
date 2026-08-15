@@ -30,6 +30,9 @@ const LINEAR_READ = "query { issues(first: 20) { nodes { id title } } }";
 const LINEAR_SMALL = "query { issues(first: 10) { nodes { id title } } }";
 const GITHUB_SEARCH = "GET /search/issues?q=<your terms>";
 const GITHUB_SMALL = "GET /search/issues?q=<your terms>&per_page=10";
+/** The only route a path-scoped mission serves — a shape, never an identifier. */
+const GITHUB_CONTENTS =
+  "GET /repos/{owner}/{repo}/contents/<a path at or below the one your mission covers>";
 const ZENDESK_SEARCH = "GET /api/v2/search?query=type:ticket <your terms>";
 const ZENDESK_SMALL =
   "GET /api/v2/search?query=type:ticket <your terms>&per_page=10";
@@ -102,6 +105,25 @@ function outOfScope(ctx: Ctx): string {
   return `${repos}, and this path names one that is not among them. Target a repository your mission covers, or search instead: missura forces your mission's repositories into \`/search/issues\`, so a search needs no repository name.`;
 }
 
+/**
+ * A mission scoped to a PATH inside a repository, not to the repository.
+ *
+ * The count is the mission's own, as everywhere here, and the sentence reads
+ * identically whether the refused path exists or not — a path prefix is a
+ * property of the grant, so "outside it" is decided without ever asking the
+ * vendor. What it must NOT do is offer search: a path-scoped mission refuses
+ * `/search/issues` (an issue names no path, so nothing there could be proven to
+ * belong to the mission), and advice pointing at a refused route is the
+ * hallucinated workaround this file exists to prevent.
+ */
+function outOfPathScope(ctx: Ctx): string {
+  const paths =
+    ctx.scopeSize === undefined
+      ? `your mission covers ${ctx.scope}`
+      : `your mission covers ${String(ctx.scopeSize)} path${ctx.scopeSize === 1 ? "" : "s"} inside a repository`;
+  return `${paths}, and this request is outside them. A path-scoped mission serves \`GET /repos/{owner}/{repo}/contents/…\` at or below a path it covers and NOTHING else on that repository — not the repository object, not issues, not pull requests, not search, and not a listing of a parent directory, which would enumerate paths the mission does not cover. Ask the operator for a wider mission if you need one of those.`;
+}
+
 export function remediationFor(code: DenialCode, ctx: Ctx): string {
   switch (code) {
     case "missura_unauthenticated":
@@ -118,6 +140,8 @@ export function remediationFor(code: DenialCode, ctx: Ctx): string {
       return `this endpoint is not in missura's ${ctx.provider} catalog, so no mission can reach it — a wider mission would not change that. Use a cataloged read or search route instead.`;
     case "missura_out_of_mission_scope":
       return outOfScope(ctx);
+    case "missura_out_of_path_scope":
+      return outOfPathScope(ctx);
     case "missura_invalid_target":
       return `the request target must be a path on this connection's own base URL — an absolute or protocol-relative URL is refused before anything is sent. Re-issue it as a path.`;
     case "missura_request_too_large":
@@ -166,6 +190,11 @@ export function tryInsteadFor(code: DenialCode, ctx: Ctx): readonly string[] {
       return [shape.small];
     case "missura_invalid_target":
       return [shape.entry];
+    // The one code whose alternative is NOT the connection's entry shape: a
+    // path-scoped mission refuses search, so `shape.read` would name a route
+    // this very refusal also denies.
+    case "missura_out_of_path_scope":
+      return ctx.provider === "github" ? [GITHUB_CONTENTS] : [];
     default:
       return [shape.read];
   }

@@ -21,15 +21,51 @@ const MAP_JSON = JSON.stringify({
   "customer:globex": { "linear.customer": "c_42" },
 });
 
+/** The human's real shape: one shared repository, one directory per customer. */
+const SHARED_REPO_JSON = JSON.stringify({
+  "customer:abcam": {
+    "github.repos": [
+      "acme-corp/customer-data:granola-transcripts/abcam",
+      "acme-corp/customer-data:google-drive-customers-se/abcam/**",
+    ],
+  },
+});
+
 describe("entity map loader", () => {
   it("round-trips entities.json into a map", () => {
     const map = loadEntityMap(write(MAP_JSON));
     expect([...map.keys()]).toEqual(["customer:acme", "customer:globex"]);
     expect(map.get("customer:acme")).toEqual({
       linearCustomerId: "c_18",
-      githubRepos: ["acme-corp/product", "acme-corp/docs"],
+      githubRepos: [{ repo: "acme-corp/product" }, { repo: "acme-corp/docs" }],
     });
     expect(map.get("customer:globex")).toEqual({ linearCustomerId: "c_42" });
+  });
+
+  it("carries a path prefix through, one entry per prefix", () => {
+    const map = loadEntityMap(write(SHARED_REPO_JSON));
+    expect(map.get("customer:abcam")?.githubRepos).toEqual([
+      {
+        repo: "acme-corp/customer-data",
+        pathPrefix: "granola-transcripts/abcam",
+      },
+      {
+        repo: "acme-corp/customer-data",
+        pathPrefix: "google-drive-customers-se/abcam",
+      },
+    ]);
+  });
+
+  it("names the offending key when a path prefix cannot be read", () => {
+    expect(() =>
+      loadEntityMap(
+        write(
+          JSON.stringify({
+            "customer:acme": { "github.repos": ["a/b:../escape"] },
+          }),
+        ),
+      ),
+    ).toThrow(/customer:acme.*path prefix/i);
   });
 
   it("returns an empty map when the file does not exist", () => {
@@ -84,7 +120,7 @@ describe("scope resolution", () => {
   it("resolves a customer scope to its linear id and repos", () => {
     expect(resolveScope(map, { customer: "acme" })).toEqual({
       linearCustomerId: "c_18",
-      githubRepos: ["acme-corp/product", "acme-corp/docs"],
+      githubRepos: [{ repo: "acme-corp/product" }, { repo: "acme-corp/docs" }],
     });
   });
 
@@ -100,7 +136,11 @@ describe("scope resolution", () => {
         customer: "acme",
         repos: ["acme-corp/tools"],
       }).githubRepos,
-    ).toEqual(["acme-corp/product", "acme-corp/docs", "acme-corp/tools"]);
+    ).toEqual([
+      { repo: "acme-corp/product" },
+      { repo: "acme-corp/docs" },
+      { repo: "acme-corp/tools" },
+    ]);
   });
 
   it("dedupes repos case-insensitively, keeping the entity spelling", () => {
@@ -109,13 +149,51 @@ describe("scope resolution", () => {
         customer: "acme",
         repos: ["ACME-Corp/Product"],
       }).githubRepos,
-    ).toEqual(["acme-corp/product", "acme-corp/docs"]);
+    ).toEqual([{ repo: "acme-corp/product" }, { repo: "acme-corp/docs" }]);
   });
 
   it("resolves a repos-only scope without touching the map", () => {
     expect(resolveScope(map, { repos: ["octo/cat"] })).toEqual({
-      githubRepos: ["octo/cat"],
+      githubRepos: [{ repo: "octo/cat" }],
     });
+  });
+
+  it("carries an explicit `--repo owner/name:prefix` through", () => {
+    expect(
+      resolveScope(map, { repos: ["octo/cat:transcripts/abcam/**"] })
+        .githubRepos,
+    ).toEqual([{ repo: "octo/cat", pathPrefix: "transcripts/abcam" }]);
+  });
+
+  it("keeps two prefixes on one repository apart — they are two grants", () => {
+    expect(
+      resolveScope(map, {
+        repos: ["octo/cat:t/abcam", "octo/cat:t/zoetis"],
+      }).githubRepos,
+    ).toEqual([
+      { repo: "octo/cat", pathPrefix: "t/abcam" },
+      { repo: "octo/cat", pathPrefix: "t/zoetis" },
+    ]);
+  });
+
+  it("does not fold a path prefix by case — git paths are case-sensitive", () => {
+    expect(
+      resolveScope(map, { repos: ["octo/cat:T/Abcam", "octo/cat:t/abcam"] })
+        .githubRepos,
+    ).toHaveLength(2);
+  });
+
+  it("dedupes an identical prefixed entry", () => {
+    expect(
+      resolveScope(map, { repos: ["octo/cat:t/abcam", "OCTO/Cat:t/abcam"] })
+        .githubRepos,
+    ).toEqual([{ repo: "octo/cat", pathPrefix: "t/abcam" }]);
+  });
+
+  it("keeps a bare entry and a prefixed one for the same repository apart", () => {
+    expect(
+      resolveScope(map, { repos: ["octo/cat", "octo/cat:t/abcam"] }).githubRepos,
+    ).toEqual([{ repo: "octo/cat" }, { repo: "octo/cat", pathPrefix: "t/abcam" }]);
   });
 
   it("yields no linear id for an entity that maps no linear customer", () => {
@@ -127,7 +205,7 @@ describe("scope resolution", () => {
       ),
     );
     expect(resolveScope(reposOnly, { customer: "acme" })).toEqual({
-      githubRepos: ["acme-corp/product"],
+      githubRepos: [{ repo: "acme-corp/product" }],
     });
   });
 

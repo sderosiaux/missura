@@ -1,4 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
+import {
+  githubRepoScopeKey,
+  parseGithubRepoScope,
+  type GithubRepoScope,
+} from "./github-scope";
 import type { MissionScope } from "./token";
 
 /**
@@ -8,36 +13,40 @@ import type { MissionScope } from "./token";
  */
 export interface EntityMapping {
   linearCustomerId?: string;
-  githubRepos?: string[];
+  githubRepos?: GithubRepoScope[];
 }
 
 export interface ResolvedScope {
   linearCustomerId?: string;
-  githubRepos: string[];
+  githubRepos: GithubRepoScope[];
 }
-
-const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readRepos(key: string, value: unknown): string[] | undefined {
+/**
+ * `github.repos` entries are `owner/name` or `owner/name:path/prefix` — see
+ * `github-scope.ts` for why that spelling. Parsed here, at load, so a prefix
+ * nobody could read fails when the operator edits the file rather than at the
+ * first request that would have been decided against it.
+ */
+function readRepos(key: string, value: unknown): GithubRepoScope[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((r) => typeof r !== "string")) {
     throw new Error(
       `entity "${key}": "github.repos" must be an array of strings`,
     );
   }
-  const repos = value as string[];
-  for (const repo of repos) {
-    if (!REPO_RE.test(repo)) {
+  return (value as string[]).map((repo) => {
+    try {
+      return parseGithubRepoScope(repo);
+    } catch (err) {
       throw new Error(
-        `entity "${key}": invalid repo "${repo}", expected owner/name`,
+        `entity "${key}": ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-  }
-  return repos;
+  });
 }
 
 function readMapping(key: string, value: unknown): EntityMapping {
@@ -78,17 +87,14 @@ export function loadEntityMap(path: string): Map<string, EntityMapping> {
   return map;
 }
 
-function assertRepo(repo: string): string {
-  if (!REPO_RE.test(repo)) {
-    throw new Error(`invalid repo "${repo}", expected owner/name`);
-  }
-  return repo;
-}
-
 /**
  * Turns a mission scope into vendor targets. An unknown customer throws rather
  * than resolving to nothing: a mission whose entity vanished must fail to be
  * minted, not quietly become an unscoped one.
+ *
+ * Two entries on the same repository with different path prefixes are two
+ * distinct grants and both survive; a bare entry alongside a prefixed one does
+ * too, and the connector reads the bare one as the wider grant it is.
  */
 export function resolveScope(
   map: Map<string, EntityMapping>,
@@ -96,8 +102,8 @@ export function resolveScope(
 ): ResolvedScope {
   const resolved: ResolvedScope = { githubRepos: [] };
   const seen = new Set<string>();
-  const add = (repo: string): void => {
-    const key = repo.toLowerCase();
+  const add = (repo: GithubRepoScope): void => {
+    const key = githubRepoScopeKey(repo);
     if (seen.has(key)) return;
     seen.add(key);
     resolved.githubRepos.push(repo);
@@ -112,6 +118,6 @@ export function resolveScope(
     }
     for (const repo of mapping.githubRepos ?? []) add(repo);
   }
-  for (const repo of scope.repos ?? []) add(assertRepo(repo));
+  for (const repo of scope.repos ?? []) add(parseGithubRepoScope(repo));
   return resolved;
 }

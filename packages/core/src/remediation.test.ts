@@ -197,6 +197,29 @@ describe("buildDenial", () => {
     expect(denial.try_instead.join(" ")).toContain("/search/issues");
   });
 
+  /**
+   * A path-scoped mission cannot search: no `/search/issues` result names the
+   * path it lives at, so the connector refuses the route outright. Sending the
+   * agent at it would be the hallucinated-workaround failure §4.8bis exists to
+   * prevent — the remediation must offer the one route that CAN work.
+   */
+  it("never points a path-scoped refusal at the search route it also refuses", () => {
+    const denial = buildDenial({
+      code: "missura_out_of_path_scope",
+      reason: "path outside the mission's path prefix",
+      provider: "github",
+      claims: { ...CLAIMS, connections: ["github"] },
+      now: NOW,
+      scopeSize: 1,
+    });
+    expect(denial.try_instead.join(" ")).not.toContain("/search/issues");
+    expect(denial.try_instead.join(" ")).toContain("contents");
+    expect(denial.remediation).toContain("1");
+    expect(denial.remediation).toContain("contents");
+    // Counted, never named: the wording must not describe the denied target.
+    expect(denial.remediation).not.toContain("granola");
+  });
+
   it("suggests a smaller page when the vendor's answer was too large", () => {
     const linear = buildDenial({
       code: "missura_response_too_large",

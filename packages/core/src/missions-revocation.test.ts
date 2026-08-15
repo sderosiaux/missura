@@ -28,7 +28,7 @@ const INPUT: CreateMission = {
 
 const RESOLVED: ResolvedScope = {
   linearCustomerId: "c_18",
-  githubRepos: ["acme-corp/product"],
+  githubRepos: [{ repo: "acme-corp/product" }],
 };
 
 /**

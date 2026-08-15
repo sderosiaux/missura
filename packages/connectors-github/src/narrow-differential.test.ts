@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { narrowGithub } from "./narrow";
 
-const SCOPE = { githubRepos: ["acme-corp/product", "acme-corp/infra"] };
+const SCOPE = { githubRepos: [{ repo: "acme-corp/product" }, { repo: "acme-corp/infra" }] };
 
 /**
  * The decision is taken on the decoded, dot-collapsed view of the path. If the
@@ -71,7 +71,7 @@ describe("narrowGithub — the decided path is the forwarded path", () => {
 describe("narrowGithub — owner/repo charset", () => {
   it("denies a repo name whose case-folding collides with a mission repo", () => {
     const result = narrowGithub("/repos/acme-corp/Kafka/issues", {
-      githubRepos: ["acme-corp/kafka"],
+      githubRepos: [{ repo: "acme-corp/kafka" }],
     });
     expect(result.decision).toBe("deny");
     expect(result.denyShape).toBe("github404");

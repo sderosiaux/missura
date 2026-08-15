@@ -1,4 +1,5 @@
-import type { FilterPlan, PaginationRule } from "@missura/core";
+import type { FilterPlan, GithubRepoScope, PaginationRule } from "@missura/core";
+import { pathScopedDeny } from "./narrow-contents";
 import { isVendorName, type CanonicalRequest } from "./narrow-path";
 import {
   deny,
@@ -8,6 +9,18 @@ import {
 
 const AMBIGUOUS_Q = "the search query parameter was given more than once";
 const UNNAMEABLE_REPO = "mission repo outside GitHub's own naming charset";
+
+/**
+ * `GET /search/issues` returns ISSUES, and an issue lives at no path: nothing
+ * on a search item could prove it belongs to the directory a mission covers.
+ * So a repository the mission holds BY PATH contributes nothing to a search —
+ * neither a forced `repo:` qualifier (it would widen the mission to the whole
+ * repository) nor a filter rule (there is no field to compare). It is dropped,
+ * and a mission whose every entry is path-scoped has no searchable repository
+ * left, which is a refusal rather than an unbounded search.
+ */
+const PATH_SCOPED_SEARCH =
+  "every repository in this mission is scoped by path, and a search result names no path";
 
 const QUALIFIER_PREFIXES = ["repo:", "org:", "user:"];
 
@@ -182,9 +195,13 @@ function searchPagination(params: URLSearchParams): PaginationRule | undefined {
  */
 export function narrowSearchIssues(
   canonical: CanonicalRequest,
-  githubRepos: readonly string[],
+  scope: readonly GithubRepoScope[],
 ): GithubNarrowResult {
-  if (githubRepos.length === 0) return deny(REPO_NOT_IN_MISSION);
+  if (scope.length === 0) return deny(REPO_NOT_IN_MISSION);
+  const githubRepos = scope
+    .filter((entry) => entry.pathPrefix === undefined)
+    .map((entry) => entry.repo);
+  if (githubRepos.length === 0) return pathScopedDeny(PATH_SCOPED_SEARCH);
   const repositoryOwners = repositoryUrls(githubRepos);
   if (repositoryOwners === undefined) return deny(UNNAMEABLE_REPO);
 

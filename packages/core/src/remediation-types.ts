@@ -17,6 +17,7 @@ export type DenialCode =
   | "missura_action_not_allowed"
   | "missura_operation_not_in_catalog"
   | "missura_out_of_mission_scope"
+  | "missura_out_of_path_scope"
   | "missura_invalid_target"
   | "missura_request_too_large"
   | "missura_response_too_large"

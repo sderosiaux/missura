@@ -21,7 +21,7 @@ const INPUT: CreateMission = {
 
 const RESOLVED: ResolvedScope = {
   linearCustomerId: "c_18",
-  githubRepos: ["acme-corp/product"],
+  githubRepos: [{ repo: "acme-corp/product" }],
 };
 
 describe("mission store — create", () => {
@@ -65,7 +65,7 @@ describe("mission store — create", () => {
     const store = new MissionStore(statePath(), KEY);
     const { token } = store.create(
       { ...INPUT, scope: { repos: ["acme-corp/product"] } },
-      { githubRepos: ["acme-corp/product"] },
+      { githubRepos: [{ repo: "acme-corp/product" }] },
     );
     expect(verifyMissionToken(token, { key: KEY }).connections).toEqual([
       "github",

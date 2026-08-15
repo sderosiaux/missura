@@ -17,7 +17,7 @@ import { MAX_REFILL_CALLS } from "./refill";
  * answering it without refilling was a regression in reachable information.
  */
 
-const SCOPE = ["acme-corp/product"];
+const SCOPE = [{ repo: "acme-corp/product" }];
 
 const narrow: NarrowFn = (req) =>
   narrowGithub(req.path, { githubRepos: SCOPE });
