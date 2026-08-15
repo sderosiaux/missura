@@ -42,9 +42,22 @@ function positiveInt(name: string, raw: string | undefined, fallback: number): n
   return value;
 }
 
-/** `0` means "let the OS pick": used by tests to boot on ephemeral ports. */
+const MAX_PORT = 65535;
+
+/**
+ * Validated at parse time, before the vault is opened: an out-of-range port
+ * would otherwise surface as an opaque `listen` error after the credentials
+ * were already decrypted. `0` means "let the OS pick" (used by the tests).
+ */
 function portOption(name: string, raw: string | undefined): number | undefined {
-  return raw === undefined ? undefined : positiveInt(name, raw, 0);
+  if (raw === undefined) return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > MAX_PORT) {
+    throw new Error(
+      `--${name} must be an integer between 0 and 65535 (0 lets the OS pick)`,
+    );
+  }
+  return value;
 }
 
 async function dispatch(

@@ -175,6 +175,38 @@ describe("missura run", () => {
   });
 });
 
+describe("missura run — port validation", () => {
+  const rejected = ["65536", "70000", "-1", "8481.5", "http"];
+
+  for (const raw of rejected) {
+    it(`rejects --linear-port ${raw} before touching the vault`, async () => {
+      const h = harness();
+
+      // `=` form so a leading `-` reaches the validator instead of parseArgs.
+      const result = await run(["run", `--linear-port=${raw}`], h.io);
+
+      expect(result.code).toBe(1);
+      expect(result.servers).toBeUndefined();
+      // The first stderr line is the failure itself; the usage block follows.
+      const message = h.err[0] ?? "";
+      expect(message).toContain("--linear-port");
+      expect(message).toContain("0 and 65535");
+      // A parse-time failure, not a "vault not found" one.
+      expect(message).not.toContain("vault");
+    });
+  }
+
+  it("accepts the boundary values 0 and 65535", async () => {
+    const h = harness();
+
+    const result = await run(["run", "--github-port", "65535"], h.io);
+
+    // Still fails on the missing vault — but past the port check.
+    expect(result.code).toBe(1);
+    expect(h.err.join("\n")).toContain("missura init");
+  });
+});
+
 describe("missura bin", () => {
   it("runs through the shebang entry point", async () => {
     const h = harness({
