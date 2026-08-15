@@ -67,6 +67,46 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  examples/compat:
+    dependencies:
+      '@linear/sdk':
+        specifier: ^90.0.0
+        version: 90.0.0(graphql@16.14.2)
+      graphql:
+        specifier: ^16
+        version: 16.14.2
+      octokit:
+        specifier: ^5.0.5
+        version: 5.0.5
+    devDependencies:
+      '@missura/connectors-github':
+        specifier: workspace:*
+        version: link:../../packages/connectors-github
+      '@missura/connectors-linear':
+        specifier: workspace:*
+        version: link:../../packages/connectors-linear
+      '@missura/connectors-zendesk':
+        specifier: workspace:*
+        version: link:../../packages/connectors-zendesk
+      '@missura/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@missura/proxy':
+        specifier: workspace:*
+        version: link:../../packages/proxy
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      tsx:
+        specifier: ^4
+        version: 4.23.12
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+      vitest:
+        specifier: ^3
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)
+
   examples/m1-proof:
     dependencies:
       '@linear/sdk':

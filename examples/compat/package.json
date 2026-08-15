@@ -1,0 +1,29 @@
+{
+  "name": "@missura/example-compat",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint via root eslint' && exit 0"
+  },
+  "//dependencies": "The official vendor SDKs are how half B generates the calls an SDK consumer would actually make; `graphql` parses the documents this suite sends so the read-only assertion is a parse, not a regex.",
+  "dependencies": {
+    "@linear/sdk": "^90.0.0",
+    "graphql": "^16",
+    "octokit": "^5.0.5"
+  },
+  "//devDependencies": "The proxy is booted IN-PROCESS (`createServers`) so the suite depends on neither the vault nor the CLI, and missions are minted straight from `@missura/core`. The three connectors are imported for their NARROW only — a `ConnectionConfig` without one is not spellable, deliberately. These are the only @missura/* imports and they exist to boot the proxy; nothing here asserts through missura code.",
+  "devDependencies": {
+    "@missura/connectors-github": "workspace:*",
+    "@missura/connectors-linear": "workspace:*",
+    "@missura/connectors-zendesk": "workspace:*",
+    "@missura/core": "workspace:*",
+    "@missura/proxy": "workspace:*",
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
