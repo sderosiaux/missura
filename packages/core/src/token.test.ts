@@ -1,6 +1,11 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { signDevToken, signMissionToken, verifyMissionToken } from "./token";
+import {
+  MAX_TTL_SECONDS,
+  signDevToken,
+  signMissionToken,
+  verifyMissionToken,
+} from "./token";
 
 const KEY = Buffer.from("k".repeat(32));
 
@@ -61,7 +66,8 @@ describe("mission token", () => {
   it("rejects an expired token", () => {
     const token = signMissionToken(MISSION, {
       key: KEY,
-      ttlSeconds: -10, // already expired
+      ttlSeconds: 60,
+      now: Date.now() - 3_600_000, // minted an hour ago: already expired
     });
     expect(() => verifyMissionToken(token, { key: KEY })).toThrow(/expired/i);
   });
@@ -198,5 +204,41 @@ describe("dev token", () => {
     expect(() =>
       signDevToken({ key: Buffer.from("k".repeat(31)), ttlSeconds: 60 }),
     ).toThrow(/key/i);
+  });
+});
+
+describe("ttl hard cap", () => {
+  it("exposes the 60 minute cap", () => {
+    expect(MAX_TTL_SECONDS).toBe(3600);
+  });
+
+  it("accepts a ttl exactly at the cap", () => {
+    const claims = verifyMissionToken(
+      signDevToken({ key: KEY, ttlSeconds: MAX_TTL_SECONDS }),
+      { key: KEY },
+    );
+    expect(claims.exp - claims.iat).toBe(MAX_TTL_SECONDS);
+  });
+
+  it("rejects a ttl above the cap", () => {
+    expect(() => signDevToken({ key: KEY, ttlSeconds: 3601 })).toThrow(/ttl/i);
+    expect(() =>
+      signMissionToken(MISSION, { key: KEY, ttlSeconds: 86_400 }),
+    ).toThrow(/ttl/i);
+  });
+
+  it("rejects a zero or negative ttl", () => {
+    expect(() => signDevToken({ key: KEY, ttlSeconds: 0 })).toThrow(/ttl/i);
+    expect(() => signDevToken({ key: KEY, ttlSeconds: -1 })).toThrow(/ttl/i);
+    expect(() =>
+      signMissionToken(MISSION, { key: KEY, ttlSeconds: 0 }),
+    ).toThrow(/ttl/i);
+  });
+
+  it("rejects a non-integer ttl", () => {
+    expect(() => signDevToken({ key: KEY, ttlSeconds: 1.5 })).toThrow(/ttl/i);
+    expect(() => signDevToken({ key: KEY, ttlSeconds: Number.NaN })).toThrow(
+      /ttl/i,
+    );
   });
 });

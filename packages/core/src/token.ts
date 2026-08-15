@@ -22,6 +22,14 @@ export interface MissionClaims extends MissionInput {
 const PREFIX = "msr_";
 const MIN_KEY_BYTES = 32;
 
+/**
+ * Hard cap on mission lifetime (SPEC §4.2): 60 minutes. A mission is a
+ * short-lived grant, so the cap lives here — at the only place that mints —
+ * rather than in the callers, where one forgetful path would be enough to
+ * hand out a near-eternal scope-all token.
+ */
+export const MAX_TTL_SECONDS = 3600;
+
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");
 }
@@ -76,11 +84,23 @@ function validateClaims(value: unknown): MissionClaims {
   return value as MissionClaims;
 }
 
+function assertTtl(ttlSeconds: number): void {
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
+    throw new Error("ttl must be a positive integer number of seconds");
+  }
+  if (ttlSeconds > MAX_TTL_SECONDS) {
+    throw new Error(
+      `ttl must not exceed ${String(MAX_TTL_SECONDS)} seconds (60 minutes)`,
+    );
+  }
+}
+
 export function signMissionToken(
   mission: MissionInput,
   opts: { key: Buffer; ttlSeconds: number; now?: number },
 ): string {
   assertKey(opts.key);
+  assertTtl(opts.ttlSeconds);
   const iat = Math.floor((opts.now ?? Date.now()) / 1000);
   const claims: MissionClaims = {
     ...mission,
