@@ -106,4 +106,12 @@ describe("entity graph mutation", () => {
     expect(raw).toContain('\n  "entities": {\n');
     expect(raw.endsWith("\n")).toBe(true);
   });
+
+  it("serves a confirmation to the same instance that made it", () => {
+    const store = openEntityGraph(write(ADEO_JSON));
+    store.setStatus("customer:adeo", "linear", "c_18", "confirmed", "ops");
+    expect(store.linksTo("linear", "c_18")[0]?.link.status).toBe("confirmed");
+    expect(store.entity("customer:adeo")?.links[1]?.status).toBe("confirmed");
+  });
+
 });
