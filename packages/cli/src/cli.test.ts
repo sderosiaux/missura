@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,6 +76,8 @@ describe("missura init", () => {
     expect(result.code).toBe(0);
     expect(existsSync(paths.vaultPath)).toBe(true);
     expect(existsSync(paths.signingKeyPath)).toBe(true);
+    expect(existsSync(paths.operatorKeyPath)).toBe(true);
+    expect(statSync(paths.operatorKeyPath).mode & 0o777).toBe(0o600);
     const printed = h.out.join("\n");
     expect(printed).toContain(paths.vaultPath);
     expect(printed).not.toContain(LINEAR_KEY);
@@ -108,7 +117,7 @@ describe("missura token", () => {
     await init(h);
     h.out.length = 0;
 
-    const result = await run(["token", "--ttl", "60"], h.io);
+    const result = await run(["token", "--dev", "--ttl", "60"], h.io);
 
     expect(result.code).toBe(0);
     expect(h.out).toHaveLength(1);
@@ -127,7 +136,7 @@ describe("missura token", () => {
     await init(h);
     h.out.length = 0;
 
-    const result = await run(["token"], h.io);
+    const result = await run(["token", "--dev"], h.io);
 
     expect(result.code).toBe(0);
     const key = loadOrCreateKey(resolveHome(h.io.env).signingKeyPath);
@@ -143,7 +152,7 @@ describe("missura token", () => {
     await init(h);
     h.out.length = 0;
 
-    const result = await run(["token", "--ttl", "999999"], h.io);
+    const result = await run(["token", "--dev", "--ttl", "999999"], h.io);
 
     expect(result.code).toBe(1);
     expect(h.out).toHaveLength(0);
@@ -159,7 +168,7 @@ describe("missura token", () => {
     await init(h);
     h.out.length = 0;
 
-    const result = await run(["token", "--ttl", "0"], h.io);
+    const result = await run(["token", "--dev", "--ttl", "0"], h.io);
 
     expect(result.code).toBe(1);
     expect(h.out).toHaveLength(0);
@@ -264,7 +273,7 @@ describe("missura bin", () => {
 
     const { stdout } = await execFileAsync(
       join(import.meta.dirname, "..", "node_modules", ".bin", "tsx"),
-      [join(import.meta.dirname, "cli.ts"), "token"],
+      [join(import.meta.dirname, "cli.ts"), "token", "--dev"],
       { env: { ...process.env, MISSURA_HOME: h.home } },
     );
 

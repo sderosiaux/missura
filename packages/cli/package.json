@@ -13,6 +13,8 @@
     "lint": "echo 'lint via root eslint later' && exit 0"
   },
   "dependencies": {
+    "@missura/connectors-github": "workspace:*",
+    "@missura/connectors-linear": "workspace:*",
     "@missura/core": "workspace:*",
     "@missura/proxy": "workspace:*"
   },

@@ -12,6 +12,12 @@ export interface MissuraPaths {
   vaultPath: string;
   /** HMAC key the proxy verifies mission tokens against. */
   signingKeyPath: string;
+  /** Bearer the operator plane (8480) authenticates its caller with. */
+  operatorKeyPath: string;
+  /** Missions and their revocations — descriptions of grants, never bearers. */
+  missionsPath: string;
+  /** Business entity → vendor ids. The only place a mission's scope resolves. */
+  entitiesPath: string;
   eventsDir: string;
 }
 
@@ -28,6 +34,9 @@ export function resolveHome(env: NodeJS.ProcessEnv): MissuraPaths {
     vaultKeyPath: join(home, "vault.key"),
     vaultPath: join(home, "vault.json"),
     signingKeyPath: join(home, "signing.key"),
+    operatorKeyPath: join(home, "operator.key"),
+    missionsPath: join(home, "missions.json"),
+    entitiesPath: join(home, "entities.json"),
     eventsDir: join(home, "events"),
   };
 }

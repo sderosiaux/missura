@@ -88,6 +88,12 @@ importers:
 
   packages/cli:
     dependencies:
+      '@missura/connectors-github':
+        specifier: workspace:*
+        version: link:../connectors-github
+      '@missura/connectors-linear':
+        specifier: workspace:*
+        version: link:../connectors-linear
       '@missura/core':
         specifier: workspace:*
         version: link:../core

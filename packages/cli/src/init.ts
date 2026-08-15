@@ -66,12 +66,18 @@ export async function initCommand(io: CliIo): Promise<number> {
   const vaultKey = loadOrCreateKey(paths.vaultKeyPath);
   saveVault(paths.vaultPath, vaultKey, data);
   loadOrCreateKey(paths.signingKeyPath);
+  // The operator plane's bearer. Created here so `missura run` never has to
+  // mint one at boot: a key that appears on first use is a key nobody backed up.
+  loadOrCreateKey(paths.operatorKeyPath);
 
   io.stdout(`vault       ${paths.vaultPath}`);
   io.stdout(`vault key   ${paths.vaultKeyPath}`);
   io.stdout(`signing key ${paths.signingKeyPath}`);
+  io.stdout(`operator key ${paths.operatorKeyPath}`);
   io.stdout(`events      ${paths.eventsDir}`);
   io.stdout("");
-  io.stdout("next: missura run   (then: missura token)");
+  io.stdout(
+    "next: missura run   (then: missura exec --customer <name> --purpose <why> -- <cmd>)",
+  );
   return 0;
 }
