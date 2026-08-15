@@ -1,4 +1,5 @@
 export * from "./catalog";
+export * from "./entities";
 export * from "./events";
 export * from "./keys";
 export * from "./missions";
