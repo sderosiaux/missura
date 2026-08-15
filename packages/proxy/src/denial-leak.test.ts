@@ -122,12 +122,16 @@ describe("non-leak rule — a denial never names the target it refused", () => {
   });
 
   /**
-   * The one denial produced AFTER the vendor answered: the object came back
-   * and the filter proved it foreign. Both the id the agent guessed and the
-   * owner id the vendor disclosed must disappear — and the answer must be the
-   * vendor's own not-found, which is what an issue that never existed returns.
+   * The one denial produced AFTER the vendor answered: the object came back and
+   * the filter proved it foreign. What IS proven here is the non-leak rule —
+   * both the id the agent guessed and the owner id the vendor disclosed
+   * disappear, and the answer is a constant that describes nothing.
+   *
+   * What is NOT proven, and used to be claimed here: that this reads like an
+   * issue which never existed. It does not. See the known limitation below and
+   * SPEC §7 (M3).
    */
-  it("refuses a foreign issue on the way back, keeping the vendor not-found", async () => {
+  it("refuses a foreign issue on the way back without naming anything", async () => {
     const h = harness(
       {
         provider: "linear",
@@ -169,6 +173,63 @@ describe("non-leak rule — a denial never names the target it refused", () => {
     expect(bodyText(res.body)).toBe(
       '{"errors":[{"message":"issue not found"}]}',
     );
+  });
+
+  /**
+   * KNOWN LIMITATION, pinned so a fix shows up as a change here (SPEC §7, M3).
+   *
+   * `query { issue(id:"…") }` has three distinguishable answers, and the id an
+   * agent guesses selects between them:
+   *   - an id that never existed → Linear's own error, with a `path`, an
+   *     `extensions` block and `"data":{"issue":null}` beside it;
+   *   - a datum the vendor nulled → `{"data":{"issue":null}}`, no `errors`;
+   *   - an id that EXISTS but belongs to another customer → the constant below.
+   * So guessing ids separates exists-but-not-yours from does-not-exist. It is
+   * pre-existing from M2 and is not fixed by synthesizing Linear's shape,
+   * because that shape could not be established with evidence — see
+   * `NOT_FOUND_GRAPHQL_BODY`.
+   */
+  it("answers a foreign object differently from a vendor-nulled one — known limitation", async () => {
+    const vendor =
+      (body: unknown): (() => Promise<Response>) =>
+      (): Promise<Response> =>
+        Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+    const ask = async (body: unknown): Promise<string> => {
+      const h = harness(
+        {
+          provider: "linear",
+          upstreamBase: "https://api.linear.app",
+          verifyToken: (): MissionClaims => SCOPED,
+          decide: (req): CatalogDecision =>
+            decideLinear(req.method, req.path, req.body),
+          narrow: linearNarrow,
+        },
+        vendor(body),
+      );
+      const res = await handle(
+        h.deps,
+        request({
+          method: "POST",
+          path: "/graphql",
+          body: JSON.stringify({
+            query: 'query { issue(id: "ISS-1") { id title } }',
+          }),
+        }),
+      );
+      return bodyText(res.body);
+    };
+
+    const foreign = await ask({
+      data: { issue: { id: "ISS-1", customer: { id: "0f9d1b77-globex" } } },
+    });
+    const nulled = await ask({ data: { issue: null } });
+
+    expect(foreign).not.toBe(nulled);
   });
 
   /**

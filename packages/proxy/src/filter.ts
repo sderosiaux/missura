@@ -36,7 +36,13 @@ export interface FilterTask {
   plan: FilterPlan;
   /** Audit reason when the filter fails closed. */
   denyReason: string;
-  /** The vendor's own "not found", so a refusal is indistinguishable from absence. */
+  /**
+   * The body a fail-closed filter answers with, in the vendor's own envelope so
+   * an SDK can parse it. Under `github404` it is GitHub's bare not-found; under
+   * GraphQL it is a constant that does NOT match Linear's own absence bytes —
+   * see `NOT_FOUND_GRAPHQL_BODY` and SPEC §7 for what an attacker learns from
+   * the difference.
+   */
   notFoundBody: string;
 }
 

@@ -92,9 +92,21 @@ export const GITHUB_NOT_FOUND_MESSAGE = "Not Found";
 export const GITHUB_NOT_FOUND_BODY = `{"message":"${GITHUB_NOT_FOUND_MESSAGE}"}`;
 
 /**
- * A GraphQL not-found: Linear answers 200 with an `errors` array, so an object
- * outside the mission has to look exactly like an object that does not exist.
- * A different status would itself be the leak the check exists to prevent.
+ * The GraphQL fail-closed body: what an agent gets when the vendor answered and
+ * the filter proved the object foreign. 200 with an `errors` array, because
+ * that is the envelope a GraphQL SDK can parse.
+ *
+ * KNOWN LIMITATION, not a property (SPEC §7, M3). These are NOT the bytes
+ * Linear sends for an id that does not exist, so an out-of-scope object is
+ * distinguishable from one that never existed. It is not synthesized to match
+ * because the vendor's real absence body could not be established with
+ * evidence: `@linear/sdk@90` declares every field of a GraphQL error optional
+ * and pins no `extensions` content (`LinearErrorType` has no not-found member
+ * at all), the reported `extensions.type` contradicts that enum, and the real
+ * body carries an `errors[].path` that follows the agent's own field ALIAS plus
+ * a `data` object mirroring its selection — neither of which a per-plan
+ * constant can know. Guessing bytes here would trade a visible limitation for
+ * an invisible one.
  */
 export const NOT_FOUND_GRAPHQL_BODY =
   '{"errors":[{"message":"issue not found"}]}';
