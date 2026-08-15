@@ -1,4 +1,4 @@
-import type { MissionClaims } from "@missura/core";
+import type { DenialCode, FilterPlan, MissionClaims } from "@missura/core";
 
 /**
  * What NARROW had to add to the query to make the ownership check possible,
@@ -16,6 +16,10 @@ export type InjectedSelection = "none" | "relation" | "id";
  * pipeline knows nothing about GraphQL: it looks `path` up in the parsed JSON
  * body, compares the value against `expectedCustomerId`, and removes whatever
  * NARROW added so the agent sees exactly the shape it asked for.
+ *
+ * SUPERSEDED by `FilterPlan`, which says the same thing for any number of
+ * objects, lists included. It stays until every connector emits plans: it is
+ * translated into a one-rule plan and runs through the same engine.
  */
 export interface NarrowPostCheck {
   /** e.g. `["data","issue","customer","id"]`. */
@@ -30,10 +34,34 @@ export interface NarrowResult {
   path?: string;
   /** Rewritten request body (a narrowed GraphQL document/variables). */
   body?: string;
-  /** `github404` answers with GitHub's own not-found shape: no enumeration. */
+  /**
+   * `github404` answers with GitHub's own not-found shape: no enumeration. It
+   * also names the shape a fail-closed FILTER must take on an ALLOW, so a
+   * refusal on the way back looks like the vendor's own "not found" too.
+   */
   denyShape?: "github404";
   reason?: string;
+  /**
+   * Which §4.8bis remediation the refusal deserves. Absent ⇒ "out of mission
+   * scope", the safe default: it is derived from the mission alone, so a
+   * connector that says nothing cannot accidentally produce a remediation that
+   * describes the target.
+   */
+  denialCode?: DenialCode;
+  /**
+   * How many targets the mission resolves to in this connector's terms — the
+   * COUNT only. "Your mission covers 3 repositories" is a fact about the
+   * agent's own grant and reads identically whether the refused repo exists or
+   * not; naming any of them would not.
+   */
+  missionScopeSize?: number;
   postCheck?: NarrowPostCheck;
+  /**
+   * What the proxy must do to the response: which objects to prove, which
+   * fields to take back. Preferred over `postCheck` — it covers lists, several
+   * paths, and counts.
+   */
+  filterPlan?: FilterPlan;
 }
 
 export type NarrowFn = (
@@ -48,87 +76,48 @@ export type NarrowFn = (
  */
 export const passThroughNarrow: NarrowFn = () => ({ decision: "allow" });
 
-/** GitHub's own not-found body, byte for byte. */
-export const GITHUB_NOT_FOUND_BODY = '{"message":"Not Found"}';
+/** GitHub's own not-found message, byte for byte. */
+export const GITHUB_NOT_FOUND_MESSAGE = "Not Found";
 
 /**
- * A GraphQL not-found: Linear answers 200 with an `errors` array, so an object
- * outside the mission has to look exactly like an object that does not exist.
- * A different status would itself be the leak the check exists to prevent.
+ * GitHub's own not-found body, byte for byte.
+ *
+ * Used where a refusal must carry NOTHING else: on the way back, when the
+ * vendor already answered and the filter proved the object foreign. A missura
+ * block there would be the enumeration oracle itself — an object that never
+ * existed gets the vendor's bare 404, so an object that exists out of scope
+ * must get exactly the same bytes. Request-side refusals are decided before
+ * the vendor is asked, so they carry the block (see `deny.ts`).
+ */
+export const GITHUB_NOT_FOUND_BODY = `{"message":"${GITHUB_NOT_FOUND_MESSAGE}"}`;
+
+/**
+ * The GraphQL fail-closed body: what an agent gets when the vendor answered and
+ * the filter proved the object foreign. 200 with an `errors` array, because
+ * that is the envelope a GraphQL SDK can parse.
+ *
+ * KNOWN LIMITATION, not a property (SPEC §7, M3). These are NOT the bytes
+ * Linear sends for an id that does not exist, so an out-of-scope object is
+ * distinguishable from one that never existed. It is not synthesized to match
+ * because the vendor's real absence body could not be established with
+ * evidence. Four independent gaps, none of them a matter of effort:
+ *   - `@linear/sdk@90` declares every field of a GraphQL error optional and
+ *     pins no `extensions` content; its `LinearErrorType` enum has no not-found
+ *     member at all, and the `extensions.type` reported outside the SDK
+ *     contradicts that enum. Two sources, no primary artefact;
+ *   - the pinned schema cannot arbitrate. It is extracted from the SDK's MODEL
+ *     types (`@linear/sdk/dist/index.d.mts`, 41 types) and carries no `Query`
+ *     root, so it does not even say whether `issue` is nullable — i.e. whether
+ *     absence reads `{"data":{"issue":null}}` or `{"data":null}`;
+ *   - no schema could supply the rest anyway: GraphQL schemas describe data,
+ *     never error payloads. Only a RECORDED live response can, which is the
+ *     compatibility suite's job (PRD §33, milestone M4);
+ *   - and the real body's `errors[].path` follows the agent's own field ALIAS
+ *     while its `data` mirrors the agent's selection — neither is knowable from
+ *     a per-plan constant.
+ * Guessing bytes here would trade a visible limitation for an invisible one.
  */
 export const NOT_FOUND_GRAPHQL_BODY =
   '{"errors":[{"message":"issue not found"}]}';
 
 export const OUT_OF_SCOPE_REASON = "out-of-scope object";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function lookup(root: unknown, path: readonly string[]): unknown {
-  let current: unknown = root;
-  for (const key of path) {
-    if (!isRecord(current)) return undefined;
-    current = current[key];
-  }
-  return current;
-}
-
-/**
- * Verifies the object the vendor returned belongs to the mission. Anything the
- * check cannot prove — unparseable body, missing relation, wrong owner — is a
- * refusal: an unverifiable object is treated exactly like a foreign one.
- */
-export function applyPostCheck(
-  check: NarrowPostCheck,
-  body: string,
-): { ok: boolean; body: string } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    return { ok: false, body: NOT_FOUND_GRAPHQL_BODY };
-  }
-  const relation = check.path[check.path.length - 2];
-  const field = check.path[check.path.length - 1];
-  if (relation === undefined || field === undefined) {
-    return { ok: false, body: NOT_FOUND_GRAPHQL_BODY };
-  }
-  const subject = lookup(parsed, check.path.slice(0, -2));
-  // The vendor returned no object at all: nothing to own, nothing to leak.
-  if (subject === null || subject === undefined) return { ok: true, body };
-  if (!isRecord(subject)) return { ok: false, body: NOT_FOUND_GRAPHQL_BODY };
-
-  const owner = lookup(subject, [relation, field]);
-  if (owner !== check.expectedCustomerId) {
-    return { ok: false, body: NOT_FOUND_GRAPHQL_BODY };
-  }
-  if (check.injectedSelection === "none") return { ok: true, body };
-  // We added it to make the check possible — take back exactly that much.
-  const owned = subject[relation];
-  const rest =
-    check.injectedSelection === "relation"
-      ? without(subject, relation)
-      : { ...subject, [relation]: isRecord(owned) ? without(owned, field) : owned };
-  const stripped = replace(parsed, check.path.slice(0, -2), rest);
-  return { ok: true, body: JSON.stringify(stripped) };
-}
-
-function without(
-  source: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(source).filter(([k]) => k !== key));
-}
-
-/** Rebuilds `root` with `value` at `path` — no mutation of the parsed body. */
-function replace(
-  root: unknown,
-  path: readonly string[],
-  value: unknown,
-): unknown {
-  const [head, ...rest] = path;
-  if (head === undefined) return value;
-  if (!isRecord(root)) return root;
-  return { ...root, [head]: replace(root[head], rest, value) };
-}

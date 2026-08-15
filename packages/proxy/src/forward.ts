@@ -1,25 +1,35 @@
-import type { CatalogDecision } from "@missura/core";
+import type { CatalogDecision, MissionClaims } from "@missura/core";
 import {
   emitEvent,
   TOO_LARGE_REASON,
   type AuditDeps,
   type RequestContext,
 } from "./audit";
+import { denialResponse } from "./deny";
+import { applyFilterPlan, type FilterTask } from "./filter";
 import {
-  applyPostCheck,
-  OUT_OF_SCOPE_REASON,
-  type NarrowPostCheck,
-} from "./narrow";
-import {
+  FILTER_INVALIDATED_RESPONSE_HEADERS,
   FORWARDED_RESPONSE_HEADERS,
   hasBody,
-  jsonError,
   JSON_HEADERS,
   readCapped,
   upstreamHeaders,
   type IncomingShape,
   type ResponseShape,
 } from "./transport";
+
+/**
+ * One vendor round-trip, plus the one fact about it the REFILL walk needs.
+ *
+ * `removed` is how many objects the FILTER took out of THIS response. It exists
+ * because page-numbered pagination has no `hasNextPage`: the vendor page's real
+ * length is `nodes + removed`, and without it "the vendor ran out" and "we hid
+ * all of it" are the same short page. It is a fact about the decision, never
+ * part of the answer — nothing serializes it.
+ */
+export interface ForwardOutcome extends ResponseShape {
+  removed: number;
+}
 
 /** What talking to the vendor needs: the credential, the origin, a fetch. */
 export interface ForwardDeps extends AuditDeps {
@@ -51,9 +61,50 @@ export function upstreamTarget(
 }
 
 /**
+ * The vendor headers the agent is allowed to see, minus the ones a filter plan
+ * invalidates. `filtered` is "a plan applied to this response", not "the plan
+ * removed something": a header that appears only on untouched pages tells the
+ * agent which pages held objects it may not see.
+ */
+function relayedHeaders(
+  response: Response,
+  filtered: boolean,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const name of FORWARDED_RESPONSE_HEADERS) {
+    if (filtered && FILTER_INVALIDATED_RESPONSE_HEADERS.has(name)) continue;
+    const value = response.headers.get(name);
+    if (value !== null) headers[name] = value;
+  }
+  return headers;
+}
+
+/**
+ * A refusal produced on the way back keeps the headers an answer would have
+ * carried. Relaying the rate-limit budget on the ALLOW and dropping it here
+ * would make the headers themselves the tell — "no budget, no request id" then
+ * reads as "the page I asked for held objects I may not see", which is the
+ * enumeration the vendor-shaped body exists to prevent.
+ *
+ * Only the content-type is reconsidered: the body is now OUR JSON, so a vendor
+ * content-type that does not announce JSON would be a lie. When it does
+ * announce JSON, its exact spelling is kept — `application/json` where the
+ * vendor said `application/json; charset=utf-8` is one more difference between
+ * a refusal and an answer.
+ */
+function refusalHeaders(
+  relayed: Record<string, string>,
+): Record<string, string> {
+  const declared = relayed["content-type"]?.toLowerCase() ?? "";
+  return declared.includes("application/json")
+    ? relayed
+    : { ...relayed, ...JSON_HEADERS };
+}
+
+/**
  * The only place the vendor credential is used, and the only place a vendor
  * answer becomes ours: the response is capped, header-filtered and, when the
- * connector registered one, post-checked before it reaches the agent.
+ * connector registered a plan, FILTERED before it reaches the agent.
  */
 export async function forward(
   deps: ForwardDeps,
@@ -61,8 +112,25 @@ export async function forward(
   req: IncomingShape,
   verdict: CatalogDecision,
   ctx: RequestContext,
-  postCheck?: NarrowPostCheck,
-): Promise<ResponseShape> {
+  filter?: FilterTask,
+  claims?: MissionClaims,
+): Promise<ForwardOutcome> {
+  const deny = (
+    status: number,
+    code: "missura_upstream_error" | "missura_response_too_large",
+    reason: string,
+    headers?: Record<string, string>,
+  ): ForwardOutcome => ({
+    ...denialResponse(deps.provider, {
+      status,
+      code,
+      reason,
+      claims,
+      now: deps.now?.(),
+      headers,
+    }),
+    removed: 0,
+  });
   let response: Response;
   try {
     // Origin + the normalized target only: never the raw client path, and
@@ -77,49 +145,67 @@ export async function forward(
     // The upstream error is deliberately swallowed: its message can carry the
     // vendor host, and an injected credential could surface in a wrapped error.
     emitEvent(deps, ctx, verdict, "upstream_error");
-    return jsonError(502, "missura_upstream_error");
+    return deny(
+      502,
+      "missura_upstream_error",
+      "the vendor could not be reached",
+    );
   }
 
+  const headers = relayedHeaders(response, filter !== undefined);
   const payload = await readCapped(response);
   if (payload === undefined) {
     // The vendor was reached, so the record says so — the request is denied
-    // on the way back, not on the way out.
+    // on the way back, not on the way out, and it keeps the headers an answer
+    // would have carried.
     emitEvent(
       deps,
       ctx,
       { ...verdict, decision: "deny", reason: TOO_LARGE_REASON },
       TOO_LARGE_REASON,
     );
-    return jsonError(502, "missura_response_too_large");
-  }
-  const headers: Record<string, string> = {};
-  for (const name of FORWARDED_RESPONSE_HEADERS) {
-    const value = response.headers.get(name);
-    if (value !== null) headers[name] = value;
+    return deny(
+      502,
+      "missura_response_too_large",
+      TOO_LARGE_REASON,
+      refusalHeaders(headers),
+    );
   }
 
-  if (postCheck !== undefined) {
-    const checked = applyPostCheck(
-      postCheck,
+  if (filter !== undefined) {
+    const filtered = applyFilterPlan(
+      filter.plan,
       new TextDecoder().decode(payload),
+      filter.notFoundBody,
     );
-    if (!checked.ok) {
+    if (!filtered.ok) {
+      // The vendor answered, so the record says so — the request is refused on
+      // the way back, and the agent sees the vendor's own "not found".
       emitEvent(
         deps,
         ctx,
-        { ...verdict, decision: "deny", reason: OUT_OF_SCOPE_REASON },
-        OUT_OF_SCOPE_REASON,
+        { ...verdict, decision: "deny", reason: filter.denyReason },
+        filter.denyReason,
       );
       return {
         status: response.status,
-        headers: { ...JSON_HEADERS },
-        body: checked.body,
+        headers: refusalHeaders(headers),
+        body: filtered.body,
+        removed: 0,
       };
     }
-    emitEvent(deps, ctx, verdict);
-    return { status: response.status, headers, body: checked.body };
+    // How many objects the mission was not allowed to see is part of the
+    // record: an ALLOW that removed objects is not the same event as one that
+    // had nothing to remove.
+    emitEvent(deps, ctx, verdict, undefined, filtered.objectsRemoved);
+    return {
+      status: response.status,
+      headers,
+      body: filtered.body,
+      removed: filtered.objectsRemoved,
+    };
   }
 
   emitEvent(deps, ctx, verdict);
-  return { status: response.status, headers, body: payload };
+  return { status: response.status, headers, body: payload, removed: 0 };
 }

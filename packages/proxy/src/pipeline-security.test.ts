@@ -10,6 +10,7 @@ import {
   bodyText,
   harness,
   request,
+  restDenial,
 } from "./pipeline.fixtures";
 
 describe("pipeline — upstream failure (step 4)", () => {
@@ -22,8 +23,7 @@ describe("pipeline — upstream failure (step 4)", () => {
     const res = await handle(h.deps, request());
 
     expect(res.status).toBe(502);
-    const payload: unknown = JSON.parse(bodyText(res.body));
-    expect(payload).toEqual({ error: { code: "missura_upstream_error" } });
+    expect(restDenial(res.body).code).toBe("missura_upstream_error");
     expect(bodyText(res.body)).not.toContain("ECONNREFUSED");
     expect(bodyText(res.body)).not.toContain("api.github.com");
   });
@@ -80,11 +80,9 @@ describe("pipeline — the mission claims are enforced", () => {
 
     expect(res.status).toBe(403);
     expect(h.fetchCount()).toBe(0);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: {
-        code: "missura_denied",
-        reason: "connection not in mission",
-      },
+    expect(restDenial(res.body)).toMatchObject({
+      code: "missura_connection_not_in_mission",
+      reason: "connection not in mission",
     });
     expect(h.events[0]?.decision).toBe("deny");
     expect(h.events[0]?.reason).toBe("connection not in mission");
@@ -112,11 +110,9 @@ describe("pipeline — the mission claims are enforced", () => {
 
     expect(res.status).toBe(403);
     expect(h.fetchCount()).toBe(0);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: {
-        code: "missura_denied",
-        reason: "action not allowed by mission",
-      },
+    expect(restDenial(res.body)).toMatchObject({
+      code: "missura_action_not_allowed",
+      reason: "action not allowed by mission",
     });
     expect(h.events[0]?.decision).toBe("deny");
     expect(h.events[0]?.operation).toBe(ALLOW.operation);
@@ -142,11 +138,9 @@ describe("pipeline — the request target cannot move the origin", () => {
 
       expect(res.status).toBe(403);
       expect(h.fetchCount()).toBe(0);
-      expect(JSON.parse(bodyText(res.body))).toEqual({
-        error: {
-          code: "missura_denied",
-          reason: "path escapes upstream origin",
-        },
+      expect(restDenial(res.body)).toMatchObject({
+        code: "missura_invalid_target",
+        reason: "path escapes upstream origin",
       });
     });
 
@@ -182,9 +176,7 @@ describe("pipeline — fail closed", () => {
     const res = await handle(h.deps, request());
 
     expect(res.status).toBe(500);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_internal" },
-    });
+    expect(restDenial(res.body).code).toBe("missura_internal");
     expect(h.fetchCount()).toBe(0);
     expect(bodyText(res.body)).not.toContain("catalog blew up");
   });
@@ -199,9 +191,7 @@ describe("pipeline — fail closed", () => {
     const res = await handle(h.deps, request({ path: "/user" }));
 
     expect(res.status).toBe(500);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_internal" },
-    });
+    expect(restDenial(res.body).code).toBe("missura_internal");
     expect(h.fetchCount()).toBe(0);
   });
 

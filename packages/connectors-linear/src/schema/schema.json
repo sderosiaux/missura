@@ -1,0 +1,3516 @@
+{
+  "source": "@linear/sdk/dist/index.d.mts",
+  "sdkVersion": "90.0.0",
+  "leaves": [
+    "Date",
+    "DateResolutionType",
+    "Day",
+    "ExternalSyncService",
+    "FeedSummarySchedule",
+    "FrequencyResolutionType",
+    "InitiativeTab",
+    "IntegrationService",
+    "IssueSharedAccessDisallowedField",
+    "JSONObject",
+    "PipelineTab",
+    "ProjectMilestoneStatus",
+    "ProjectTab",
+    "ProjectUpdateHealthType",
+    "ProjectUpdateReminderFrequency",
+    "ReleaseChannel",
+    "SLADayCountType",
+    "TeamVisibility",
+    "TimelessDate",
+    "boolean",
+    "number",
+    "string"
+  ],
+  "types": {
+    "ActorBot": {
+      "fields": {
+        "avatarUrl": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "subType": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "type": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "userDisplayName": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Attachment": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "bodyData": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "creator": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "externalUserCreator": {
+          "type": "ExternalUser",
+          "nullable": true,
+          "list": false
+        },
+        "groupBySource": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "issue": {
+          "type": "Issue",
+          "nullable": false,
+          "list": false
+        },
+        "metadata": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "originalIssue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "source": {
+          "type": "JSONObject",
+          "nullable": true,
+          "list": false
+        },
+        "sourceType": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "subtitle": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "title": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "creatorId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "externalUserCreatorId": "synthesized-id-getter",
+        "issueId": "synthesized-id-getter",
+        "originalIssueId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "AttachmentConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Attachment",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Comment": {
+      "fields": {
+        "agentSession": {
+          "type": "AgentSession",
+          "nullable": true,
+          "list": false
+        },
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "body": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "botActor": {
+          "type": "ActorBot",
+          "nullable": true,
+          "list": false
+        },
+        "children": {
+          "type": "CommentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "createdIssues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "documentContent": {
+          "type": "DocumentContent",
+          "nullable": true,
+          "list": false
+        },
+        "documentContentId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "editedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "externalThread": {
+          "type": "SyncedExternalThread",
+          "nullable": true,
+          "list": false
+        },
+        "externalUser": {
+          "type": "ExternalUser",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "initiative": {
+          "type": "Initiative",
+          "nullable": true,
+          "list": false
+        },
+        "initiativeId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "initiativeUpdate": {
+          "type": "InitiativeUpdate",
+          "nullable": true,
+          "list": false
+        },
+        "initiativeUpdateId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "issue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "issueId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "parent": {
+          "type": "Comment",
+          "nullable": true,
+          "list": false
+        },
+        "parentId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "project": {
+          "type": "Project",
+          "nullable": true,
+          "list": false
+        },
+        "projectId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "projectUpdate": {
+          "type": "ProjectUpdate",
+          "nullable": true,
+          "list": false
+        },
+        "projectUpdateId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "quotedText": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "reactionData": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "reactions": {
+          "type": "Reaction",
+          "nullable": false,
+          "list": true
+        },
+        "resolvedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "resolvingComment": {
+          "type": "Comment",
+          "nullable": true,
+          "list": false
+        },
+        "resolvingCommentId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "resolvingUser": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "syncedWith": {
+          "type": "ExternalEntityInfo",
+          "nullable": true,
+          "list": true
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "user": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {
+        "agentSessionId": "synthesized-id-getter",
+        "create": "non-query-method",
+        "delete": "non-query-method",
+        "externalUserId": "synthesized-id-getter",
+        "resolvingUserId": "synthesized-id-getter",
+        "update": "non-query-method",
+        "userId": "synthesized-id-getter"
+      }
+    },
+    "CommentConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Comment",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Customer": {
+      "fields": {
+        "approximateNeedCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "domains": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "externalIds": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "integration": {
+          "type": "Integration",
+          "nullable": true,
+          "list": false
+        },
+        "logoUrl": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "mainSourceId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "needs": {
+          "type": "CustomerNeed",
+          "nullable": false,
+          "list": true
+        },
+        "owner": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "revenue": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "size": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "slackChannelId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "slugId": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "status": {
+          "type": "CustomerStatus",
+          "nullable": false,
+          "list": false
+        },
+        "tier": {
+          "type": "CustomerTier",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "delete": "non-query-method",
+        "integrationId": "synthesized-id-getter",
+        "ownerId": "synthesized-id-getter",
+        "statusId": "synthesized-id-getter",
+        "tierId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "CustomerConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Customer",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "CustomerNeed": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "attachment": {
+          "type": "Attachment",
+          "nullable": true,
+          "list": false
+        },
+        "body": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "comment": {
+          "type": "Comment",
+          "nullable": true,
+          "list": false
+        },
+        "content": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "creator": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "customer": {
+          "type": "Customer",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "issue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "originalIssue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "priority": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "project": {
+          "type": "Project",
+          "nullable": true,
+          "list": false
+        },
+        "projectAttachment": {
+          "type": "ProjectAttachment",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "attachmentId": "synthesized-id-getter",
+        "commentId": "synthesized-id-getter",
+        "create": "non-query-method",
+        "creatorId": "synthesized-id-getter",
+        "customerId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "issueId": "synthesized-id-getter",
+        "originalIssueId": "synthesized-id-getter",
+        "projectId": "synthesized-id-getter",
+        "unarchive": "non-query-method",
+        "update": "non-query-method"
+      }
+    },
+    "CustomerNeedConnection": {
+      "fields": {
+        "nodes": {
+          "type": "CustomerNeed",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Cycle": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "autoArchivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "completedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "completedIssueCountHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "completedScopeHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "endsAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inProgressScopeHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "inheritedFrom": {
+          "type": "Cycle",
+          "nullable": true,
+          "list": false
+        },
+        "isActive": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isFuture": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isNext": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isPast": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isPrevious": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "issueCountHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "issues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "number": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "progress": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "scopeHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "startsAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "team": {
+          "type": "Team",
+          "nullable": false,
+          "list": false
+        },
+        "uncompletedIssuesUponClose": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "create": "non-query-method",
+        "inheritedFromId": "synthesized-id-getter",
+        "teamId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "CycleConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Cycle",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "ExternalEntityInfo": {
+      "fields": {
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "service": {
+          "type": "ExternalSyncService",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "metadata": "unmapped-type"
+      }
+    },
+    "ExternalEntityInfoGithubMetadata": {
+      "fields": {
+        "number": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "owner": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "repo": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "ExternalEntityInfoJiraMetadata": {
+      "fields": {
+        "issueKey": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "issueTypeId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "projectId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "ExternalEntitySlackMetadata": {
+      "fields": {
+        "channelId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "channelName": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "isFromSlack": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "messageUrl": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "ExternalUser": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "avatarUrl": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "displayName": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "email": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "lastSeen": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "organization": "unbacked-getter"
+      }
+    },
+    "ExternalUserConnection": {
+      "fields": {
+        "nodes": {
+          "type": "ExternalUser",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Favorite": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "children": {
+          "type": "FavoriteConnection",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "customView": {
+          "type": "CustomView",
+          "nullable": true,
+          "list": false
+        },
+        "customer": {
+          "type": "Customer",
+          "nullable": true,
+          "list": false
+        },
+        "cycle": {
+          "type": "Cycle",
+          "nullable": true,
+          "list": false
+        },
+        "document": {
+          "type": "Document",
+          "nullable": true,
+          "list": false
+        },
+        "folderName": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "initiative": {
+          "type": "Initiative",
+          "nullable": true,
+          "list": false
+        },
+        "initiativeTab": {
+          "type": "InitiativeTab",
+          "nullable": true,
+          "list": false
+        },
+        "issue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "label": {
+          "type": "IssueLabel",
+          "nullable": true,
+          "list": false
+        },
+        "liveFolderDefinition": {
+          "type": "JSONObject",
+          "nullable": true,
+          "list": false
+        },
+        "liveFolderPreset": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "owner": {
+          "type": "User",
+          "nullable": false,
+          "list": false
+        },
+        "parent": {
+          "type": "Favorite",
+          "nullable": true,
+          "list": false
+        },
+        "pipelineTab": {
+          "type": "PipelineTab",
+          "nullable": true,
+          "list": false
+        },
+        "predefinedViewTeam": {
+          "type": "Team",
+          "nullable": true,
+          "list": false
+        },
+        "predefinedViewType": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "project": {
+          "type": "Project",
+          "nullable": true,
+          "list": false
+        },
+        "projectLabel": {
+          "type": "ProjectLabel",
+          "nullable": true,
+          "list": false
+        },
+        "projectTab": {
+          "type": "ProjectTab",
+          "nullable": true,
+          "list": false
+        },
+        "projectTeam": {
+          "type": "Team",
+          "nullable": true,
+          "list": false
+        },
+        "release": {
+          "type": "Release",
+          "nullable": true,
+          "list": false
+        },
+        "releaseNote": {
+          "type": "ReleaseNote",
+          "nullable": true,
+          "list": false
+        },
+        "releasePipeline": {
+          "type": "ReleasePipeline",
+          "nullable": true,
+          "list": false
+        },
+        "sortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "team": {
+          "type": "Team",
+          "nullable": true,
+          "list": false
+        },
+        "type": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "user": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "customViewId": "synthesized-id-getter",
+        "customerId": "synthesized-id-getter",
+        "cycleId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "documentId": "synthesized-id-getter",
+        "initiativeId": "synthesized-id-getter",
+        "issueId": "synthesized-id-getter",
+        "labelId": "synthesized-id-getter",
+        "ownerId": "synthesized-id-getter",
+        "parentId": "synthesized-id-getter",
+        "predefinedViewTeamId": "synthesized-id-getter",
+        "projectId": "synthesized-id-getter",
+        "projectLabelId": "synthesized-id-getter",
+        "projectTeamId": "synthesized-id-getter",
+        "releaseId": "synthesized-id-getter",
+        "releaseNoteId": "synthesized-id-getter",
+        "releasePipelineId": "synthesized-id-getter",
+        "teamId": "synthesized-id-getter",
+        "update": "non-query-method",
+        "userId": "synthesized-id-getter"
+      }
+    },
+    "FavoriteConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Favorite",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Issue": {
+      "fields": {
+        "addedToCycleAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "addedToProjectAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "addedToTeamAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "asksExternalUserRequester": {
+          "type": "ExternalUser",
+          "nullable": true,
+          "list": false
+        },
+        "asksRequester": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "assignee": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "attachments": {
+          "type": "AttachmentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "autoArchivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "autoClosedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "boardOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "botActor": {
+          "type": "ActorBot",
+          "nullable": true,
+          "list": false
+        },
+        "branchName": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "canceledAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "children": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "comments": {
+          "type": "CommentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "completedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "creator": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "customerTicketCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "cycle": {
+          "type": "Cycle",
+          "nullable": true,
+          "list": false
+        },
+        "delegate": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "documents": {
+          "type": "DocumentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "dueDate": {
+          "type": "TimelessDate",
+          "nullable": true,
+          "list": false
+        },
+        "estimate": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "externalUserCreator": {
+          "type": "ExternalUser",
+          "nullable": true,
+          "list": false
+        },
+        "favorite": {
+          "type": "Favorite",
+          "nullable": true,
+          "list": false
+        },
+        "formerAttachments": {
+          "type": "AttachmentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "formerNeeds": {
+          "type": "CustomerNeedConnection",
+          "nullable": false,
+          "list": false
+        },
+        "history": {
+          "type": "IssueHistoryConnection",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "identifier": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inheritsSharedAccess": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "integrationSourceType": {
+          "type": "IntegrationService",
+          "nullable": true,
+          "list": false
+        },
+        "inverseRelations": {
+          "type": "IssueRelationConnection",
+          "nullable": false,
+          "list": false
+        },
+        "labelIds": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "labels": {
+          "type": "IssueLabelConnection",
+          "nullable": false,
+          "list": false
+        },
+        "lastAppliedTemplate": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "needs": {
+          "type": "CustomerNeedConnection",
+          "nullable": false,
+          "list": false
+        },
+        "number": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "parent": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "previousIdentifiers": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "priority": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "priorityLabel": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "prioritySortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "project": {
+          "type": "Project",
+          "nullable": true,
+          "list": false
+        },
+        "projectMilestone": {
+          "type": "ProjectMilestone",
+          "nullable": true,
+          "list": false
+        },
+        "reactionData": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "reactions": {
+          "type": "Reaction",
+          "nullable": false,
+          "list": true
+        },
+        "recurringIssueTemplate": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "relations": {
+          "type": "IssueRelationConnection",
+          "nullable": false,
+          "list": false
+        },
+        "releases": {
+          "type": "ReleaseConnection",
+          "nullable": false,
+          "list": false
+        },
+        "sharedAccess": {
+          "type": "IssueSharedAccess",
+          "nullable": false,
+          "list": false
+        },
+        "slaBreachesAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "slaHighRiskAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "slaMediumRiskAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "slaStartedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "slaType": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "snoozedBy": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "snoozedUntilAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "sortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "sourceComment": {
+          "type": "Comment",
+          "nullable": true,
+          "list": false
+        },
+        "startedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "startedTriageAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "state": {
+          "type": "WorkflowState",
+          "nullable": false,
+          "list": false
+        },
+        "stateHistory": {
+          "type": "IssueStateSpanConnection",
+          "nullable": false,
+          "list": false
+        },
+        "subIssueSortOrder": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "subscribers": {
+          "type": "UserConnection",
+          "nullable": false,
+          "list": false
+        },
+        "syncedWith": {
+          "type": "ExternalEntityInfo",
+          "nullable": true,
+          "list": true
+        },
+        "team": {
+          "type": "Team",
+          "nullable": false,
+          "list": false
+        },
+        "title": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "trashed": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "triagedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "asksExternalUserRequesterId": "synthesized-id-getter",
+        "asksRequesterId": "synthesized-id-getter",
+        "assigneeId": "synthesized-id-getter",
+        "create": "non-query-method",
+        "creatorId": "synthesized-id-getter",
+        "cycleId": "synthesized-id-getter",
+        "delegateId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "externalUserCreatorId": "synthesized-id-getter",
+        "favoriteId": "synthesized-id-getter",
+        "lastAppliedTemplateId": "synthesized-id-getter",
+        "parentId": "synthesized-id-getter",
+        "projectId": "synthesized-id-getter",
+        "projectMilestoneId": "synthesized-id-getter",
+        "recurringIssueTemplateId": "synthesized-id-getter",
+        "snoozedById": "synthesized-id-getter",
+        "sourceCommentId": "synthesized-id-getter",
+        "stateId": "synthesized-id-getter",
+        "teamId": "synthesized-id-getter",
+        "unarchive": "non-query-method",
+        "update": "non-query-method"
+      }
+    },
+    "IssueConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Issue",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "IssueLabel": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "children": {
+          "type": "IssueLabelConnection",
+          "nullable": false,
+          "list": false
+        },
+        "color": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "creator": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inheritedFrom": {
+          "type": "IssueLabel",
+          "nullable": true,
+          "list": false
+        },
+        "isGroup": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "issues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "lastAppliedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "parent": {
+          "type": "IssueLabel",
+          "nullable": true,
+          "list": false
+        },
+        "retiredBy": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "team": {
+          "type": "Team",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "creatorId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "inheritedFromId": "synthesized-id-getter",
+        "organization": "unbacked-getter",
+        "parentId": "synthesized-id-getter",
+        "retiredById": "synthesized-id-getter",
+        "teamId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "IssueLabelConnection": {
+      "fields": {
+        "nodes": {
+          "type": "IssueLabel",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "IssueRelation": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "issue": {
+          "type": "Issue",
+          "nullable": false,
+          "list": false
+        },
+        "relatedIssue": {
+          "type": "Issue",
+          "nullable": false,
+          "list": false
+        },
+        "type": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "delete": "non-query-method",
+        "issueId": "synthesized-id-getter",
+        "relatedIssueId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "IssueRelationConnection": {
+      "fields": {
+        "nodes": {
+          "type": "IssueRelation",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "IssueSharedAccess": {
+      "fields": {
+        "disallowedIssueFields": {
+          "type": "IssueSharedAccessDisallowedField",
+          "nullable": false,
+          "list": true
+        },
+        "isShared": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "sharedWithCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "sharedWithUsers": {
+          "type": "User",
+          "nullable": false,
+          "list": true
+        },
+        "viewerHasOnlySharedAccess": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Organization": {
+      "fields": {
+        "aiDiscussionSummariesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "aiThreadSummariesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "allowMembersToInvite": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "allowedAuthServices": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "allowedFileUploadContentTypes": {
+          "type": "string",
+          "nullable": true,
+          "list": true
+        },
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "authSettings": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "createdIssueCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "customerCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "customersConfiguration": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "customersEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "defaultFeedSummarySchedule": {
+          "type": "FeedSummarySchedule",
+          "nullable": true,
+          "list": false
+        },
+        "defaultHomeView": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "defaultHomeViewTargetId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "deletionRequestedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "feedEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "fiscalYearStartMonth": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "gitBranchFormat": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "gitLinkbackDescriptionsEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "gitLinkbackMessagesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "gitPublicLinkbackMessagesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "hideNonPrimaryOrganizations": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "hipaaComplianceEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "initiativeUpdateReminderFrequencyInWeeks": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "initiativeUpdateRemindersDay": {
+          "type": "Day",
+          "nullable": false,
+          "list": false
+        },
+        "initiativeUpdateRemindersHour": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "integrations": {
+          "type": "IntegrationConnection",
+          "nullable": false,
+          "list": false
+        },
+        "labels": {
+          "type": "IssueLabelConnection",
+          "nullable": false,
+          "list": false
+        },
+        "logoUrl": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "periodUploadVolume": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "previousUrlKeys": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "projectLabels": {
+          "type": "ProjectLabelConnection",
+          "nullable": false,
+          "list": false
+        },
+        "projectStatuses": {
+          "type": "ProjectStatus",
+          "nullable": false,
+          "list": true
+        },
+        "projectUpdateReminderFrequencyInWeeks": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "projectUpdateRemindersDay": {
+          "type": "Day",
+          "nullable": false,
+          "list": false
+        },
+        "projectUpdateRemindersHour": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "projectUpdatesReminderFrequency": {
+          "type": "ProjectUpdateReminderFrequency",
+          "nullable": false,
+          "list": false
+        },
+        "pullRequestIssueMode": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "pullRequestTourEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "releaseChannel": {
+          "type": "ReleaseChannel",
+          "nullable": false,
+          "list": false
+        },
+        "releasesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "restrictLabelManagementToAdmins": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "restrictTeamCreationToAdmins": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "roadmapEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "samlEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "scimEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "securitySettings": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "slaDayCount": {
+          "type": "SLADayCountType",
+          "nullable": false,
+          "list": false
+        },
+        "slackProjectChannelIntegration": {
+          "type": "Integration",
+          "nullable": true,
+          "list": false
+        },
+        "slackProjectChannelPrefix": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "subscription": {
+          "type": "PaidSubscription",
+          "nullable": true,
+          "list": false
+        },
+        "teams": {
+          "type": "TeamConnection",
+          "nullable": false,
+          "list": false
+        },
+        "templates": {
+          "type": "TemplateConnection",
+          "nullable": false,
+          "list": false
+        },
+        "trialEndsAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "trialStartsAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "urlKey": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "userCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "users": {
+          "type": "UserConnection",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "delete": "non-query-method",
+        "slackProjectChannelIntegrationId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "PageInfo": {
+      "fields": {
+        "endCursor": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "hasNextPage": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "hasPreviousPage": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "startCursor": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Project": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "attachments": {
+          "type": "ProjectAttachmentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "autoArchivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "canceledAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "color": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "comments": {
+          "type": "CommentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "completedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "completedIssueCountHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "completedScopeHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "content": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "convertedFromIssue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "creator": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "documentContent": {
+          "type": "DocumentContent",
+          "nullable": true,
+          "list": false
+        },
+        "documents": {
+          "type": "DocumentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "externalLinks": {
+          "type": "EntityExternalLinkConnection",
+          "nullable": false,
+          "list": false
+        },
+        "favorite": {
+          "type": "Favorite",
+          "nullable": true,
+          "list": false
+        },
+        "frequencyResolution": {
+          "type": "FrequencyResolutionType",
+          "nullable": false,
+          "list": false
+        },
+        "health": {
+          "type": "ProjectUpdateHealthType",
+          "nullable": true,
+          "list": false
+        },
+        "healthUpdatedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "history": {
+          "type": "ProjectHistoryConnection",
+          "nullable": false,
+          "list": false
+        },
+        "icon": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inProgressScopeHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "initiativeToProjects": {
+          "type": "InitiativeToProjectConnection",
+          "nullable": false,
+          "list": false
+        },
+        "initiatives": {
+          "type": "InitiativeConnection",
+          "nullable": false,
+          "list": false
+        },
+        "integrationsSettings": {
+          "type": "IntegrationsSettings",
+          "nullable": true,
+          "list": false
+        },
+        "inverseRelations": {
+          "type": "ProjectRelationConnection",
+          "nullable": false,
+          "list": false
+        },
+        "issueCountHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "issues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "labelIds": {
+          "type": "string",
+          "nullable": false,
+          "list": true
+        },
+        "labels": {
+          "type": "ProjectLabelConnection",
+          "nullable": false,
+          "list": false
+        },
+        "lastAppliedTemplate": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "lastUpdate": {
+          "type": "ProjectUpdate",
+          "nullable": true,
+          "list": false
+        },
+        "lead": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "members": {
+          "type": "UserConnection",
+          "nullable": false,
+          "list": false
+        },
+        "microsoftTeamsChannelId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "needs": {
+          "type": "CustomerNeedConnection",
+          "nullable": false,
+          "list": false
+        },
+        "priority": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "priorityLabel": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "prioritySortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "progress": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "projectMilestones": {
+          "type": "ProjectMilestoneConnection",
+          "nullable": false,
+          "list": false
+        },
+        "projectUpdateRemindersPausedUntilAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "projectUpdates": {
+          "type": "ProjectUpdateConnection",
+          "nullable": false,
+          "list": false
+        },
+        "relations": {
+          "type": "ProjectRelationConnection",
+          "nullable": false,
+          "list": false
+        },
+        "resourceCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "scope": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "scopeHistory": {
+          "type": "number",
+          "nullable": false,
+          "list": true
+        },
+        "slackChannelId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "slackIssueComments": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "slackIssueStatuses": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "slackNewIssue": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "slugId": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "sortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "startDate": {
+          "type": "TimelessDate",
+          "nullable": true,
+          "list": false
+        },
+        "startDateResolution": {
+          "type": "DateResolutionType",
+          "nullable": true,
+          "list": false
+        },
+        "startedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "state": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "status": {
+          "type": "ProjectStatus",
+          "nullable": false,
+          "list": false
+        },
+        "syncedWith": {
+          "type": "ExternalEntityInfo",
+          "nullable": true,
+          "list": true
+        },
+        "targetDate": {
+          "type": "TimelessDate",
+          "nullable": true,
+          "list": false
+        },
+        "targetDateResolution": {
+          "type": "DateResolutionType",
+          "nullable": true,
+          "list": false
+        },
+        "teams": {
+          "type": "TeamConnection",
+          "nullable": false,
+          "list": false
+        },
+        "trashed": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "updateReminderFrequency": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "updateReminderFrequencyInWeeks": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "updateRemindersDay": {
+          "type": "Day",
+          "nullable": true,
+          "list": false
+        },
+        "updateRemindersHour": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "convertedFromIssueId": "synthesized-id-getter",
+        "create": "non-query-method",
+        "creatorId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "favoriteId": "synthesized-id-getter",
+        "integrationsSettingsId": "synthesized-id-getter",
+        "lastAppliedTemplateId": "synthesized-id-getter",
+        "lastUpdateId": "synthesized-id-getter",
+        "leadId": "synthesized-id-getter",
+        "statusId": "synthesized-id-getter",
+        "unarchive": "non-query-method",
+        "update": "non-query-method"
+      }
+    },
+    "ProjectConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Project",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "ProjectMilestone": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "documentContent": {
+          "type": "DocumentContent",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "issues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "progress": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "project": {
+          "type": "Project",
+          "nullable": false,
+          "list": false
+        },
+        "sortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "status": {
+          "type": "ProjectMilestoneStatus",
+          "nullable": false,
+          "list": false
+        },
+        "targetDate": {
+          "type": "TimelessDate",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "delete": "non-query-method",
+        "projectId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "ProjectMilestoneConnection": {
+      "fields": {
+        "nodes": {
+          "type": "ProjectMilestone",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Reaction": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "comment": {
+          "type": "Comment",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "emoji": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "externalUser": {
+          "type": "ExternalUser",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "initiativeUpdate": {
+          "type": "InitiativeUpdate",
+          "nullable": true,
+          "list": false
+        },
+        "issue": {
+          "type": "Issue",
+          "nullable": true,
+          "list": false
+        },
+        "projectUpdate": {
+          "type": "ProjectUpdate",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "user": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        }
+      },
+      "excluded": {
+        "commentId": "synthesized-id-getter",
+        "create": "non-query-method",
+        "delete": "non-query-method",
+        "externalUserId": "synthesized-id-getter",
+        "initiativeUpdateId": "synthesized-id-getter",
+        "issueId": "synthesized-id-getter",
+        "projectUpdateId": "synthesized-id-getter",
+        "userId": "synthesized-id-getter"
+      }
+    },
+    "Team": {
+      "fields": {
+        "activeCycle": {
+          "type": "Cycle",
+          "nullable": true,
+          "list": false
+        },
+        "aiDiscussionSummariesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "aiThreadSummariesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "allMembersCanJoin": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "autoArchivePeriod": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "autoCloseChildIssues": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "autoCloseParentIssues": {
+          "type": "boolean",
+          "nullable": true,
+          "list": false
+        },
+        "autoClosePeriod": {
+          "type": "number",
+          "nullable": true,
+          "list": false
+        },
+        "autoCloseStateId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "color": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "cycleCalenderUrl": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "cycleCooldownTime": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "cycleDuration": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "cycleIssueAutoAssignCompleted": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "cycleIssueAutoAssignStarted": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "cycleLockToActive": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "cycleStartDay": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "cycles": {
+          "type": "CycleConnection",
+          "nullable": false,
+          "list": false
+        },
+        "cyclesEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "defaultIssueEstimate": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "defaultIssueState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "defaultProjectTemplate": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "defaultTemplateForMembers": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "defaultTemplateForMembersId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "defaultTemplateForNonMembers": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "defaultTemplateForNonMembersId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "displayName": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "draftWorkflowState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "gitAutomationStates": {
+          "type": "GitAutomationStateConnection",
+          "nullable": false,
+          "list": false
+        },
+        "groupIssueHistory": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "icon": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inheritIssueEstimation": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "inheritWorkflowStatuses": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "integrationsSettings": {
+          "type": "IntegrationsSettings",
+          "nullable": true,
+          "list": false
+        },
+        "inviteHash": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "issueCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "issueEstimationAllowZero": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "issueEstimationExtended": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "issueEstimationType": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "issueOrderingNoPriorityFirst": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "issueSortOrderDefaultToBottom": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "issues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "key": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "labels": {
+          "type": "IssueLabelConnection",
+          "nullable": false,
+          "list": false
+        },
+        "ledInitiativeCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "markedAsDuplicateWorkflowState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "members": {
+          "type": "UserConnection",
+          "nullable": false,
+          "list": false
+        },
+        "memberships": {
+          "type": "TeamMembershipConnection",
+          "nullable": false,
+          "list": false
+        },
+        "mergeWorkflowState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "mergeableWorkflowState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "parent": {
+          "type": "Team",
+          "nullable": true,
+          "list": false
+        },
+        "private": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "projects": {
+          "type": "ProjectConnection",
+          "nullable": false,
+          "list": false
+        },
+        "releasePipelines": {
+          "type": "ReleasePipelineConnection",
+          "nullable": false,
+          "list": false
+        },
+        "requirePriorityToLeaveTriage": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "retiredAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "reviewWorkflowState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "scimGroupName": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "scimManaged": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "securitySettings": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "setIssueSortOrderOnStateChange": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "slackIssueComments": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "slackIssueStatuses": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "slackNewIssue": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "startWorkflowState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "states": {
+          "type": "WorkflowStateConnection",
+          "nullable": false,
+          "list": false
+        },
+        "templates": {
+          "type": "TemplateConnection",
+          "nullable": false,
+          "list": false
+        },
+        "timezone": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "triageEnabled": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "triageIssueState": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "triageResponsibility": {
+          "type": "TriageResponsibility",
+          "nullable": true,
+          "list": false
+        },
+        "upcomingCycleCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "visibility": {
+          "type": "TeamVisibility",
+          "nullable": false,
+          "list": false
+        },
+        "webhooks": {
+          "type": "WebhookConnection",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "activeCycleId": "synthesized-id-getter",
+        "create": "non-query-method",
+        "defaultIssueStateId": "synthesized-id-getter",
+        "defaultProjectTemplateId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "draftWorkflowStateId": "synthesized-id-getter",
+        "integrationsSettingsId": "synthesized-id-getter",
+        "markedAsDuplicateWorkflowStateId": "synthesized-id-getter",
+        "mergeWorkflowStateId": "synthesized-id-getter",
+        "mergeableWorkflowStateId": "synthesized-id-getter",
+        "organization": "unbacked-getter",
+        "parentId": "synthesized-id-getter",
+        "reviewWorkflowStateId": "synthesized-id-getter",
+        "startWorkflowStateId": "synthesized-id-getter",
+        "triageIssueStateId": "synthesized-id-getter",
+        "triageResponsibilityId": "synthesized-id-getter",
+        "unarchive": "non-query-method",
+        "update": "non-query-method"
+      }
+    },
+    "TeamConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Team",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "Template": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "color": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "creator": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "icon": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inheritedFrom": {
+          "type": "Template",
+          "nullable": true,
+          "list": false
+        },
+        "lastAppliedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "lastUpdatedBy": {
+          "type": "User",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "pipeline": {
+          "type": "ReleasePipeline",
+          "nullable": true,
+          "list": false
+        },
+        "sortOrder": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "team": {
+          "type": "Team",
+          "nullable": true,
+          "list": false
+        },
+        "type": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "create": "non-query-method",
+        "creatorId": "synthesized-id-getter",
+        "delete": "non-query-method",
+        "inheritedFromId": "synthesized-id-getter",
+        "lastUpdatedById": "synthesized-id-getter",
+        "organization": "unbacked-getter",
+        "pipelineId": "synthesized-id-getter",
+        "teamId": "synthesized-id-getter",
+        "templateData": "unmapped-type",
+        "update": "non-query-method"
+      }
+    },
+    "TemplateConnection": {
+      "fields": {
+        "nodes": {
+          "type": "Template",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "User": {
+      "fields": {
+        "active": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "admin": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "app": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "assignedIssues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "avatarBackgroundColor": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "avatarUrl": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "calendarHash": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "canAccessAnyPublicTeam": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "createdIssueCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "createdIssues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "delegatedIssues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "disableReason": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "displayName": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "drafts": {
+          "type": "DraftConnection",
+          "nullable": false,
+          "list": false
+        },
+        "email": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "gitHubUserId": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "guest": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "initials": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inviteHash": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "isAssignable": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isMe": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isMentionable": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "lastSeen": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "owner": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "statusEmoji": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "statusLabel": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "statusUntilAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "supportsAgentSessions": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "teamMemberships": {
+          "type": "TeamMembershipConnection",
+          "nullable": false,
+          "list": false
+        },
+        "teams": {
+          "type": "TeamConnection",
+          "nullable": false,
+          "list": false
+        },
+        "timezone": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "title": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "organization": "unbacked-getter",
+        "suspend": "non-query-method",
+        "unsuspend": "non-query-method",
+        "update": "non-query-method"
+      }
+    },
+    "UserConnection": {
+      "fields": {
+        "nodes": {
+          "type": "User",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    },
+    "WorkflowState": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "color": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "description": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "inheritedFrom": {
+          "type": "WorkflowState",
+          "nullable": true,
+          "list": false
+        },
+        "issues": {
+          "type": "IssueConnection",
+          "nullable": false,
+          "list": false
+        },
+        "name": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "position": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "team": {
+          "type": "Team",
+          "nullable": false,
+          "list": false
+        },
+        "type": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "create": "non-query-method",
+        "inheritedFromId": "synthesized-id-getter",
+        "teamId": "synthesized-id-getter",
+        "update": "non-query-method"
+      }
+    },
+    "WorkflowStateConnection": {
+      "fields": {
+        "nodes": {
+          "type": "WorkflowState",
+          "nullable": false,
+          "list": true
+        },
+        "pageInfo": {
+          "type": "PageInfo",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {}
+    }
+  }
+}

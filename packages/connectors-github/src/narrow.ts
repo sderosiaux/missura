@@ -64,15 +64,37 @@ export function narrowGithub(
   path: string,
   scope: { githubRepos: string[] },
 ): GithubNarrowResult {
+  return withScopeSize(decide(path, scope.githubRepos), scope.githubRepos.length);
+}
+
+function decide(
+  path: string,
+  githubRepos: readonly string[],
+): GithubNarrowResult {
   const canonical = canonicalize(path);
-  if (canonical === undefined) return deny(UNDECODABLE_PATH);
+  if (canonical === undefined) return deny(UNDECODABLE_PATH, "missura_invalid_target");
   const [first, second] = canonical.segments;
 
   if (first === "repos" && second !== undefined) {
-    return narrowRepoPath(canonical, scope.githubRepos);
+    return narrowRepoPath(canonical, githubRepos);
   }
   if (first === "search" && second === "issues") {
-    return narrowSearchIssues(canonical, scope.githubRepos);
+    return narrowSearchIssues(canonical, githubRepos);
   }
-  return deny(NOT_IN_CATALOG_SCOPE);
+  return deny(NOT_IN_CATALOG_SCOPE, "missura_operation_not_in_catalog");
+}
+
+/**
+ * Attached once, at the exit, so no refusal can be added without it. The count
+ * is what the remediation is built from — "your mission covers 3 repositories"
+ * reads the same whether the refused one exists or not, which is the whole
+ * point (SPEC §4.8bis).
+ */
+function withScopeSize(
+  result: GithubNarrowResult,
+  size: number,
+): GithubNarrowResult {
+  return result.decision === "deny"
+    ? { ...result, missionScopeSize: size }
+    : result;
 }

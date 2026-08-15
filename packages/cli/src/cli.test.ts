@@ -211,9 +211,13 @@ describe("missura run", () => {
       });
 
       expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({
-        error: { code: "missura_unauthorized" },
-      });
+      // GraphQL-shaped, so the Linear SDK can parse its own refusal.
+      const payload = (await res.json()) as {
+        errors: { extensions: { missura: { code: string } } }[];
+      };
+      expect(payload.errors[0]?.extensions.missura.code).toBe(
+        "missura_unauthenticated",
+      );
       expect(h.out.join("\n")).toContain("DENY");
 
       const eventsDir = resolveHome(h.io.env).eventsDir;

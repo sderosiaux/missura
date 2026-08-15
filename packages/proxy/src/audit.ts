@@ -23,12 +23,26 @@ export interface RequestContext {
   traceId?: string;
 }
 
+/** No token, or one whose signature this proxy cannot verify. */
+export const UNAUTHENTICATED_REASON = "authn: missing or invalid mission token";
+/**
+ * Signature valid, clock past `exp`. Kept apart from the line above because it
+ * is the one authn failure that still describes a real mission, and the agent
+ * gets told which — its own.
+ */
+export const EXPIRED_REASON = "mission expired";
 /** Reasons a verified token still does not get through. */
 export const REVOKED_REASON = "revoked";
 export const CONNECTION_REASON = "connection not in mission";
 export const ACTION_REASON = "action not allowed by mission";
 /** Every request target that would leave the connector's origin. */
 export const ESCAPE_REASON = "path escapes upstream origin";
+/**
+ * A pagination cursor this mission was never handed. Cursors are missura's own
+ * handles (SPEC §22), so one we cannot resolve is either forged or another
+ * mission's — either way it names a vendor position nothing authorized.
+ */
+export const CURSOR_REASON = "pagination cursor not issued to this mission";
 /** The vendor answered, but the answer was refused. */
 export const TOO_LARGE_REASON = "response too large (after upstream call)";
 
@@ -49,6 +63,7 @@ export function emitEvent(
   ctx: RequestContext,
   decision: CatalogDecision,
   reason?: string,
+  objectsRemoved?: number,
 ): void {
   const now = deps.now?.() ?? Date.now();
   deps.emit({
@@ -63,6 +78,7 @@ export function emitEvent(
     ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
     ...(ctx.purpose === undefined ? {} : { purpose: ctx.purpose }),
     ...(ctx.traceId === undefined ? {} : { traceId: ctx.traceId }),
+    ...(objectsRemoved === undefined ? {} : { objectsRemoved }),
   });
 }
 

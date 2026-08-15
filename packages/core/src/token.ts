@@ -21,6 +21,22 @@ export interface MissionClaims extends MissionInput {
   exp: number;
 }
 
+/**
+ * The one rejection that still knows a real mission: the signature is checked
+ * before the clock, so claims reaching this error are verified claims, not a
+ * bearer's unproven story. Carrying them lets a denial tell the agent that ITS
+ * mission expired — a fact about its own grant, never about a target — where a
+ * garbage token can only be answered with "unauthenticated".
+ */
+export class MissionExpiredError extends Error {
+  readonly claims: MissionClaims;
+  constructor(claims: MissionClaims) {
+    super("token expired");
+    this.name = "MissionExpiredError";
+    this.claims = claims;
+  }
+}
+
 const PREFIX = "msr_";
 const MIN_KEY_BYTES = 32;
 
@@ -139,7 +155,7 @@ export function verifyMissionToken(
   }
   const claims = validateClaims(parsed);
   const now = Math.floor((opts.now ?? Date.now()) / 1000);
-  if (claims.exp <= now) throw new Error("token expired");
+  if (claims.exp <= now) throw new MissionExpiredError(claims);
   return claims;
 }
 

@@ -1,7 +1,7 @@
 import type { MissionClaims } from "@missura/core";
 import { describe, expect, it } from "vitest";
 import { handle } from "./pipeline";
-import { bodyText, CLAIMS, harness, request } from "./pipeline.fixtures";
+import { CLAIMS, harness, request, restDenial } from "./pipeline.fixtures";
 
 const TRACEPARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
@@ -12,8 +12,9 @@ describe("pipeline — revocation (hot path)", () => {
 
     expect(res.status).toBe(401);
     expect(h.fetchCount()).toBe(0);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_unauthorized", reason: "revoked" },
+    expect(restDenial(res.body)).toMatchObject({
+      code: "missura_mission_revoked",
+      reason: "revoked",
     });
   });
 

@@ -2,7 +2,13 @@ import type { MissionClaims } from "@missura/core";
 import { describe, expect, it } from "vitest";
 import type { NarrowResult } from "./narrow";
 import { handle } from "./pipeline";
-import { bodyText, CLAIMS, harness, request } from "./pipeline.fixtures";
+import {
+  bodyText,
+  CLAIMS,
+  harness,
+  request,
+  restDenial,
+} from "./pipeline.fixtures";
 
 const CUSTOMER_PATH = ["data", "issue", "customer", "id"];
 
@@ -54,11 +60,9 @@ describe("pipeline — narrow seam", () => {
 
     expect(res.status).toBe(403);
     expect(h.fetchCount()).toBe(0);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: {
-        code: "missura_denied",
-        reason: "no proven relation to mission customer",
-      },
+    expect(restDenial(res.body)).toMatchObject({
+      code: "missura_out_of_mission_scope",
+      reason: "no proven relation to mission customer",
     });
     expect(h.events[0]?.decision).toBe("deny");
     expect(h.events[0]?.reason).toBe("no proven relation to mission customer");
@@ -76,7 +80,12 @@ describe("pipeline — narrow seam", () => {
 
     expect(res.status).toBe(404);
     expect(res.headers["content-type"]).toBe("application/json");
-    expect(bodyText(res.body)).toBe('{"message":"Not Found"}');
+    // GitHub's own not-found at the top level, so it still reads as absence;
+    // the actionable part rides underneath, built from the mission alone.
+    expect(
+      (JSON.parse(bodyText(res.body)) as { message: string }).message,
+    ).toBe("Not Found");
+    expect(restDenial(res.body).code).toBe("missura_out_of_mission_scope");
     expect(h.fetchCount()).toBe(0);
     expect(h.events[0]?.decision).toBe("deny");
     expect(h.events[0]?.reason).toBe("repo not in mission");
