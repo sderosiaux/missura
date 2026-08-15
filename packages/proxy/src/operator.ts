@@ -125,24 +125,31 @@ function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
 function revoke(deps: OperatorDeps, body: Record<string, unknown>): unknown {
   const token = body.token;
   const missionId = body.mission_id;
-  let key: string;
   if (typeof token === "string" && token !== "") {
+    let jti: string;
     try {
-      key = deps.verifyToken(token).jti;
+      jti = deps.verifyToken(token).jti;
     } catch {
+      // Nothing to revoke: an unverifiable token was never a grant.
       return { revoked: true };
     }
-  } else if (typeof missionId === "string" && missionId !== "") {
-    key = missionId;
-  } else {
-    throw new FieldError("token", "token or mission_id is required");
-  }
-  try {
-    deps.store.revoke(key);
-  } catch {
+    // Recorded on the jti, not on a record: the proxy honours the signature,
+    // so a token whose record this store never saw is still live. A failure to
+    // write is left to surface — answering `{revoked: true}` for a revocation
+    // that did not land is the one lie this endpoint must not tell.
+    deps.store.revokeJti(jti);
     return { revoked: true };
   }
-  return { revoked: true };
+  if (typeof missionId === "string" && missionId !== "") {
+    try {
+      deps.store.revoke(missionId);
+    } catch {
+      // An id names a record or nothing at all, and which one it is stays
+      // unsaid: RFC 7009 again.
+    }
+    return { revoked: true };
+  }
+  throw new FieldError("token", "token or mission_id is required");
 }
 
 /** Description of a grant only: no jti, no token, nothing bearer-shaped. */

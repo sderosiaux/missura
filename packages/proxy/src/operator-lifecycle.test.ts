@@ -1,5 +1,5 @@
 import type { MissionScope } from "@missura/core";
-import { verifyMissionToken } from "@missura/core";
+import { signMissionToken, verifyMissionToken } from "@missura/core";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   boot,
@@ -51,6 +51,32 @@ describe("operator API — POST /v1/revoke", () => {
 
     expect(res.status).toBe(200);
     expect(store.active()).toHaveLength(0);
+  });
+
+  it("takes effect on a signature-valid token this store has no record of", async () => {
+    const { base, store } = await boot();
+    // The proxy honours the signature, not the record: a mission dropped by a
+    // concurrent write — or minted against another state file — is still a
+    // live grant. Revoking it used to swallow `unknown mission` and answer
+    // `{revoked: true}` over a token that kept working.
+    const orphan = signMissionToken(
+      {
+        id: "msn_orphan",
+        purpose: "support case 42",
+        actor: "ops@local",
+        scope: {},
+        connections: [],
+        allow: ["read"],
+      },
+      { key: SIGNING_KEY, ttlSeconds: 300 },
+    );
+    const { jti } = verifyMissionToken(orphan, { key: SIGNING_KEY });
+
+    const res = await post(base, "/v1/revoke", JSON.stringify({ token: orphan }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ revoked: true });
+    expect(store.isRevoked(jti)).toBe(true);
   });
 
   it("answers 200 for an unknown token instead of confirming existence", async () => {
