@@ -3,7 +3,7 @@ import { honestList, isRecord, stripAt } from "./filter-json";
 import { isOwned } from "./filter-owner";
 import {
   NOT_FOUND_GRAPHQL_BODY,
-  notFoundBody,
+  notFoundAnswer,
   OUT_OF_SCOPE_REASON,
   type NarrowPostCheck,
   type NarrowResult,
@@ -44,6 +44,14 @@ export interface FilterTask {
    * the difference.
    */
   notFoundBody: string;
+  /**
+   * The status that body is served at: the connector's own absence status, and
+   * never the upstream one. It travels WITH the body because the pair is what
+   * makes a refusal indistinguishable from an absence — a vendor-shaped
+   * not-found returned at the vendor's 200 would announce, by its status line
+   * alone, that the object exists (`notFoundAnswer` in `narrow.ts`).
+   */
+  notFoundStatus: number;
 }
 
 interface RuleOutcome {
@@ -272,19 +280,23 @@ export function planFromPostCheck(check: NarrowPostCheck): FilterPlan {
  * own unit test — it goes when `NarrowPostCheck` goes.
  */
 export function filterTask(narrowed: NarrowResult): FilterTask | undefined {
-  const vendorNotFound = notFoundBody(narrowed.denyShape);
+  const absence = notFoundAnswer(narrowed.denyShape);
+  const answer = {
+    notFoundBody: absence.body,
+    notFoundStatus: absence.status,
+  };
   if (narrowed.filterPlan !== undefined) {
     return {
       plan: narrowed.filterPlan,
       denyReason: UNFILTERABLE_REASON,
-      notFoundBody: vendorNotFound,
+      ...answer,
     };
   }
   if (narrowed.postCheck !== undefined) {
     return {
       plan: planFromPostCheck(narrowed.postCheck),
       denyReason: OUT_OF_SCOPE_REASON,
-      notFoundBody: vendorNotFound,
+      ...answer,
     };
   }
   return undefined;

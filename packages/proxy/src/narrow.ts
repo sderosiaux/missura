@@ -139,13 +139,26 @@ export const ZENDESK_NOT_FOUND_MESSAGE = "Not found";
 export const ZENDESK_NOT_FOUND_BODY = `{"error":"RecordNotFound","description":"${ZENDESK_NOT_FOUND_MESSAGE}"}`;
 
 /**
- * The vendor's own absence, per shape. Kept as one table so the request side
- * (which pins the top-level message) and the response side (which returns the
- * whole body) cannot drift into two different "not found"s for one vendor.
+ * The vendor's own absence, per shape: status, top-level message and whole
+ * body. Kept as one table so the request side (which pins the message and takes
+ * the status from here) and the response side (which returns the whole body at
+ * that same status) cannot drift into two different "not found"s for one
+ * vendor.
  */
-const NOT_FOUND: Record<DenyShape, { message: string; body: string }> = {
-  github404: { message: GITHUB_NOT_FOUND_MESSAGE, body: GITHUB_NOT_FOUND_BODY },
+interface VendorAbsence {
+  status: number;
+  message: string;
+  body: string;
+}
+
+const NOT_FOUND: Record<DenyShape, VendorAbsence> = {
+  github404: {
+    status: 404,
+    message: GITHUB_NOT_FOUND_MESSAGE,
+    body: GITHUB_NOT_FOUND_BODY,
+  },
   zendesk404: {
+    status: 404,
     message: ZENDESK_NOT_FOUND_MESSAGE,
     body: ZENDESK_NOT_FOUND_BODY,
   },
@@ -179,21 +192,49 @@ export function scopeDenial(
   vendorMessage?: string;
   scopeSize: number | undefined;
 } {
-  const absence = notFoundMessage(narrowed.denyShape);
+  const shape = narrowed.denyShape;
+  const absence = shape === undefined ? undefined : NOT_FOUND[shape];
   return {
-    status: absence === undefined ? 403 : 404,
+    // The vendor's own absence status, from the same table the response side
+    // reads: a request-side and a response-side refusal for one connector
+    // cannot end up on two different status lines.
+    status: absence === undefined ? 403 : absence.status,
     code: narrowed.denialCode ?? "missura_out_of_mission_scope",
     reason,
     // The vendor's own absence message, unchanged: a target outside the mission
     // and one that never existed answer the same bytes.
-    ...(absence === undefined ? {} : { vendorMessage: absence }),
+    ...(absence === undefined ? {} : { vendorMessage: absence.message }),
     scopeSize: narrowed.missionScopeSize,
   };
 }
 
-/** The body a fail-closed FILTER answers with, in the vendor's own envelope. */
-export function notFoundBody(shape: DenyShape | undefined): string {
-  return shape === undefined ? NOT_FOUND_GRAPHQL_BODY : NOT_FOUND[shape].body;
+/**
+ * GraphQL has no absence status: Linear answers 200 with an `errors` array
+ * whether the object was refused, nulled or never existed, so a fail-closed
+ * FILTER keeps the shape the envelope already uses.
+ */
+export const NOT_FOUND_GRAPHQL_STATUS = 200;
+
+/**
+ * The whole answer a fail-closed FILTER gives, in the vendor's own envelope:
+ * the connector's canonical absence, status included.
+ *
+ * The STATUS is the point, and it is fixed per shape rather than taken from the
+ * response that triggered the refusal. Relaying the upstream status made the
+ * refusal an existence oracle: a foreign object the vendor answered 200 for
+ * came back 200-with-a-not-found-body, while an object that never existed came
+ * back 404 — so an agent scoped to one organization could sort ids into "exists
+ * but is not mine" and "does not exist" by reading the status line alone. It is
+ * returned together with the body so a connector shape cannot be given one
+ * without the other.
+ */
+export function notFoundAnswer(shape: DenyShape | undefined): {
+  status: number;
+  body: string;
+} {
+  return shape === undefined
+    ? { status: NOT_FOUND_GRAPHQL_STATUS, body: NOT_FOUND_GRAPHQL_BODY }
+    : { status: NOT_FOUND[shape].status, body: NOT_FOUND[shape].body };
 }
 
 /**

@@ -181,6 +181,14 @@ export async function forward(
     if (!filtered.ok) {
       // The vendor answered, so the record says so — the request is refused on
       // the way back, and the agent sees the vendor's own "not found".
+      //
+      // The STATUS is the connector's, never `response.status`. Relaying the
+      // upstream status made this refusal an existence oracle: a foreign object
+      // the vendor answered 200 for came back 200, and an object that never
+      // existed came back with the vendor's own 404 — so the status line alone
+      // sorted ids into "exists but is not mine" and "does not exist". Same
+      // class of leak as the headers above, closed the same way: from the
+      // connector's own shape, never from the answer that triggered it.
       emitEvent(
         deps,
         ctx,
@@ -188,7 +196,7 @@ export async function forward(
         filter.denyReason,
       );
       return {
-        status: response.status,
+        status: filter.notFoundStatus,
         headers: refusalHeaders(headers),
         body: filtered.body,
         removed: 0,
