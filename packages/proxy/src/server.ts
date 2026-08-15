@@ -12,7 +12,7 @@ import {
   type DecisionEvent,
   type Provider,
 } from "@missura/core";
-import { passThroughNarrow, type NarrowFn } from "./narrow";
+import type { NarrowFn } from "./narrow";
 import { handle, type IncomingShape, type PipelineDeps } from "./pipeline";
 
 export const DEFAULT_LINEAR_PORT = 8481;
@@ -27,18 +27,24 @@ export interface ConnectionConfig {
   vendorAuthHeader: string;
   port?: number;
   upstreamBase?: string;
-  /** The connector's NARROW; absent means pass-through (catalog only). */
-  narrow?: NarrowFn;
+  /**
+   * The connector's NARROW. Required: a connection wired without one would
+   * pass every cataloged request through unnarrowed, and a missing policy
+   * input must never read as PASS. A connection that genuinely narrows nothing
+   * says so out loud, with `passThroughNarrow`.
+   */
+  narrow: NarrowFn;
 }
 
 export interface ProxyConfig {
   signingKey: Buffer;
   emit(ev: DecisionEvent): void;
   /**
-   * The mission store's revocation list. Absent means nothing is revoked —
-   * true only for a proxy booted without an operator plane.
+   * The mission store's revocation list. Required: defaulting it to "nothing
+   * is revoked" would turn a wiring mistake into a proxy that honours every
+   * called-back mission until expiry.
    */
-  isRevoked?: (jti: string) => boolean;
+  isRevoked: (jti: string) => boolean;
   linear: ConnectionConfig;
   github: ConnectionConfig;
   /** Overridable so tests can drive an in-process vendor double. */
@@ -170,8 +176,8 @@ function deps(
     verifyToken: (token) =>
       verifyMissionToken(token, { key: config.signingKey }),
     decide,
-    isRevoked: (jti: string): boolean => config.isRevoked?.(jti) ?? false,
-    narrow: connection.narrow ?? passThroughNarrow,
+    isRevoked: config.isRevoked,
+    narrow: connection.narrow,
     vendorAuthHeader: (): string => connection.vendorAuthHeader,
     upstreamBase: connection.upstreamBase ?? defaultUpstream,
     fetchImpl: config.fetchImpl ?? fetch,

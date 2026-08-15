@@ -7,6 +7,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import { signDevToken, type DecisionEvent } from "@missura/core";
+import { passThroughNarrow } from "./narrow";
 import { createServers, type ProxyServers } from "./server";
 
 /**
@@ -90,6 +91,9 @@ export async function boot(): Promise<{
   events.length = 0;
   const running = await createServers({
     signingKey: SIGNING_KEY,
+    // Spelled out rather than defaulted: these specs are about the transport,
+    // so they say what policy they are running without.
+    isRevoked: (): boolean => false,
     emit: (ev: DecisionEvent): void => {
       events.push(ev);
     },
@@ -97,11 +101,13 @@ export async function boot(): Promise<{
       vendorAuthHeader: `Bearer ${LINEAR_SECRET}`,
       port: 0,
       upstreamBase: upstream.base,
+      narrow: passThroughNarrow,
     },
     github: {
       vendorAuthHeader: `Bearer ${GITHUB_SECRET}`,
       port: 0,
       upstreamBase: upstream.base,
+      narrow: passThroughNarrow,
     },
   });
   live.running = running;
