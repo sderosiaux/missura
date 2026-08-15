@@ -42,9 +42,9 @@ function Hero() {
           Same API. Smaller permissions. For every agent.
         </h1>
         <p className="mt-6 max-w-[54ch] text-lg text-ink-soft">
-          One command scopes your agent to one customer, for 30 minutes, with
-          zero vendor credentials in its hands. Keep your SDK. Rewrite
-          nothing.
+          One command wraps your agent in a zero-trust mission: one customer,
+          read-only, 30 minutes, no vendor credentials in its hands. Keep
+          your SDK. Rewrite nothing.
         </p>
         <div className="mt-8" id="early-access">
           <WaitlistForm id="hero-form" />
