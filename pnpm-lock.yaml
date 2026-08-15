@@ -11,6 +11,9 @@ importers:
       '@linear/sdk':
         specifier: ^90.0.0
         version: 90.0.0(graphql@16.14.2)
+      '@missura/cli':
+        specifier: workspace:*
+        version: link:packages/cli
       eslint:
         specifier: ^9.39.5
         version: 9.39.5(jiti@2.7.0)
