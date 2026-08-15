@@ -67,6 +67,28 @@ function relayedHeaders(
 }
 
 /**
+ * A refusal produced on the way back keeps the headers an answer would have
+ * carried. Relaying the rate-limit budget on the ALLOW and dropping it here
+ * would make the headers themselves the tell — "no budget, no request id" then
+ * reads as "the page I asked for held objects I may not see", which is the
+ * enumeration the vendor-shaped body exists to prevent.
+ *
+ * Only the content-type is reconsidered: the body is now OUR JSON, so a vendor
+ * content-type that does not announce JSON would be a lie. When it does
+ * announce JSON, its exact spelling is kept — `application/json` where the
+ * vendor said `application/json; charset=utf-8` is one more difference between
+ * a refusal and an answer.
+ */
+function refusalHeaders(
+  relayed: Record<string, string>,
+): Record<string, string> {
+  const declared = relayed["content-type"]?.toLowerCase() ?? "";
+  return declared.includes("application/json")
+    ? relayed
+    : { ...relayed, ...JSON_HEADERS };
+}
+
+/**
  * The only place the vendor credential is used, and the only place a vendor
  * answer becomes ours: the response is capped, header-filtered and, when the
  * connector registered a plan, FILTERED before it reaches the agent.
@@ -127,7 +149,7 @@ export async function forward(
       );
       return {
         status: response.status,
-        headers: { ...JSON_HEADERS },
+        headers: refusalHeaders(headers),
         body: filtered.body,
       };
     }

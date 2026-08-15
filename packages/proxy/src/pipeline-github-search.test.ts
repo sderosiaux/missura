@@ -37,17 +37,24 @@ const VENDOR_HEADERS: Record<string, string> = {
   "x-oauth-scopes": "repo, read:org",
 };
 
-function vendor(
-  body: unknown,
+function raw(
+  body: string,
   over: Record<string, string> = {},
 ): () => Promise<Response> {
   return async (): Promise<Response> =>
     Promise.resolve(
-      new Response(JSON.stringify(body), {
+      new Response(body, {
         status: 200,
         headers: { ...VENDOR_HEADERS, ...over },
       }),
     );
+}
+
+function vendor(
+  body: unknown,
+  over: Record<string, string> = {},
+): () => Promise<Response> {
+  return raw(JSON.stringify(body), over);
 }
 
 /** Three items, one of them another customer's — as GitHub would answer. */
@@ -172,6 +179,53 @@ describe("pipeline — vendor response headers", () => {
 
     expect(h.events[0]?.objectsRemoved).toBe(0);
     expect(res.headers.link).toBeUndefined();
+  });
+
+  /**
+   * A refusal produced on the way back must be as ordinary as an answer. Relay
+   * the vendor's headers on the ALLOW and drop them on the fail-closed and the
+   * headers themselves become the tell: "no rate-limit budget" would mean "the
+   * page I asked for held objects I may not see" — the oracle the vendor-shaped
+   * body exists to close.
+   */
+  it("carries the same vendor headers on a refusal as on an answer", async () => {
+    const h = harness(
+      { narrow },
+      vendor({ total_count: 1, items: { not: "a list" } }),
+    );
+    const res = await handle(h.deps, searchRequest(EXPLOIT));
+
+    expect(bodyText(res.body)).toBe('{"message":"Not Found"}');
+    expect(h.events[0]?.reason).toBe("unfilterable");
+    expect(res.headers["x-ratelimit-remaining"]).toBe("29");
+    expect(res.headers["x-ratelimit-reset"]).toBe("1786802192");
+    expect(res.headers["x-github-request-id"]).toBe("F282:1D6AAF:282A7A0");
+    expect(res.headers["set-cookie"]).toBeUndefined();
+    expect(res.headers.link).toBeUndefined();
+  });
+
+  it("answers a refusal in the vendor's own content-type spelling", async () => {
+    const h = harness(
+      { narrow },
+      vendor(
+        { items: { not: "a list" } },
+        { "content-type": "application/json; charset=utf-8" },
+      ),
+    );
+    const res = await handle(h.deps, searchRequest(EXPLOIT));
+
+    expect(res.headers["content-type"]).toBe("application/json; charset=utf-8");
+  });
+
+  it("does not label its own JSON refusal with a content-type that is not JSON", async () => {
+    const h = harness(
+      { narrow },
+      raw("<html>gateway</html>", { "content-type": "text/html" }),
+    );
+    const res = await handle(h.deps, searchRequest(EXPLOIT));
+
+    expect(res.headers["content-type"]).toBe("application/json");
+    expect(bodyText(res.body)).toBe('{"message":"Not Found"}');
   });
 
   it("keeps `link` on a response no filter plan applied to", async () => {
