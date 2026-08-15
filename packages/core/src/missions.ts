@@ -283,5 +283,8 @@ export function connectionsFor(scope: ResolvedScope): string[] {
     connections.push("linear");
   }
   if (scope.githubRepos.length > 0) connections.push("github");
+  if ((scope.zendeskOrganizationIds ?? []).length > 0) {
+    connections.push("zendesk");
+  }
   return connections;
 }

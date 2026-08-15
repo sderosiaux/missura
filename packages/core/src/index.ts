@@ -3,6 +3,7 @@ export * from "./cursor";
 export * from "./entities";
 export * from "./entity-graph";
 export * from "./entity-graph-store";
+export * from "./entity-resolve";
 export * from "./events";
 export * from "./filter-plan";
 export * from "./github-scope";

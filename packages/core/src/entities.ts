@@ -19,6 +19,16 @@ export interface EntityMapping {
 export interface ResolvedScope {
   linearCustomerId?: string;
   githubRepos: GithubRepoScope[];
+  /**
+   * Zendesk organization ids the mission covers, as strings — Zendesk publishes
+   * `organization_id` as a number, and the connector compares it as text.
+   *
+   * Optional where `githubRepos` is required, because the flat map predates the
+   * Zendesk connection and every caller that builds a `ResolvedScope` by hand
+   * would otherwise have to name a field it has nothing to put in. Absent and
+   * empty mean the same thing: no Zendesk target, so no zendesk connection.
+   */
+  zendeskOrganizationIds?: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
