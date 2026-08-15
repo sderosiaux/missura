@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { MAX_TTL_SECONDS } from "@missura/core";
 import type { ProxyServers } from "@missura/proxy";
 import { initCommand } from "./init";
 import type { CliIo } from "./io";
@@ -21,7 +22,7 @@ const USAGE = [
   "  missura init                     store vendor credentials in the encrypted vault",
   "  missura run [--linear-port N]    boot one proxy listener per connector",
   "              [--github-port N]",
-  "  missura token [--ttl SECONDS]    print a dev mission token (default 3600)",
+  "  missura token [--ttl SECONDS]    print a dev mission token (default and max 3600)",
   "",
   "MISSURA_HOME overrides ~/.missura for every file.",
 ].join("\n");
@@ -33,11 +34,21 @@ const OPTIONS = {
   help: { type: "boolean", short: "h" },
 } as const;
 
-function positiveInt(name: string, raw: string | undefined, fallback: number): number {
-  if (raw === undefined) return fallback;
+/**
+ * Rejected at parse time, before the signing key is touched: the cap is a
+ * spec invariant (SPEC §4.2, 60 minutes), and the operator should read it in
+ * the error rather than discover a silently clamped lifetime in a token.
+ */
+function ttlOption(raw: string | undefined): number {
+  if (raw === undefined) return DEFAULT_TTL_SECONDS;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`--${name} must be a non-negative integer`);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error("--ttl must be a positive integer number of seconds");
+  }
+  if (value > MAX_TTL_SECONDS) {
+    throw new Error(
+      `--ttl must not exceed ${String(MAX_TTL_SECONDS)} seconds (60 minutes)`,
+    );
   }
   return value;
 }
@@ -72,11 +83,8 @@ async function dispatch(
   switch (command) {
     case "init":
       return { code: await initCommand(io) };
-    case "token": {
-      const ttl = positiveInt("ttl", str("ttl"), DEFAULT_TTL_SECONDS);
-      if (ttl === 0) throw new Error("--ttl must be greater than 0");
-      return { code: tokenCommand(io, ttl) };
-    }
+    case "token":
+      return { code: tokenCommand(io, ttlOption(str("ttl"))) };
     case "run": {
       const linearPort = portOption("linear-port", str("linear-port"));
       const githubPort = portOption("github-port", str("github-port"));

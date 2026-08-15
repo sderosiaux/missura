@@ -64,6 +64,16 @@ const FORWARDED_RESPONSE_HEADERS: readonly string[] = ["content-type"];
 
 const BEARER = "bearer ";
 
+/**
+ * Upstream responses are capped at 10 MB (SPEC: JSON ≤ 10 MB), the same cap
+ * the inbound request gets. A vendor is not a trusted size: buffering whatever
+ * it sends would let one response take the proxy's memory with it.
+ */
+export const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+
+/** Reason recorded when the vendor answered but the answer was refused. */
+const TOO_LARGE_REASON = "response too large (after upstream call)";
+
 function errorBody(code: string, reason?: string): string {
   return JSON.stringify({
     error: reason === undefined ? { code } : { code, reason },
@@ -173,6 +183,42 @@ function upstreamTarget(deps: PipelineDeps, path: string): URL | undefined {
   return url;
 }
 
+/**
+ * Reads at most `MAX_RESPONSE_BYTES`; `undefined` means the cap was crossed.
+ * A declared `content-length` above the cap is refused before a single byte is
+ * read, and a chunked body is abandoned the moment it crosses — an oversized
+ * response is never fully buffered, which is the point of the cap.
+ */
+async function readCapped(response: Response): Promise<Uint8Array | undefined> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  const body = response.body;
+  if (body === null) return new Uint8Array(0);
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
 async function forward(
   deps: PipelineDeps,
   target: URL,
@@ -203,7 +249,18 @@ async function forward(
     return jsonError(502, "missura_upstream_error");
   }
 
-  const payload = new Uint8Array(await response.arrayBuffer());
+  const payload = await readCapped(response);
+  if (payload === undefined) {
+    // The vendor was reached, so the record says so — the request is denied
+    // on the way back, not on the way out.
+    emitEvent(deps, {
+      decision: { ...verdict, decision: "deny", reason: TOO_LARGE_REASON },
+      missionId,
+      startedAt,
+      reason: TOO_LARGE_REASON,
+    });
+    return jsonError(502, "missura_response_too_large");
+  }
   const headers: Record<string, string> = {};
   for (const name of FORWARDED_RESPONSE_HEADERS) {
     const value = response.headers.get(name);

@@ -118,6 +118,53 @@ describe("missura token", () => {
     expect(claims.connections).toContain("linear");
     expect(claims.exp - claims.iat).toBe(60);
   });
+
+  it("defaults to the 3600s cap", async () => {
+    const h = harness({
+      MISSURA_INIT_LINEAR_KEY: LINEAR_KEY,
+      MISSURA_INIT_GITHUB_TOKEN: GITHUB_TOKEN,
+    });
+    await init(h);
+    h.out.length = 0;
+
+    const result = await run(["token"], h.io);
+
+    expect(result.code).toBe(0);
+    const key = loadOrCreateKey(resolveHome(h.io.env).signingKeyPath);
+    const claims = verifyMissionToken(h.out[0] ?? "", { key });
+    expect(claims.exp - claims.iat).toBe(3600);
+  });
+
+  it("refuses a --ttl above the 3600s cap, naming the cap", async () => {
+    const h = harness({
+      MISSURA_INIT_LINEAR_KEY: LINEAR_KEY,
+      MISSURA_INIT_GITHUB_TOKEN: GITHUB_TOKEN,
+    });
+    await init(h);
+    h.out.length = 0;
+
+    const result = await run(["token", "--ttl", "999999"], h.io);
+
+    expect(result.code).toBe(1);
+    expect(h.out).toHaveLength(0);
+    expect(h.err.join("\n")).toContain("3600");
+    expect(h.err.join("\n")).toMatch(/ttl/i);
+  });
+
+  it("refuses a zero --ttl", async () => {
+    const h = harness({
+      MISSURA_INIT_LINEAR_KEY: LINEAR_KEY,
+      MISSURA_INIT_GITHUB_TOKEN: GITHUB_TOKEN,
+    });
+    await init(h);
+    h.out.length = 0;
+
+    const result = await run(["token", "--ttl", "0"], h.io);
+
+    expect(result.code).toBe(1);
+    expect(h.out).toHaveLength(0);
+    expect(h.err.join("\n")).toMatch(/ttl/i);
+  });
 });
 
 describe("missura run", () => {
