@@ -6,6 +6,7 @@ import {
 } from "node:http";
 import { decideGithub } from "@missura/connectors-github";
 import { decideLinear } from "@missura/connectors-linear";
+import { decideZendesk } from "@missura/connectors-zendesk";
 import {
   createCursorStore,
   createParentProofStore,
@@ -25,6 +26,7 @@ import {
 
 export const DEFAULT_LINEAR_PORT = 8481;
 export const DEFAULT_GITHUB_PORT = 8482;
+export const DEFAULT_ZENDESK_PORT = 8483;
 export const DEFAULT_LINEAR_UPSTREAM = "https://api.linear.app";
 export const DEFAULT_GITHUB_UPSTREAM = "https://api.github.com";
 /** Requests above this are refused before any policy work: 10 MB. */
@@ -44,6 +46,18 @@ export interface ConnectionConfig {
   narrow: NarrowFn;
 }
 
+/**
+ * A Zendesk connection, which owes one thing more than the others: its origin.
+ *
+ * Every account lives at its own `https://<subdomain>.zendesk.com`, so there is
+ * no default that is not a guess at somebody else's tenant — and a proxy that
+ * guessed would inject this account's credential into it. Required, therefore,
+ * rather than defaulted.
+ */
+export interface ZendeskConnectionConfig extends ConnectionConfig {
+  upstreamBase: string;
+}
+
 export interface ProxyConfig {
   signingKey: Buffer;
   emit(ev: DecisionEvent): void;
@@ -55,6 +69,13 @@ export interface ProxyConfig {
   isRevoked: (jti: string) => boolean;
   linear: ConnectionConfig;
   github: ConnectionConfig;
+  /**
+   * Optional, and the one connection that is: a Zendesk connection needs an
+   * account's own origin and its own credential, so an operator who configured
+   * neither gets no listener rather than one aimed at nothing. Absent means
+   * "this proxy serves no Zendesk", never "Zendesk passes through".
+   */
+  zendesk?: ZendeskConnectionConfig;
   /** Overridable so tests can drive an in-process vendor double. */
   fetchImpl?: typeof fetch;
 }
@@ -62,6 +83,8 @@ export interface ProxyConfig {
 export interface ProxyServers {
   linear: Server;
   github: Server;
+  /** Present exactly when `ProxyConfig.zendesk` was. */
+  zendesk?: Server;
   close(): Promise<void>;
 }
 
@@ -267,20 +290,46 @@ export async function createServers(
       ),
     ),
   );
+  const zendeskConfig = config.zendesk;
+  const zendesk =
+    zendeskConfig === undefined
+      ? undefined
+      : createServer(
+          listener(
+            deps(
+              "zendesk",
+              config,
+              zendeskConfig,
+              (req): CatalogDecision => decideZendesk(req.method, req.path),
+              zendeskConfig.upstreamBase,
+            ),
+          ),
+        );
 
-  await listen(linear, config.linear.port ?? DEFAULT_LINEAR_PORT);
+  // Started in order, and every failure takes down what is already up: a proxy
+  // half-listening would serve one vendor while an operator believed all of
+  // them were bound.
+  const started: Server[] = [];
   try {
+    await listen(linear, config.linear.port ?? DEFAULT_LINEAR_PORT);
+    started.push(linear);
     await listen(github, config.github.port ?? DEFAULT_GITHUB_PORT);
+    started.push(github);
+    if (zendesk !== undefined && zendeskConfig !== undefined) {
+      await listen(zendesk, zendeskConfig.port ?? DEFAULT_ZENDESK_PORT);
+      started.push(zendesk);
+    }
   } catch (err) {
-    await shutdown(linear);
+    await Promise.all(started.map(shutdown));
     throw err;
   }
 
   return {
     linear,
     github,
+    ...(zendesk === undefined ? {} : { zendesk }),
     close: async (): Promise<void> => {
-      await Promise.all([shutdown(linear), shutdown(github)]);
+      await Promise.all(started.map(shutdown));
     },
   };
 }
