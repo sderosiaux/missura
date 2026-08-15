@@ -7,6 +7,7 @@ import {
 import { decideGithub } from "@missura/connectors-github";
 import { decideLinear } from "@missura/connectors-linear";
 import {
+  createCursorStore,
   verifyMissionToken,
   type CatalogDecision,
   type DecisionEvent,
@@ -194,6 +195,10 @@ function deps(
 ): PipelineDeps {
   return {
     provider,
+    // One store per connection: a cursor is a position in ONE vendor's
+    // collection, and a handle that crossed connections would name a position
+    // in a collection the other vendor never has.
+    cursors: createCursorStore(),
     verifyToken: (token) =>
       verifyMissionToken(token, { key: config.signingKey }),
     decide,

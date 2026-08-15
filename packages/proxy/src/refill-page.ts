@@ -44,7 +44,7 @@ export interface VendorPage {
   next: NextPage | undefined;
 }
 
-function valueAt(root: unknown, path: readonly string[]): unknown {
+export function valueAt(root: unknown, path: readonly string[]): unknown {
   let current: unknown = root;
   for (const key of path) {
     if (!isRecord(current) || !Object.hasOwn(current, key)) return undefined;
@@ -54,7 +54,7 @@ function valueAt(root: unknown, path: readonly string[]): unknown {
 }
 
 /** Rebuilds `root` with `value` at `path`. Every step must already exist. */
-function replaceAt(
+export function replaceAt(
   root: unknown,
   path: readonly string[],
   value: unknown,

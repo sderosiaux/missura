@@ -3,12 +3,14 @@ import { handle } from "./pipeline";
 import { bodyText, harness } from "./pipeline.fixtures";
 import { MAX_REFILL_CALLS, REFILL_BUDGET_MS } from "./refill";
 import {
+  behindCursor,
   connection,
   graphqlRequest,
   page,
   plan,
   sentBody,
   serveEach,
+  withoutCursor,
   withPlan,
 } from "./refill.fixtures";
 
@@ -61,10 +63,11 @@ describe("pagination refill", () => {
     const res = await handle(h.deps, graphqlRequest(2));
 
     expect(h.fetchCount()).toBe(1);
-    expect(connection(res.body).pageInfo).toEqual({
-      hasNextPage: true,
-      endCursor: "c1",
-    });
+    expect(connection(res.body).pageInfo.hasNextPage).toBe(true);
+    // A handle of ours, not the vendor's position — even on a page we did not
+    // walk, so the cursor's format never says whether a walk happened.
+    expect(connection(res.body).pageInfo.endCursor).not.toBe("c1");
+    expect(behindCursor(h, res.body)).toBe("c1");
   });
 
   it("stops at the call cap and stays honest about the rest", async () => {
@@ -110,10 +113,8 @@ describe("pagination refill", () => {
     const res = await handle(h.deps, graphqlRequest(5));
 
     expect(h.fetchCount()).toBe(2);
-    expect(connection(res.body).pageInfo).toEqual({
-      hasNextPage: false,
-      endCursor: "c2",
-    });
+    expect(connection(res.body).pageInfo.hasNextPage).toBe(false);
+    expect(behindCursor(h, res.body)).toBe("c2");
   });
 
   it("returns the requested count and keeps the leftovers behind a cursor", async () => {
@@ -169,7 +170,36 @@ describe("pagination refill", () => {
     const one = await handle(build(3).deps, graphqlRequest(3));
     const two = await handle(build(9_412).deps, graphqlRequest(3));
 
-    expect(bodyText(one.body)).toBe(bodyText(two.body));
+    expect(withoutCursor(one.body)).toBe(withoutCursor(two.body));
+  });
+
+  /**
+   * The reason a handle is a fix and not a trade: replacing the vendor cursor
+   * hides the walk position WITHOUT costing pagination. The agent sends the
+   * handle back, and the vendor sees the position it actually left off at — so
+   * it neither repeats objects (which the first page's cursor would have
+   * caused) nor stops iterating (which dropping the cursor would have caused).
+   */
+  it("resumes at the vendor position the handle stands for", async () => {
+    const h = harness(
+      { narrow: withPlan(plan(2)) },
+      serveEach(() => page(["i1", "i2"], true, "c1")),
+    );
+    const first = await handle(h.deps, graphqlRequest(2));
+    const cursor = connection(first.body).pageInfo.endCursor;
+
+    await handle(h.deps, {
+      ...graphqlRequest(2),
+      body: JSON.stringify({
+        query: "query Issues($first: Int!, $after: String) { issues { … } }",
+        variables: { first: 2, after: cursor },
+      }),
+    });
+
+    expect(sentBody(h.calls[1])).toEqual({
+      query: "query Issues($first: Int!, $after: String) { issues { … } }",
+      variables: { first: 2, after: "c1" },
+    });
   });
 
   it("makes every extra call its own decision event", async () => {

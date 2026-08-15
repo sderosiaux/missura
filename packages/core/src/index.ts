@@ -1,4 +1,5 @@
 export * from "./catalog";
+export * from "./cursor";
 export * from "./entities";
 export * from "./events";
 export * from "./filter-plan";

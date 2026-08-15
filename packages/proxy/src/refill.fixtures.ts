@@ -1,6 +1,6 @@
-import type { FilterPlan } from "@missura/core";
+import type { CursorStore, FilterPlan } from "@missura/core";
 import type { NarrowResult } from "./narrow";
-import { request } from "./pipeline.fixtures";
+import { CLAIMS, request } from "./pipeline.fixtures";
 import type { IncomingShape } from "./transport";
 
 /**
@@ -117,4 +117,26 @@ export interface Connection {
 export function connection(body: string | Uint8Array): Connection {
   const text = typeof body === "string" ? body : new TextDecoder().decode(body);
   return (JSON.parse(text) as { data: { issues: Connection } }).data.issues;
+}
+
+/**
+ * The answer with the cursor taken out. Cursors are missura handles now, so two
+ * runs of the same request never share one — comparing whole bodies would
+ * compare the randomness instead of the objects.
+ */
+export function withoutCursor(body: string | Uint8Array): string {
+  const conn = connection(body);
+  return JSON.stringify({
+    nodes: conn.nodes,
+    hasNextPage: conn.pageInfo.hasNextPage,
+    totalCount: conn.totalCount,
+  });
+}
+
+/** The vendor position a handed-back cursor stands for, per the harness store. */
+export function behindCursor(
+  h: { deps: { cursors: CursorStore } },
+  body: string | Uint8Array,
+): string | undefined {
+  return h.deps.cursors.resolve(CLAIMS.id, connection(body).pageInfo.endCursor);
 }

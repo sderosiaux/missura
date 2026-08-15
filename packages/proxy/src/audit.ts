@@ -37,6 +37,12 @@ export const CONNECTION_REASON = "connection not in mission";
 export const ACTION_REASON = "action not allowed by mission";
 /** Every request target that would leave the connector's origin. */
 export const ESCAPE_REASON = "path escapes upstream origin";
+/**
+ * A pagination cursor this mission was never handed. Cursors are missura's own
+ * handles (SPEC §22), so one we cannot resolve is either forged or another
+ * mission's — either way it names a vendor position nothing authorized.
+ */
+export const CURSOR_REASON = "pagination cursor not issued to this mission";
 /** The vendor answered, but the answer was refused. */
 export const TOO_LARGE_REASON = "response too large (after upstream call)";
 

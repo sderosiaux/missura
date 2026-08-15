@@ -1,3 +1,4 @@
+import { createCursorStore } from "@missura/core";
 import type {
   CatalogDecision,
   DecisionEvent,
@@ -96,6 +97,7 @@ export function harness(
     decide: (): CatalogDecision => ALLOW,
     isRevoked: (): boolean => false,
     narrow: passThroughNarrow,
+    cursors: createCursorStore(),
     vendorAuthHeader: (): string => VENDOR_HEADER,
     upstreamBase: "https://api.github.com",
     fetchImpl,

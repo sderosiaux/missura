@@ -27,29 +27,21 @@ import type { IncomingShape, ResponseShape } from "./transport";
  * cap, the filter and the audit record all stay in one place — and the audit
  * shows the real number of vendor calls a mission spent.
  *
- * DEFERRED (SPEC §22): missura-owned opaque logical cursors. M3 hands back the
- * last upstream cursor it actually used. Three consequences, all real:
- *   - a cursor is only meaningful against the same mission and the same vendor
- *     page boundaries, so an agent that STORES a cursor and replays it under a
- *     later mission resumes from a vendor position that mission never walked —
- *     it will silently skip or repeat objects;
- *   - when a walk collects more authorized objects than the agent asked for,
- *     the surplus is dropped rather than returned, and the cursor we hand back
- *     points PAST it. Those objects are missing from the agent's next page.
- *     Returning them instead would make the answer longer than the page that
- *     was requested, which is itself a count of how many pages we walked;
- *   - CONFIDENTIALITY, and it is the one that is not merely an availability
- *     cost: that cursor is a vendor POSITION, so it says how far the walk went.
- *     The common `arrayconnection:N` spelling is plain base64, so an agent that
- *     decodes it reads `position_walked − page_size` = objects hidden between
- *     its own page and ours. Everything else about a walked answer is already
- *     indistinguishable (same shape, same key order, the first page's headers);
- *     the cursor is the one field that is not. It is NOT masked because both
- *     ways of masking it break pagination rather than protect it: the first
- *     page's cursor resumes at a vendor position we have already consumed, so
- *     the agent is served the same objects twice, and omitting the cursor stops
- *     the SDK's iteration outright. Pinned by refill-closed.test.ts.
- * All three disappear once the cursor is ours to mint.
+ * The cursor the agent gets back is OURS (SPEC §22, `core/cursor.ts`): an
+ * opaque handle standing for the vendor position, which never leaves the proxy.
+ * That is what makes the walk unobservable — the last upstream cursor we used
+ * says how far we went, and the walk length is a measure of how many objects
+ * were hidden. It also makes a cursor replayed under a different mission fail
+ * closed instead of resuming a walk that mission never made.
+ *
+ * REMAINING COST, and it is availability, not confidentiality: when a walk
+ * collects more authorized objects than the agent asked for, the surplus is
+ * dropped rather than returned, and the position we hand back points PAST it.
+ * Those objects are missing from the agent's next page. Returning them instead
+ * would make the answer longer than the page that was requested, which is
+ * itself a count of how many pages we walked. Fixing it needs the handle to
+ * carry an offset INTO a page, not merely a page boundary — the store already
+ * makes that expressible; nothing reads it yet.
  */
 
 /** Extra upstream calls one agent request may cause. */

@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { handle } from "./pipeline";
 import { bodyText, harness } from "./pipeline.fixtures";
 import {
+  behindCursor,
   connection,
   graphqlRequest,
   page,
   plan,
   serveEach,
+  withoutCursor,
   withPlan,
 } from "./refill.fixtures";
 
@@ -122,15 +124,6 @@ describe("pagination refill — the walk is not observable", () => {
     };
   }
 
-  /** The body with the vendor cursor taken out — everything else must match. */
-  function withoutCursor(body: string | Uint8Array): string {
-    const conn = connection(body);
-    return JSON.stringify({
-      nodes: conn.nodes,
-      hasNextPage: conn.pageInfo.hasNextPage,
-    });
-  }
-
   it("answers the same bytes as a vendor page that held those objects, apart from the cursor", async () => {
     const { walked, direct } = walkedAndDirect();
 
@@ -144,30 +137,48 @@ describe("pagination refill — the walk is not observable", () => {
   });
 
   /**
-   * KNOWN LIMITATION, pinned so a fix shows up as a change here
-   * (SPEC §4.4.2bis, and the deferred list in refill.ts).
+   * The cursor used to be the one field that betrayed the walk: we handed back
+   * the LAST upstream cursor we used, so a walked answer carried `c2` where an
+   * unwalked one carried `c1`. A Relay cursor is a vendor POSITION, and the
+   * common `arrayconnection:N` spelling is plain base64, so decoding it gave
+   * `position_walked − page_size` = objects hidden.
    *
-   * The cursor we hand back is the LAST upstream one we used, so it says how
-   * far the walk went. A Relay cursor is a vendor position and the common
-   * `arrayconnection:N` spelling is plain base64, so an agent that decodes it
-   * reads `position_walked − page_size` = objects hidden between its own page
-   * and ours.
-   *
-   * It is not masked because masking is not free: handing back the FIRST page's
-   * cursor makes the agent's next request resume at a vendor position we have
-   * already consumed, so it re-serves objects we just returned; omitting the
-   * cursor stops the SDK's pagination outright. Both trade a confidentiality
-   * leak for a correctness break. The fix is the missura-owned logical cursor
-   * (SPEC §22), which is a position of OURS and says nothing about the vendor's.
+   * It is now a missura handle (SPEC §22): same shape and same size whatever
+   * position it stands for, and the vendor cursor stays on our side.
    */
-  it("hands back the cursor of the last page it walked — known limitation", async () => {
+  it("hands back a cursor that does not say how far it walked", async () => {
     const { walked, direct } = walkedAndDirect();
 
     const one = await handle(walked.deps, graphqlRequest(3));
     const two = await handle(direct.deps, graphqlRequest(3));
 
-    expect(connection(one.body).pageInfo.endCursor).toBe("c2");
-    expect(connection(two.body).pageInfo.endCursor).toBe("c1");
+    const walkedCursor = connection(one.body).pageInfo.endCursor;
+    const directCursor = connection(two.body).pageInfo.endCursor;
+    expect(walkedCursor).not.toBe("c2");
+    expect(directCursor).not.toBe("c1");
+    // Indistinguishable: an agent holding both learns nothing from either.
+    expect(walkedCursor).toHaveLength(directCursor.length);
+    // …and each still resolves, on our side, to the position it stands for.
+    expect(behindCursor(walked, one.body)).toBe("c2");
+    expect(behindCursor(direct, two.body)).toBe("c1");
+  });
+
+  it("refuses a cursor this mission was never handed", async () => {
+    const h = harness(
+      { narrow: withPlan(plan(3)) },
+      serveEach(() => page(["i1"], true, "c1")),
+    );
+    const res = await handle(h.deps, {
+      ...graphqlRequest(3),
+      body: JSON.stringify({
+        query: "query Issues($first: Int!, $after: String) { issues { … } }",
+        variables: { first: 3, after: "arrayconnection:4711" },
+      }),
+    });
+
+    expect(h.fetchCount()).toBe(0);
+    expect(res.status).toBe(403);
+    expect(h.events[0]?.reason).toContain("cursor");
   });
 
   it("relays the first page's rate-limit budget, not the last call's", async () => {

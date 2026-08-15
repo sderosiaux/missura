@@ -1,11 +1,13 @@
 import {
   MissionExpiredError,
   type CatalogDecision,
+  type CursorStore,
   type MissionClaims,
 } from "@missura/core";
 import {
   ACTION_REASON,
   CONNECTION_REASON,
+  CURSOR_REASON,
   claimsDenial,
   emitEvent,
   ESCAPE_REASON,
@@ -15,6 +17,7 @@ import {
   UNKNOWN_VERDICT,
   type RequestContext,
 } from "./audit";
+import { missuraCursor, vendorCursor } from "./cursor-swap";
 import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
@@ -40,6 +43,12 @@ export interface PipelineDeps extends ForwardDeps {
   isRevoked(jti: string): boolean;
   /** The connector's NARROW: rewrites, denies, or registers a post-check. */
   narrow: NarrowFn;
+  /**
+   * Where the vendor's pagination positions are kept so the agent never holds
+   * one (SPEC §22). Required: defaulting it away would hand back vendor cursors
+   * again, and the length of the walk they encode is a count of hidden objects.
+   */
+  cursors: CursorStore;
 }
 
 /**
@@ -201,11 +210,39 @@ export async function handle(
         ...mission,
       });
     }
-    const outbound: IncomingShape = {
+    let outbound: IncomingShape = {
       ...req,
       path: narrowed.path ?? req.path,
       body: narrowed.body ?? req.body,
     };
+
+    // The agent paginates with handles of ours, never with vendor positions.
+    // One that we did not issue to THIS mission is refused here rather than
+    // forwarded: it would resume the walk somewhere nothing authorized.
+    const pagination = narrowed.filterPlan?.pagination;
+    if (pagination !== undefined) {
+      const swapped = vendorCursor(
+        outbound.body,
+        pagination,
+        claims.id,
+        deps.cursors,
+      );
+      if (swapped === undefined) {
+        emitEvent(
+          deps,
+          ctx,
+          claimsDenial(verdict, CURSOR_REASON),
+          CURSOR_REASON,
+        );
+        return deny({
+          status: 403,
+          code: "missura_out_of_mission_scope",
+          reason: CURSOR_REASON,
+          ...mission,
+        });
+      }
+      outbound = { ...outbound, body: swapped.body };
+    }
 
     // Re-resolved from the rewritten target: NARROW is trusted to shrink a
     // request, never to move it to another origin.
@@ -240,11 +277,19 @@ export async function handle(
       filter,
       claims,
     );
-    return await refill(
+    const served = await refill(
       deps,
       { req: outbound, verdict, ctx, filter, claims },
       answer,
     );
+    // Last, and on every response the rule describes: the vendor's position is
+    // replaced by a handle. Doing it only on a walked answer would make the
+    // cursor's own format say that a walk happened.
+    if (pagination === undefined) return served;
+    return {
+      ...served,
+      body: missuraCursor(served.body, pagination, claims.id, deps.cursors),
+    };
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.
     return deny({
