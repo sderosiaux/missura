@@ -75,7 +75,10 @@ export default function AgentGovernancePage() {
             whether <em>this specific call</em> by <em>this specific run</em>{" "}
             should reach <em>this specific customer&apos;s data</em> — or
             proves, afterward, exactly what came back. Gateways govern
-            traffic; governance is about actions.
+            traffic; governance is about actions. Zero-trust said it years
+            ago: never trust, always verify — agents just moved the thing to
+            verify from the network session down to every single API call and
+            its response.
           </p>
         </div>
 

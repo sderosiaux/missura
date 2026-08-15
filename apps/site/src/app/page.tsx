@@ -550,8 +550,8 @@ const GUARANTEES = [
     body: "The agent holds a short-lived, ephemeral credential. Vendor secrets stay vaulted, injected server-side after the decision.",
   },
   {
-    label: "Deny by default",
-    body: "Unclassified endpoints and unproven relations are blocked.",
+    label: "Deny by default, zero-trust",
+    body: "Unclassified endpoints and unproven relations are blocked. Never trust the prompt; verify every call.",
   },
   {
     label: "Deterministic",
