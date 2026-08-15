@@ -26,16 +26,39 @@ export function omitKey(
 }
 
 /**
+ * One resolved owner id, or `undefined` when the leaf proves nothing.
+ *
+ * Two spellings are accepted and no more. A non-empty STRING is the ordinary
+ * case (a Linear UUID, a GitHub `repository_url`). A SAFE INTEGER is the other
+ * one, because plenty of REST vendors publish ids as numbers — a Zendesk ticket
+ * answers `"organization_id": 22989442`, and a rule that only ever read strings
+ * would prove nothing about a single Zendesk object.
+ *
+ * The number case is deliberately narrow. A float would let `1.0` compare equal
+ * to a mission's `1`, and an integer past `Number.MAX_SAFE_INTEGER` stringifies
+ * lossily — `9007199254740993` becomes `"9007199254740992"`, which is a
+ * DIFFERENT object's id. A comparison that can name the wrong object is worse
+ * than one that resolves nothing, and resolving nothing already means foreign.
+ * Booleans are not ids in any vendor we speak, so `true` never becomes `"true"`.
+ */
+function leafId(value: unknown): string | undefined {
+  if (typeof value === "string") return value.length > 0 ? value : undefined;
+  if (typeof value === "number" && Number.isSafeInteger(value)) {
+    return String(value);
+  }
+  return undefined;
+}
+
+/**
  * Every owning entity id `ownerPath` proves for one object — usually one, and
  * SEVERAL when the path crosses a `"*"`, which names every element of the array
  * at that position (`["needs","nodes","*","customer","id"]` on a Linear issue).
  *
  * A step that does not resolve contributes NOTHING instead of failing the whole
  * read: a missing step, a `null`, a non-object on the way, a non-array under a
- * `"*"`, or a leaf that is not a non-empty string. So an empty answer means "we
- * could not prove an owner", which callers treat exactly like FOREIGN — there
- * is no third answer, because "we could not tell" and "it is not ours" must
- * cost the same.
+ * `"*"`, or a leaf `leafId` refuses. So an empty answer means "we could not
+ * prove an owner", which callers treat exactly like FOREIGN — there is no third
+ * answer, because "we could not tell" and "it is not ours" must cost the same.
  */
 export function ownerIds(
   object: unknown,
@@ -43,7 +66,8 @@ export function ownerIds(
 ): readonly string[] {
   const [head, ...rest] = ownerPath;
   if (head === undefined) {
-    return typeof object === "string" && object.length > 0 ? [object] : [];
+    const leaf = leafId(object);
+    return leaf === undefined ? [] : [leaf];
   }
   if (head === "*") {
     if (!Array.isArray(object)) return [];
