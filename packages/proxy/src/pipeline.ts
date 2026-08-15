@@ -9,6 +9,7 @@ import {
   UNKNOWN_VERDICT,
   type RequestContext,
 } from "./audit";
+import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
 import { GITHUB_NOT_FOUND_BODY, type NarrowFn } from "./narrow";
 import { traceIdOf } from "./trace";
@@ -36,7 +37,8 @@ export interface PipelineDeps extends ForwardDeps {
 }
 
 /**
- * authn → catalog → vendor credential injection → forward → audit.
+ * authn → revocation → connections → catalog → action → narrow → origin
+ * re-validation → forward → filter → audit.
  *
  * Deny by default at every step: the upstream is reached only after a mission
  * token verified and a catalog ALLOW, and any thrown error (catalog, audit
@@ -155,13 +157,15 @@ export async function handle(
       return jsonError(403, "missura_denied", ESCAPE_REASON);
     }
 
+    // FILTER runs last, on the vendor's answer: the request was allowed to run,
+    // and what comes back is cut down to what the mission proves it may see.
     return await forward(
       deps,
       target,
       outbound,
       verdict,
       ctx,
-      narrowed.postCheck,
+      filterTask(narrowed),
     );
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.

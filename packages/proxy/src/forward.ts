@@ -5,11 +5,7 @@ import {
   type AuditDeps,
   type RequestContext,
 } from "./audit";
-import {
-  applyPostCheck,
-  OUT_OF_SCOPE_REASON,
-  type NarrowPostCheck,
-} from "./narrow";
+import { applyFilterPlan, type FilterTask } from "./filter";
 import {
   FORWARDED_RESPONSE_HEADERS,
   hasBody,
@@ -53,7 +49,7 @@ export function upstreamTarget(
 /**
  * The only place the vendor credential is used, and the only place a vendor
  * answer becomes ours: the response is capped, header-filtered and, when the
- * connector registered one, post-checked before it reaches the agent.
+ * connector registered a plan, FILTERED before it reaches the agent.
  */
 export async function forward(
   deps: ForwardDeps,
@@ -61,7 +57,7 @@ export async function forward(
   req: IncomingShape,
   verdict: CatalogDecision,
   ctx: RequestContext,
-  postCheck?: NarrowPostCheck,
+  filter?: FilterTask,
 ): Promise<ResponseShape> {
   let response: Response;
   try {
@@ -98,26 +94,32 @@ export async function forward(
     if (value !== null) headers[name] = value;
   }
 
-  if (postCheck !== undefined) {
-    const checked = applyPostCheck(
-      postCheck,
+  if (filter !== undefined) {
+    const filtered = applyFilterPlan(
+      filter.plan,
       new TextDecoder().decode(payload),
+      filter.notFoundBody,
     );
-    if (!checked.ok) {
+    if (!filtered.ok) {
+      // The vendor answered, so the record says so — the request is refused on
+      // the way back, and the agent sees the vendor's own "not found".
       emitEvent(
         deps,
         ctx,
-        { ...verdict, decision: "deny", reason: OUT_OF_SCOPE_REASON },
-        OUT_OF_SCOPE_REASON,
+        { ...verdict, decision: "deny", reason: filter.denyReason },
+        filter.denyReason,
       );
       return {
         status: response.status,
         headers: { ...JSON_HEADERS },
-        body: checked.body,
+        body: filtered.body,
       };
     }
-    emitEvent(deps, ctx, verdict);
-    return { status: response.status, headers, body: checked.body };
+    // How many objects the mission was not allowed to see is part of the
+    // record: an ALLOW that removed objects is not the same event as one that
+    // had nothing to remove.
+    emitEvent(deps, ctx, verdict, undefined, filtered.objectsRemoved);
+    return { status: response.status, headers, body: filtered.body };
   }
 
   emitEvent(deps, ctx, verdict);

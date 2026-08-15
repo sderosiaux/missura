@@ -49,6 +49,7 @@ export function emitEvent(
   ctx: RequestContext,
   decision: CatalogDecision,
   reason?: string,
+  objectsRemoved?: number,
 ): void {
   const now = deps.now?.() ?? Date.now();
   deps.emit({
@@ -63,6 +64,7 @@ export function emitEvent(
     ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
     ...(ctx.purpose === undefined ? {} : { purpose: ctx.purpose }),
     ...(ctx.traceId === undefined ? {} : { traceId: ctx.traceId }),
+    ...(objectsRemoved === undefined ? {} : { objectsRemoved }),
   });
 }
 

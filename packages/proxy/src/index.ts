@@ -1,3 +1,4 @@
+export * from "./filter";
 export * from "./narrow";
 export * from "./operator";
 export * from "./pipeline";

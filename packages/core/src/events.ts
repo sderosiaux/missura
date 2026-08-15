@@ -18,6 +18,12 @@ export interface DecisionEvent {
   purpose?: string;
   /** `trace-id` of an inbound W3C `traceparent`, when the agent sent a valid one. */
   traceId?: string;
+  /**
+   * How many objects the response FILTER removed (dropped from a list or
+   * nulled). Absent when no filter plan ran; `0` when one ran and found the
+   * whole answer authorized — the difference is what makes the log auditable.
+   */
+  objectsRemoved?: number;
 }
 
 /**
@@ -37,6 +43,7 @@ const SERIALIZED_FIELDS = [
   "actor",
   "purpose",
   "traceId",
+  "objectsRemoved",
 ] as const satisfies readonly (keyof DecisionEvent)[];
 
 /**
