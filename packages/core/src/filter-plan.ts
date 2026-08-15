@@ -40,9 +40,22 @@ export interface FilterRule {
   type: string;
   /**
    * Path from that object to its owning entity id, relative to the object:
-   * `["customer","id"]` on an `Issue`, `["id"]` on a `Customer` itself. Every
-   * segment must resolve through plain objects; the leaf must be a non-empty
-   * string.
+   * `["repository","full_name"]` on a GitHub search result, `["id"]` on a
+   * `Customer` itself. Every segment must resolve through plain objects; the
+   * leaf must be a non-empty string.
+   *
+   * A `"*"` segment means "every element of the array at this position", which
+   * makes the path resolve to a SET of owners instead of one, and the object is
+   * ours when ANY of them matches. Some vendors publish no single owner field:
+   * a Linear `Issue` has no `customer` at all, and its only customer link is
+   * `Issue.needs` → `CustomerNeed.customer`, a collection — so its owner path
+   * is `["needs","nodes","*","customer","id"]` and an issue shared by two
+   * customers belongs to both (SPEC §4.4.3, decided permissive).
+   *
+   * A path WITHOUT a `"*"` behaves exactly as before: one leaf, one owner. An
+   * element that does not resolve contributes nothing rather than failing the
+   * read, so an empty collection, a missing one, or one that is not an array
+   * all leave the object unproven — which is FOREIGN.
    */
   ownerPath: readonly string[];
   /**

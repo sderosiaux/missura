@@ -26,23 +26,31 @@ export function omitKey(
 }
 
 /**
- * The owning entity id of one object, or `undefined` when it cannot be proven:
- * a missing step, a `null`, a non-object on the way, or a leaf that is not a
- * non-empty string. Callers treat `undefined` as FOREIGN — there is no third
- * answer, because "we could not tell" and "it is not ours" must cost the same.
+ * Every owning entity id `ownerPath` proves for one object — usually one, and
+ * SEVERAL when the path crosses a `"*"`, which names every element of the array
+ * at that position (`["needs","nodes","*","customer","id"]` on a Linear issue).
+ *
+ * A step that does not resolve contributes NOTHING instead of failing the whole
+ * read: a missing step, a `null`, a non-object on the way, a non-array under a
+ * `"*"`, or a leaf that is not a non-empty string. So an empty answer means "we
+ * could not prove an owner", which callers treat exactly like FOREIGN — there
+ * is no third answer, because "we could not tell" and "it is not ours" must
+ * cost the same.
  */
-export function ownerId(
+export function ownerIds(
   object: unknown,
   ownerPath: readonly string[],
-): string | undefined {
-  let current: unknown = object;
-  for (const key of ownerPath) {
-    if (!isRecord(current) || !Object.hasOwn(current, key)) return undefined;
-    current = current[key];
+): readonly string[] {
+  const [head, ...rest] = ownerPath;
+  if (head === undefined) {
+    return typeof object === "string" && object.length > 0 ? [object] : [];
   }
-  return typeof current === "string" && current.length > 0
-    ? current
-    : undefined;
+  if (head === "*") {
+    if (!Array.isArray(object)) return [];
+    return object.flatMap((element) => ownerIds(element, rest));
+  }
+  if (!isRecord(object) || !Object.hasOwn(object, head)) return [];
+  return ownerIds(object[head], rest);
 }
 
 /**

@@ -1,5 +1,5 @@
 import type { FilterRule } from "@missura/core";
-import { ownerId } from "./filter-json";
+import { ownerIds } from "./filter-json";
 
 /**
  * The one question the FILTER asks of every object: is this ours?
@@ -31,13 +31,19 @@ function matches(resolved: string, expected: string, rule: FilterRule): boolean 
 /**
  * True when the object's owner resolves to one of the rule's expected owners.
  * An unresolvable owner (missing key, `null`, a non-object on the way, a leaf
- * that is not a non-empty string) resolves to `undefined` and therefore
- * matches nothing — including an empty expected set, which owns nothing at all.
+ * that is not a non-empty string) resolves to nothing and therefore matches
+ * nothing — including against an empty expected set, which owns nothing at all.
+ *
+ * An `ownerPath` crossing a `"*"` resolves SEVERAL owners, and ANY of them
+ * matching makes the object ours: an object reachable through a collection
+ * (a Linear issue, whose only customer link is its `needs`) belongs to every
+ * customer in it. The other members of that collection are themselves
+ * customer-scoped objects with their own rule, so keeping the object does not
+ * hand over who else is on it. SPEC §4.4.3.
  */
 export function isOwned(object: unknown, rule: FilterRule): boolean {
-  const resolved = ownerId(object, rule.ownerPath);
-  if (resolved === undefined) return false;
-  return rule.expectedOwnerIds.some((expected) =>
-    matches(resolved, expected, rule),
+  const resolved = ownerIds(object, rule.ownerPath);
+  return resolved.some((owner) =>
+    rule.expectedOwnerIds.some((expected) => matches(owner, expected, rule)),
   );
 }
