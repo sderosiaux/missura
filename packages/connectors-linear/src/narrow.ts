@@ -1,3 +1,4 @@
+import type { FilterPlan, FilterRule } from "@missura/core";
 import {
   Kind,
   OperationTypeNode,
@@ -8,45 +9,21 @@ import {
   type OperationDefinitionNode,
   type SelectionNode,
 } from "graphql";
-import { narrowIssuesField } from "./narrow-filter";
 import { inlineFragments } from "./narrow-fragments";
-import {
-  narrowIssueField,
-  resolveIdArgument,
-  responseKey,
-  type InjectedSelection,
-} from "./narrow-issue";
 import { forwardRecord, readPayload } from "./narrow-payload";
-import { traversalDenial } from "./narrow-walk";
-
-/**
- * Response-side ownership check handed to the proxy. Structurally identical to
- * the proxy's `NarrowPostCheck` — declared here because a connector never
- * imports the proxy.
- */
-export interface LinearNarrowPostCheck {
-  path: string[];
-  expectedCustomerId: string;
-  injectedSelection: InjectedSelection;
-}
+import { narrowRoot } from "./narrow-roots";
 
 export interface LinearNarrowResult {
   decision: "allow" | "deny";
   /** Present only when the document or its variables were rewritten. */
   body?: string;
   reason?: string;
-  postCheck?: LinearNarrowPostCheck;
+  /**
+   * What the proxy must do to the response: which objects to prove ours, and
+   * which fields we added to make that possible and must take back.
+   */
+  filterPlan?: FilterPlan;
 }
-
-const NO_RELATION = "no proven relation to mission customer";
-const OUT_OF_SCOPE_CUSTOMER = "out-of-scope customer";
-const NOT_IN_SCOPE = "linear not in mission scope";
-const UNRELATED_ROOT_FIELDS: ReadonlySet<string> = new Set([
-  "projects",
-  "project",
-  "comments",
-  "comment",
-]);
 
 function deny(reason: string): LinearNarrowResult {
   return { decision: "deny", reason };
@@ -65,10 +42,11 @@ function rootFields(
 
 interface RootState {
   fields: FieldNode[];
+  rules: FilterRule[];
+  strip: (readonly string[])[];
   fieldsChanged: boolean;
   variables: Record<string, unknown> | undefined;
   variablesChanged: boolean;
-  postCheck?: LinearNarrowPostCheck;
 }
 
 /**
@@ -83,62 +61,23 @@ function narrowRoots(
 ): RootState | string {
   const state: RootState = {
     fields: [],
+    rules: [],
+    strip: [],
     fieldsChanged: false,
     variables,
     variablesChanged: false,
   };
   for (const field of roots) {
-    const name = field.name.value;
-    if (customerId === undefined) {
-      if (name !== "viewer") return NOT_IN_SCOPE;
-      state.fields.push(field);
-      continue;
+    const outcome = narrowRoot(field, customerId, state.variables);
+    if (outcome.reason !== undefined) return outcome.reason;
+    state.fields.push(outcome.field ?? field);
+    state.rules.push(...(outcome.rules ?? []));
+    state.strip.push(...(outcome.strip ?? []));
+    if (outcome.rewritten === true) state.fieldsChanged = true;
+    if (outcome.variables !== undefined) {
+      state.variables = outcome.variables;
+      state.variablesChanged = true;
     }
-    if (name === "viewer") {
-      state.fields.push(field);
-      continue;
-    }
-    if (name === "issues") {
-      const outcome = narrowIssuesField(field, customerId, state.variables);
-      if (outcome.reason !== undefined) return outcome.reason;
-      if (outcome.variables !== undefined) {
-        state.variables = outcome.variables;
-        state.variablesChanged = true;
-        state.fields.push(field);
-      } else {
-        state.fields.push(outcome.field ?? field);
-        state.fieldsChanged = true;
-      }
-      continue;
-    }
-    if (name === "issue") {
-      if (state.postCheck !== undefined) {
-        return "a document may carry only one `issue` root field — one ownership check each";
-      }
-      const outcome = narrowIssueField(field);
-      if (outcome.reason !== undefined) return outcome.reason;
-      const next = outcome.field ?? field;
-      if (next !== field) state.fieldsChanged = true;
-      state.fields.push(next);
-      state.postCheck = {
-        path: ["data", responseKey(field), "customer", "id"],
-        expectedCustomerId: customerId,
-        injectedSelection: outcome.injectedSelection ?? "none",
-      };
-      continue;
-    }
-    if (name === "customer") {
-      if (resolveIdArgument(field, state.variables) !== customerId) {
-        return OUT_OF_SCOPE_CUSTOMER;
-      }
-      state.fields.push(field);
-      continue;
-    }
-    if (name === "customers") {
-      return "`customers` cannot be narrowed to the mission — use customer(id)";
-    }
-    if (UNRELATED_ROOT_FIELDS.has(name)) return NO_RELATION;
-    return `root field \`${name}\` is not narrowable under a mission scope`;
   }
   return state;
 }
@@ -170,10 +109,15 @@ function rebuild(
 }
 
 /**
- * Rewrites a Linear GraphQL request so it can only see the mission's customer,
- * or refuses it. Deny by default: every shape the rewrite cannot reason about
- * — unreadable body, fragment where a relation must be proven, filter it
- * cannot merge — is a refusal, never an untouched pass-through.
+ * Rewrites a Linear GraphQL request so the response can be filtered down to the
+ * mission's customer, or refuses it.
+ *
+ * The refusals that remain are the ones filtering afterwards cannot repair
+ * (SPEC §4.4.2): a write, a type the connector has not classified, a field that
+ * would have to be removed although the vendor schema declares it non-nullable,
+ * and every shape the rewrite cannot read at all — unreadable body, persisted
+ * query, more than one operation. Everything else is allowed to run and comes
+ * back through a `FilterPlan`.
  */
 export function narrowLinear(
   body: string,
@@ -209,29 +153,18 @@ export function narrowLinear(
 
   const state = narrowRoots(resolved.fields, scope.linearCustomerId, payload.variables);
   if (typeof state === "string") return deny(state);
-  // Walked on the fields that will actually be forwarded: what NARROW proved
-  // is what the vendor runs.
-  const offScope = traversalDenial(state.fields);
-  if (offScope !== undefined) return deny(offScope);
 
-  const postCheck = state.postCheck;
+  const plan: FilterPlan = { rules: state.rules, strip: state.strip };
   const rewrites =
     state.fieldsChanged ||
     state.variablesChanged ||
     resolved.inlined === true ||
     payload.carriesExtensions;
-  if (!rewrites) {
-    return postCheck === undefined
-      ? { decision: "allow" }
-      : { decision: "allow", postCheck };
-  }
+  if (!rewrites) return { decision: "allow", filterPlan: plan };
   const next = forwardRecord(
     payload,
     rebuild(operation, state.fields),
     state.variablesChanged ? state.variables : undefined,
   );
-  const rewritten = JSON.stringify(next);
-  return postCheck === undefined
-    ? { decision: "allow", body: rewritten }
-    : { decision: "allow", body: rewritten, postCheck };
+  return { decision: "allow", body: JSON.stringify(next), filterPlan: plan };
 }

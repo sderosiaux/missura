@@ -30,6 +30,9 @@
  * unknown field is a deny.
  */
 
+import { assertUnionsDeclared, readUnionProperty } from "./sdk-unions";
+import type { UnionSpec } from "./types";
+
 export interface SdkFieldInfo {
   readonly type: string;
   readonly nullable: boolean;
@@ -56,6 +59,8 @@ export interface SdkSchema {
   readonly types: Readonly<Record<string, SdkTypeInfo>>;
   /** Every non-class type name referenced by an extracted field: scalars, enums. */
   readonly leaves: readonly string[];
+  /** Union name → its member types, for the fields curated as unions. */
+  readonly unions: Readonly<Record<string, readonly string[]>>;
 }
 
 interface RawClass {
@@ -128,9 +133,14 @@ function privateRelations(members: readonly string[]): Map<string, boolean> {
 interface Accumulator {
   fields: Record<string, SdkFieldInfo>;
   excluded: Record<string, ExclusionReason>;
+  unions: Record<string, readonly string[]>;
 }
 
-function readProperty(name: string, optional: boolean, declared: string): SdkFieldInfo | undefined {
+function readProperty(
+  name: string,
+  optional: boolean,
+  declared: string,
+): SdkFieldInfo | undefined {
   let raw = declared;
   let nullable = optional;
   if (raw.endsWith(" | null")) {
@@ -173,9 +183,12 @@ function readMethod(params: string, returns: string): SdkFieldInfo | undefined {
   return { type: connection[1], nullable: false, list: false };
 }
 
-function readMembers(raw: RawClass): Accumulator {
+function readMembers(
+  raw: RawClass,
+  unions: Readonly<Record<string, UnionSpec>>,
+): Accumulator {
   const relations = privateRelations(raw.members);
-  const acc: Accumulator = { fields: {}, excluded: {} };
+  const acc: Accumulator = { fields: {}, excluded: {}, unions: {} };
   const base = CONNECTION_BASE.exec(raw.extendsClause);
   if (base?.[1] !== undefined) {
     acc.fields.nodes = { type: base[1], nullable: false, list: true };
@@ -185,6 +198,18 @@ function readMembers(raw: RawClass): Accumulator {
     if (member.startsWith("private ") || member.startsWith("constructor(")) continue;
     const property = PROPERTY.exec(member);
     if (property?.[1] !== undefined && property[3] !== undefined) {
+      const spec = Object.hasOwn(unions, property[1]) ? unions[property[1]] : undefined;
+      if (spec !== undefined) {
+        acc.fields[property[1]] = readUnionProperty(
+          raw.name,
+          property[1],
+          property[2] === "?",
+          property[3],
+          spec,
+        );
+        acc.unions[spec.name] = [...spec.members].sort();
+        continue;
+      }
       const field = readProperty(property[1], property[2] === "?", property[3]);
       if (field === undefined) acc.excluded[property[1]] = "unmapped-type";
       else acc.fields[property[1]] = field;
@@ -226,20 +251,35 @@ function sortedRecord<T>(entries: Record<string, T>): Record<string, T> {
 export function parseSdkDeclarations(
   source: string,
   seeds: readonly string[],
+  unionFields: Readonly<Record<string, Readonly<Record<string, UnionSpec>>>> = {},
 ): SdkSchema {
   const classes = splitClasses(source);
   const types: Record<string, SdkTypeInfo> = {};
   const leaves = new Set<string>();
+  const unions: Record<string, readonly string[]> = {};
   for (const name of [...seeds].sort()) {
     const raw = classes.get(name);
     if (raw === undefined) continue;
-    const { fields, excluded } = readMembers(raw);
-    types[name] = { fields: sortedRecord(fields), excluded: sortedRecord(excluded) };
+    const curated = Object.hasOwn(unionFields, name) ? unionFields[name] : undefined;
+    const read = readMembers(raw, curated ?? {});
+    types[name] = {
+      fields: sortedRecord(read.fields),
+      excluded: sortedRecord(read.excluded),
+    };
+    Object.assign(unions, read.unions);
   }
+  assertUnionsDeclared(unions, new Set(classes.keys()));
+  const unionNames = new Set(Object.keys(unions));
   for (const type of Object.values(types)) {
     for (const field of Object.values(type.fields)) {
-      if (!classes.has(field.type)) leaves.add(field.type);
+      if (!classes.has(field.type) && !unionNames.has(field.type)) {
+        leaves.add(field.type);
+      }
     }
   }
-  return { types: sortedRecord(types), leaves: [...leaves].sort() };
+  return {
+    types: sortedRecord(types),
+    leaves: [...leaves].sort(),
+    unions: sortedRecord(unions),
+  };
 }

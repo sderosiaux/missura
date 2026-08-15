@@ -16,7 +16,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseSdkDeclarations, type SdkSchema } from "./sdk-declarations";
-import { EXTRACTED_TYPES } from "./types";
+import { EXTRACTED_TYPES, UNION_FIELDS } from "./types";
 
 const SDK_PACKAGE = "@linear/sdk";
 const DECLARATIONS = "dist/index.d.mts";
@@ -55,12 +55,13 @@ function artifactPath(): string {
 export function buildSchemaDocument(): SchemaDocument {
   const root = sdkRoot();
   const declarations = readFileSync(join(root, DECLARATIONS), "utf8");
-  const parsed = parseSdkDeclarations(declarations, EXTRACTED_TYPES);
+  const parsed = parseSdkDeclarations(declarations, EXTRACTED_TYPES, UNION_FIELDS);
   return {
     source: `${SDK_PACKAGE}/${DECLARATIONS}`,
     sdkVersion: sdkVersion(root),
     types: parsed.types,
     leaves: parsed.leaves,
+    unions: parsed.unions,
   };
 }
 
@@ -74,6 +75,7 @@ export function serializeSchema(document: SchemaDocument): string {
     source: document.source,
     sdkVersion: document.sdkVersion,
     leaves: document.leaves,
+    unions: document.unions,
     types: document.types,
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;

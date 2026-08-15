@@ -267,8 +267,9 @@ export function planFromPostCheck(check: NarrowPostCheck): FilterPlan {
  *
  * The two deny reasons are not two mechanisms: `unfilterable` is what a plan
  * reports, and `out-of-scope object` is kept for the M2 post-check so the
- * decision log does not change meaning under connectors that have not moved to
- * plans yet. The post-check disappears with them, and this branch with it.
+ * decision log does not change meaning under a connector using the shortcut.
+ * No shipped connector does any more, so this branch is reachable only from its
+ * own unit test — it goes when `NarrowPostCheck` goes.
  */
 export function filterTask(narrowed: NarrowResult): FilterTask | undefined {
   const notFoundBody =

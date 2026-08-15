@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import { narrowLinear, type LinearNarrowResult } from "./narrow";
 
 const SCOPE = { linearCustomerId: "c_18" };
-const OURS = '{customer: {id: {eq: "c_18"}}}';
+/**
+ * The mission filter, in the shape `@linear/sdk@90` actually declares:
+ * `IssueFilter.needs: CustomerNeedCollectionFilter`, whose `some` takes a
+ * `CustomerNeedFilter`, whose `customer` takes a `NullableCustomerFilter`,
+ * whose `id` takes an `IdComparator`. `IssueFilter` has NO `customer` key —
+ * M2 injected one and the vendor rejected every narrowed request.
+ */
+const OURS = '{needs: {some: {customer: {id: {eq: "c_18"}}}}}';
+const OURS_JSON = { needs: { some: { customer: { id: { eq: "c_18" } } } } };
 
 function request(
   query: string,
@@ -66,28 +74,23 @@ describe("narrowLinear — issues filter injection (inline arguments)", () => {
     );
   });
 
-  it("replaces an agent-supplied customer sub-filter with ours", () => {
+  /**
+   * An agent naming ANOTHER customer's needs is not stripped, it is ANDed:
+   * `IssueFilter.and` is a conjunction, so whatever the agent wrote can only
+   * shrink the result set. What comes back is the issues that are in scope AND
+   * also touch globex — issues the mission may already see — and the response
+   * filter still removes globex's own needs from them.
+   */
+  it("cannot be widened by an agent filter naming another customer", () => {
     const result = narrowLinear(
       request(
-        `query { issues(filter: {customer: {id: {eq: "c_globex"}}}) { nodes { id } } }`,
+        `query { issues(filter: {needs: {some: {customer: {id: {eq: "c_globex"}}}}}) { nodes { id } } }`,
       ),
       SCOPE,
     );
     expect(result.decision).toBe("allow");
-    const query = queryOf(result);
-    expect(filterOf(query)).toBe(OURS);
-    expect(query).not.toContain("c_globex");
-  });
-
-  it("replaces the customer sub-filter while keeping the sibling filters", () => {
-    const result = narrowLinear(
-      request(
-        `query { issues(filter: {customer: {id: {eq: "c_globex"}}, assignee: {id: {eq: "u1"}}}) { nodes { id } } }`,
-      ),
-      SCOPE,
-    );
     expect(filterOf(queryOf(result))).toBe(
-      `{and: [{assignee: {id: {eq: "u1"}}}, ${OURS}]}`,
+      `{and: [{needs: {some: {customer: {id: {eq: "c_globex"}}}}}, ${OURS}]}`,
     );
   });
 
@@ -132,40 +135,27 @@ describe("narrowLinear — issues filter injection (variables)", () => {
     expect(result.decision).toBe("allow");
     const payload = payloadOf(result);
     expect(payload.variables).toEqual({
-      filter: {
-        and: [
-          { assignee: { id: { eq: "u1" } } },
-          { customer: { id: { eq: "c_18" } } },
-        ],
-      },
+      filter: { and: [{ assignee: { id: { eq: "u1" } } }, OURS_JSON] },
     });
     expect(queryOf(result)).toContain("filter: $filter");
   });
 
-  it("replaces an agent customer filter carried by the variable", () => {
-    const result = narrowLinear(
-      request(query, { filter: { customer: { id: { eq: "c_globex" } } } }),
-      SCOPE,
-    );
+  it("ANDs a customer filter carried by the variable instead of trusting it", () => {
+    const agent = { needs: { some: { customer: { id: { eq: "c_globex" } } } } };
+    const result = narrowLinear(request(query, { filter: agent }), SCOPE);
     expect(payloadOf(result).variables).toEqual({
-      filter: { customer: { id: { eq: "c_18" } } },
+      filter: { and: [agent, OURS_JSON] },
     });
-    expect(result.body).not.toContain("c_globex");
   });
 
   it("sets the variable when the agent sent no value for it", () => {
     const result = narrowLinear(request(query, { other: 1 }), SCOPE);
-    expect(payloadOf(result).variables).toEqual({
-      other: 1,
-      filter: { customer: { id: { eq: "c_18" } } },
-    });
+    expect(payloadOf(result).variables).toEqual({ other: 1, filter: OURS_JSON });
   });
 
   it("sets the variable when the request carries no variables at all", () => {
     const result = narrowLinear(request(query), SCOPE);
-    expect(payloadOf(result).variables).toEqual({
-      filter: { customer: { id: { eq: "c_18" } } },
-    });
+    expect(payloadOf(result).variables).toEqual({ filter: OURS_JSON });
   });
 
   it("denies when the filter variable holds a non-object", () => {

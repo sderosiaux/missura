@@ -18,8 +18,11 @@ export type InjectedSelection = "none" | "relation" | "id";
  * NARROW added so the agent sees exactly the shape it asked for.
  *
  * SUPERSEDED by `FilterPlan`, which says the same thing for any number of
- * objects, lists included. It stays until every connector emits plans: it is
- * translated into a one-rule plan and runs through the same engine.
+ * objects, lists included. NO shipped connector emits one any more — Linear was
+ * the last, and moved to plans with the type-driven walk. It is translated into
+ * a one-rule plan and runs through the same engine, and it exists now only so a
+ * connector under construction has a one-object shortcut; deleting it is a
+ * standalone change, not part of a behaviour one.
  */
 export interface NarrowPostCheck {
   /** e.g. `["data","issue","customer","id"]`. */

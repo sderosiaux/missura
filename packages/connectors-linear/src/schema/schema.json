@@ -25,6 +25,13 @@
     "number",
     "string"
   ],
+  "unions": {
+    "ExternalEntityInfoMetadata": [
+      "ExternalEntityInfoGithubMetadata",
+      "ExternalEntityInfoJiraMetadata",
+      "ExternalEntitySlackMetadata"
+    ]
+  },
   "types": {
     "ActorBot": {
       "fields": {
@@ -781,15 +788,18 @@
           "nullable": false,
           "list": false
         },
+        "metadata": {
+          "type": "ExternalEntityInfoMetadata",
+          "nullable": true,
+          "list": false
+        },
         "service": {
           "type": "ExternalSyncService",
           "nullable": false,
           "list": false
         }
       },
-      "excluded": {
-        "metadata": "unmapped-type"
-      }
+      "excluded": {}
     },
     "ExternalEntityInfoGithubMetadata": {
       "fields": {

@@ -1,4 +1,4 @@
-import { isRecord } from "./narrow-filter";
+import { isRecord } from "./narrow-ast";
 
 const EXTENSIONS = "extensions";
 const PERSISTED = "persistedQuery";

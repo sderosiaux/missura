@@ -20,6 +20,7 @@ interface TypeEntry {
 
 const TYPES: Record<string, TypeEntry> = artifact.types;
 const LEAVES: ReadonlySet<string> = new Set<string>(artifact.leaves);
+const UNIONS: Record<string, readonly string[]> = artifact.unions;
 
 function entry(type: string): TypeEntry | undefined {
   return Object.hasOwn(TYPES, type) ? TYPES[type] : undefined;
@@ -37,9 +38,19 @@ export function fieldInfo(parentType: string, field: string): FieldInfo | undefi
   return Object.hasOwn(type.fields, field) ? type.fields[field] : undefined;
 }
 
-/** True when the artifact carries the type — a leaf counts. */
+/**
+ * The member types of a union, or `undefined` when the name is not one. A union
+ * has no fields of its own: it is only ever entered through an inline fragment
+ * naming one of these, which is GraphQL's own rule and the reason the walk can
+ * decide it without guessing.
+ */
+export function unionMembers(type: string): readonly string[] | undefined {
+  return Object.hasOwn(UNIONS, type) ? UNIONS[type] : undefined;
+}
+
+/** True when the artifact carries the type — a leaf or a union counts. */
 export function knownType(type: string): boolean {
-  return entry(type) !== undefined || LEAVES.has(type);
+  return entry(type) !== undefined || LEAVES.has(type) || unionMembers(type) !== undefined;
 }
 
 /** True for a scalar/enum: known, but with no fields to walk into. */

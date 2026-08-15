@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   parseSdkDeclarations,
   type SdkSchema,
 } from "./sdk-declarations";
 import { buildSchemaDocument, serializeSchema, readCommittedSchema } from "./extract";
+import { UNION_FIELDS, type UnionSpec } from "./types";
 
 /**
  * A hand-written stand-in for the SDK's generated declarations. Every shape the
@@ -30,6 +34,10 @@ declare class Widget extends Request {
   payload: Scalars["JSONObject"];
   /** A shape the parser cannot name. */
   templateData: Record<string, unknown>;
+  /** A union, which the SDK spells as an indexed access into its fragment. */
+  facet?: WidgetFragment["facet"] | null;
+  /** An indexed access nobody curated a union for. */
+  mystery?: WidgetFragment["mystery"] | null;
   /** Nullable relation. */
   get owner(): LinearFetch<Part> | undefined;
   /** SDK-synthesized companion of the relation above. */
@@ -62,8 +70,16 @@ declare class Unwanted extends Request {
 }
 `;
 
+const FIXTURE_UNIONS: Readonly<Record<string, Readonly<Record<string, UnionSpec>>>> = {
+  Widget: { facet: { name: "WidgetFacet", members: ["Part", "Badge"] } },
+};
+
 function fixture(): SdkSchema {
-  return parseSdkDeclarations(FIXTURE, ["Widget", "Part", "Badge", "WidgetConnection"]);
+  return parseSdkDeclarations(
+    FIXTURE,
+    ["Widget", "Part", "Badge", "WidgetConnection"],
+    FIXTURE_UNIONS,
+  );
 }
 
 describe("sdk declaration parser — fields it maps", () => {
@@ -148,6 +164,11 @@ describe("sdk declaration parser — what it refuses to map", () => {
     expect(widget?.excluded.templateData).toBe("unmapped-type");
   });
 
+  it("still drops an indexed access nobody curated a union for", () => {
+    expect(widget?.fields.mystery).toBeUndefined();
+    expect(widget?.excluded.mystery).toBe("unmapped-type");
+  });
+
   it("drops mutations, including one with query-shaped variables", () => {
     expect(widget?.fields.update).toBeUndefined();
     expect(widget?.fields.archive).toBeUndefined();
@@ -162,6 +183,63 @@ describe("sdk declaration parser — what it refuses to map", () => {
   it("records every leaf type it referenced, so a leaf is known and walkable-into never", () => {
     expect(schema.leaves).toContain("string");
     expect(schema.leaves).toContain("JSONObject");
+  });
+});
+
+describe("sdk declaration parser — curated unions", () => {
+  const schema = fixture();
+
+  it("maps a curated indexed access to its union type, keeping nullability", () => {
+    expect(schema.types.Widget?.fields.facet).toEqual({
+      type: "WidgetFacet",
+      nullable: true,
+      list: false,
+    });
+    expect(schema.types.Widget?.excluded.facet).toBeUndefined();
+  });
+
+  it("records the union's members in the artifact", () => {
+    expect(schema.unions).toEqual({ WidgetFacet: ["Badge", "Part"] });
+  });
+
+  it("refuses a curated union whose member is not a declared class", () => {
+    expect(() =>
+      parseSdkDeclarations(FIXTURE, ["Widget"], {
+        Widget: { facet: { name: "WidgetFacet", members: ["Ghost"] } },
+      }),
+    ).toThrow(/Ghost/);
+  });
+
+  it("refuses a curated union on a field the SDK no longer spells that way", () => {
+    // `id: string` is a plain property: if the SDK ever stops declaring the
+    // union as an indexed access, the curation is stale and must fail loudly
+    // rather than silently classify something else.
+    expect(() =>
+      parseSdkDeclarations(FIXTURE, ["Widget"], {
+        Widget: { id: { name: "WidgetFacet", members: ["Part"] } },
+      }),
+    ).toThrow(/Widget\.id/);
+  });
+});
+
+describe("the curated union matches the SDK's own generated document", () => {
+  /**
+   * The declarations spell the union as an indexed access, so they cannot name
+   * its members. The SDK's generated GraphQL fragment can: it selects one
+   * `... on <Member>` per member. Reading it here turns the curation from an
+   * assertion into a checked fact, and a member added upstream fails the build.
+   */
+  it("names exactly the members the SDK's fragment selects", () => {
+    const root = dirname(createRequire(import.meta.url).resolve("@linear/sdk/package.json"));
+    const source = readFileSync(join(root, "dist/index.mjs"), "utf8");
+    const start = source.indexOf("fragment ExternalEntityInfo on ExternalEntityInfo {");
+    expect(start).toBeGreaterThan(-1);
+    const block = source.slice(start, source.indexOf("\n}", start));
+    const members = [...block.matchAll(/\.\.\. on (\w+) \{/g)].map((m) => m[1]);
+
+    expect([...members].sort()).toEqual(
+      [...(UNION_FIELDS.ExternalEntityInfo?.metadata?.members ?? [])].sort(),
+    );
   });
 });
 

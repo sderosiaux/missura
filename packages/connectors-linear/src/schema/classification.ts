@@ -7,7 +7,7 @@
  * including a type the SDK declares but nobody has judged.
  */
 
-import { leafType } from "./schema";
+import { leafType, unionMembers } from "./schema";
 import { CUSTOMER_SCOPED_TYPES, METADATA_TYPES } from "./types";
 
 export {
@@ -31,13 +31,13 @@ export const METADATA_SAFETY: Readonly<Record<string, string>> = {
   Cycle:
     "team/inheritedFrom are metadata singles; `issues` and `uncompletedIssuesUponClose` are IssueConnections — collections, see the table below",
   ExternalEntityInfo:
-    "`id` and `service` only; `metadata` is a union behind an indexed access and was EXCLUDED by the extractor, so it is unknown and denied",
+    "`id`, `service`, and `metadata` — a union whose three members are all scalars-only metadata types, so entering it can reach nothing else",
   ExternalEntityInfoGithubMetadata:
-    "scalars only (number, owner, repo); currently unreachable — its only route in is the excluded ExternalEntityInfo.metadata",
+    "scalars only (number, owner, repo); reachable as a member of the ExternalEntityInfo.metadata union",
   ExternalEntityInfoJiraMetadata:
-    "scalars only (issueKey, issueTypeId, projectId); unreachable for the same reason",
+    "scalars only (issueKey, issueTypeId, projectId); same route in",
   ExternalEntitySlackMetadata:
-    "scalars only (channelId, channelName, isFromSlack, messageUrl); unreachable for the same reason",
+    "scalars only (channelId, channelName, isFromSlack, messageUrl); same route in",
   ExternalUser:
     "scalars only — its `organization` getter is a root query with no backing private field and was EXCLUDED",
   Favorite:
@@ -131,22 +131,29 @@ export const METADATA_NON_NULLABLE_CUSTOMER_SINGLES: Readonly<
 /**
  * How to reach the owning customer id from an object of that type.
  *
- * CAVEAT, recorded rather than hidden: `@linear/sdk` 90 declares NO
- * `Issue.customer` field and NO `IssueFilter.customer` input — the customer
- * link runs through `Issue.needs` (`CustomerNeed.customer`). These paths are
- * the M3 plan's, kept verbatim; `schema.test.ts` pins the absence so Task 2
- * cannot miss it. If the field really is gone upstream, the injected
- * discriminator makes the vendor reject the query — a hard failure, not a leak.
+ * `@linear/sdk` 90 declares NO `Issue.customer` field and NO
+ * `IssueFilter.customer` input: the customer link runs through `Issue.needs` →
+ * `CustomerNeed.customer`, a COLLECTION. An issue can therefore belong to
+ * several customers at once, and the `"*"` segment says so — the object is ours
+ * when ANY need names the mission's customer (SPEC §4.4.3, decided permissive).
+ * The other needs are customer-scoped objects with their own rule and are
+ * removed on the way out, so a shared issue passes without naming who shares it.
+ *
+ * `Comment.issue` and `Attachment.issue` route through the same collection. A
+ * comment on a project rather than an issue resolves no owner at all, which is
+ * FOREIGN — fail closed, not a pass.
  */
+const ISSUE_OWNER: readonly string[] = ["needs", "nodes", "*", "customer", "id"];
+
 const OWNER_PATHS: Readonly<Record<string, readonly string[]>> = {
-  Attachment: ["issue", "customer", "id"],
-  Comment: ["issue", "customer", "id"],
+  Attachment: ["issue", ...ISSUE_OWNER],
+  Comment: ["issue", ...ISSUE_OWNER],
   Customer: ["id"],
-  // Not in the plan's list; CustomerNeed is customer-scoped and cannot get a
-  // filter rule without one. `CustomerNeed.customer` is a declared (nullable)
-  // relation, so an unresolvable owner makes the object foreign — fail closed.
+  // `CustomerNeed.customer` is a declared (nullable) relation, so an
+  // unresolvable owner makes the need foreign — which is what removes the needs
+  // of the OTHER customers on an issue the mission may see.
   CustomerNeed: ["customer", "id"],
-  Issue: ["customer", "id"],
+  Issue: ISSUE_OWNER,
 };
 
 const CUSTOMER_SCOPED = new Set(CUSTOMER_SCOPED_TYPES);
@@ -157,12 +164,22 @@ const METADATA = new Set(METADATA_TYPES);
  * `"metadata"`: they carry no fields, so a selection set under one resolves
  * nothing and dies anyway — while a `"denied"` answer would refuse
  * `issue { title }`.
+ *
+ * A UNION answers for all of its members at once: `"metadata"` when every
+ * member is metadata, `"denied"` otherwise. That is decidable from the artifact
+ * and it is the only reading that stays fail-closed — a union is entered
+ * through `... on <Member>`, so one customer-scoped or unclassified member would
+ * otherwise be reachable behind a name that looked safe.
  */
 export function typeClass(type: string): TypeClass {
   if (CUSTOMER_SCOPED.has(type)) return "customer-scoped";
   if (METADATA.has(type)) return "metadata";
   if (leafType(type)) return "metadata";
-  return "denied";
+  const members = unionMembers(type);
+  if (members === undefined) return "denied";
+  return members.every((member) => typeClass(member) === "metadata")
+    ? "metadata"
+    : "denied";
 }
 
 /** The route to the owning customer id, or `undefined` — which is a deny. */

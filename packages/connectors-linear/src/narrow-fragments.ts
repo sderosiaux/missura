@@ -45,15 +45,20 @@ function resolveField(
 }
 
 /**
- * Flattens spreads and inline fragments into plain fields. A directive on the
+ * Flattens a NAMED spread into the scope that wrote it. A directive on the
  * spread itself (`...F @skip`) would be lost by the flattening, so it is
  * refused rather than silently dropped.
+ *
+ * A named fragment declared on some OTHER type is not refused here — it is
+ * flattened, and the walk then resolves its fields against the type they landed
+ * on, where a field that does not exist is a deny. Fail-closed either way, and
+ * this file stays free of the schema.
  */
 function resolveSpread(
   selection: SelectionNode,
   resolver: Resolver,
   open: ReadonlySet<string>,
-): readonly FieldNode[] | string {
+): readonly SelectionNode[] | string {
   if ((selection.directives ?? []).length > 0) {
     return "a directive on a fragment cannot be inlined — spell the fields out";
   }
@@ -72,20 +77,37 @@ function resolve(
   selections: readonly SelectionNode[],
   resolver: Resolver,
   open: ReadonlySet<string>,
-): readonly FieldNode[] | string {
-  const fields: FieldNode[] = [];
+): readonly SelectionNode[] | string {
+  const out: SelectionNode[] = [];
   for (const selection of selections) {
     if (selection.kind === Kind.FIELD) {
       const resolved = resolveField(selection, resolver, open);
       if (typeof resolved === "string") return resolved;
-      fields.push(resolved);
+      out.push(resolved);
+      continue;
+    }
+    // An inline fragment with a type condition is KEPT, not flattened: it is
+    // how a union is entered, and a union has no fields of its own, so
+    // flattening `... on GithubMetadata { repo }` would print a document the
+    // vendor rejects. `@linear/sdk`'s own `ExternalEntityInfo` fragment is
+    // exactly this shape.
+    if (selection.kind === Kind.INLINE_FRAGMENT && selection.typeCondition !== undefined) {
+      if ((selection.directives ?? []).length > 0) {
+        return "a directive on a fragment cannot be inlined — spell the fields out";
+      }
+      const inner = resolve(selection.selectionSet.selections, resolver, open);
+      if (typeof inner === "string") return inner;
+      out.push({
+        ...selection,
+        selectionSet: { ...selection.selectionSet, selections: inner },
+      });
       continue;
     }
     const spread = resolveSpread(selection, resolver, open);
     if (typeof spread === "string") return spread;
-    fields.push(...spread);
+    out.push(...spread);
   }
-  return fields;
+  return out;
 }
 
 /**
@@ -104,7 +126,11 @@ export function inlineFragments(
   const fragments = collect(doc);
   if (typeof fragments === "string") return { reason: fragments };
   const resolver: Resolver = { fragments, inlined: false };
-  const fields = resolve(roots, resolver, new Set());
-  if (typeof fields === "string") return { reason: fields };
+  const fields: FieldNode[] = [];
+  for (const root of roots) {
+    const resolved = resolveField(root, resolver, new Set());
+    if (typeof resolved === "string") return { reason: resolved };
+    fields.push(resolved);
+  }
   return { fields, inlined: resolver.inlined };
 }

@@ -74,3 +74,47 @@ export const EXTRACTED_TYPES: readonly string[] = [
   ...CUSTOMER_SCOPED_TYPES,
   ...METADATA_TYPES,
 ];
+
+/** A GraphQL union: a name for the alternative, and the types it may be. */
+export interface UnionSpec {
+  /**
+   * The union's name in the artifact. SYNTHESIZED from the parent type and the
+   * field: the SDK's TypeScript spells the field as an indexed access into a
+   * generated fragment type (`ExternalEntityInfoFragment["metadata"]`), which
+   * names no union at all. The name never leaves the connector — a GraphQL
+   * document only ever spells the MEMBERS, in `... on <Member>` conditions.
+   */
+  readonly name: string;
+  readonly members: readonly string[];
+}
+
+/**
+ * The unions the connector models, per parent type and field.
+ *
+ * Curated for the same reason the type lists are: the declarations cannot be
+ * read for the member list. Not asserted, though — `extract.test.ts` reads the
+ * SDK's own generated `ExternalEntityInfo` fragment and requires exactly these
+ * members, and the extractor refuses a member that is not a declared class or a
+ * field the SDK no longer declares as an indexed access.
+ *
+ * `ExternalEntityInfo.metadata` is the one that matters: the `@linear/sdk`
+ * `Issue` fragment selects `syncedWith { ...ExternalEntityInfo }`, so without
+ * it EVERY typed SDK read of an issue is denied on a field carrying nothing but
+ * scalars. Its three members are scalars-only metadata types, which is what
+ * makes allowing it decidable rather than a judgement call: a union is walkable
+ * exactly when ALL of its members are.
+ */
+export const UNION_FIELDS: Readonly<
+  Record<string, Readonly<Record<string, UnionSpec>>>
+> = {
+  ExternalEntityInfo: {
+    metadata: {
+      name: "ExternalEntityInfoMetadata",
+      members: [
+        "ExternalEntityInfoGithubMetadata",
+        "ExternalEntityInfoJiraMetadata",
+        "ExternalEntitySlackMetadata",
+      ],
+    },
+  },
+};

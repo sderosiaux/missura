@@ -55,9 +55,12 @@ describe("typeClass", () => {
 
 describe("ownerPath", () => {
   it("gives the route from each customer-scoped type to its owning customer id", () => {
-    expect(ownerPath("Issue")).toEqual(["customer", "id"]);
-    expect(ownerPath("Comment")).toEqual(["issue", "customer", "id"]);
-    expect(ownerPath("Attachment")).toEqual(["issue", "customer", "id"]);
+    // Through the `needs` COLLECTION, because `Issue.customer` does not exist:
+    // any need naming the mission's customer makes the issue ours (§4.4.3).
+    const issue = ["needs", "nodes", "*", "customer", "id"];
+    expect(ownerPath("Issue")).toEqual(issue);
+    expect(ownerPath("Comment")).toEqual(["issue", ...issue]);
+    expect(ownerPath("Attachment")).toEqual(["issue", ...issue]);
     expect(ownerPath("Customer")).toEqual(["id"]);
     expect(ownerPath("CustomerNeed")).toEqual(["customer", "id"]);
   });

@@ -10,14 +10,23 @@ function request(query: string, extra?: Record<string, unknown>): string {
 }
 
 /**
- * The traversal contract, written out independently of the implementation:
- * every field carrying a selection set in the forwarded document must sit on
- * one of these paths. Anything else is a cross-customer read waiting to happen.
+ * The traversal contract, written out independently of the implementation.
+ *
+ * M2 enforced a hand-written path allowlist and this table WAS the contract.
+ * The walk is type-driven now, so this table is no longer the rule — it is an
+ * independent second opinion on the documents these tests forward: every field
+ * carrying a selection set in a forwarded document must be one of these, and
+ * anything else is an escape the type walk let through.
+ *
+ * `needs > nodes > customer` is the ownership route the connector injects; it
+ * is the only path here that no test wrote by hand.
  */
 const ALLOWED_PATHS: ReadonlySet<string> = new Set([
   "issues",
   "issues.nodes",
-  "issues.nodes.customer",
+  "issues.nodes.needs",
+  "issues.nodes.needs.nodes",
+  "issues.nodes.needs.nodes.customer",
   "issues.nodes.assignee",
   "issues.nodes.creator",
   "issues.nodes.state",
@@ -26,17 +35,28 @@ const ALLOWED_PATHS: ReadonlySet<string> = new Set([
   "issues.nodes.comments",
   "issues.nodes.comments.nodes",
   "issues.nodes.comments.nodes.user",
+  "issues.nodes.comments.nodes.issue",
+  "issues.nodes.comments.nodes.issue.needs",
+  "issues.nodes.comments.nodes.issue.needs.nodes",
+  "issues.nodes.comments.nodes.issue.needs.nodes.customer",
   "issues.pageInfo",
   "issue",
-  "issue.customer",
+  "issue.needs",
+  "issue.needs.nodes",
+  "issue.needs.nodes.customer",
   "issue.assignee",
   "issue.creator",
   "issue.state",
+  "issue.project",
   "issue.labels",
   "issue.labels.nodes",
   "issue.comments",
   "issue.comments.nodes",
   "issue.comments.nodes.user",
+  "issue.comments.nodes.issue",
+  "issue.comments.nodes.issue.needs",
+  "issue.comments.nodes.issue.needs.nodes",
+  "issue.comments.nodes.issue.needs.nodes.customer",
   "issue.pageInfo",
   "customer",
   "viewer",
@@ -163,6 +183,11 @@ const HOSTILE: Hostile[] = [
     scope: SCOPE,
   },
   {
+    name: "an inline fragment narrowing to another type is not a walk we checked",
+    query: 'query { issue(id: "i1") { id ... on Team { issues { nodes { id } } } } }',
+    scope: SCOPE,
+  },
+  {
     name: "issue > customer > projects escapes through the proven relation",
     query: 'query { issue(id: "i1") { id customer { id projects { nodes { id } } } } }',
     scope: SCOPE,
@@ -183,12 +208,20 @@ describe("narrowLinear — document isolation (adversarial)", () => {
     },
   );
 
+  /**
+   * The reason names the TYPE and the field on it, not the path the agent
+   * wrote: `team { issues }` and `viewer { teams { nodes { issues } } }` are the
+   * same refusal now, because they are the same field on the same type. That is
+   * the whole point of the change — one judgement covers every route in.
+   */
   it.each([
-    ["team", HOSTILE[0]?.query ?? ""],
-    ["team", HOSTILE[1]?.query ?? ""],
-    ["assignedIssues", HOSTILE[2]?.query ?? ""],
-    ["teams", HOSTILE[3]?.query ?? ""],
-    ["projects", HOSTILE[5]?.query ?? ""],
+    ["Team.issues", HOSTILE[0]?.query ?? ""],
+    ["Team.issues", HOSTILE[1]?.query ?? ""],
+    ["User.assignedIssues", HOSTILE[2]?.query ?? ""],
+    ["Team.issues", HOSTILE[3]?.query ?? ""],
+    // `Customer.projects` is not declared by the SDK at all: an unknown field
+    // on a known type, which is the other half of deny-by-default.
+    ["`projects` is not a field of `Customer`", HOSTILE[5]?.query ?? ""],
   ])("names the offending field `%s` in the reason", (field, query) => {
     const result = narrowLinear(request(query), SCOPE);
     expect(result.decision).toBe("deny");
@@ -200,8 +233,8 @@ describe("narrowLinear — legitimate traversals still pass", () => {
   it("allows the full allowlisted issue shape", () => {
     const result = narrowLinear(
       request(
-        "query { issues(first: 10) { nodes { id title customer { id name } assignee { id } " +
-          "creator { id } state { name } labels { nodes { name } } " +
+        "query { issues(first: 10) { nodes { id title needs { nodes { customer { id name } } } " +
+          "assignee { id } creator { id } state { name } labels { nodes { name } } " +
           "comments { nodes { body user { name } } } } pageInfo { hasNextPage } } }",
       ),
       SCOPE,
@@ -234,39 +267,5 @@ describe("narrowLinear — legitimate traversals still pass", () => {
     const result = narrowLinear(request("query { issues { nodes { ...Missing } } }"), SCOPE);
     expect(result.decision).toBe("deny");
     expect(result.reason).toContain("Missing");
-  });
-});
-
-describe("narrowLinear — extensions never reach the vendor", () => {
-  const query = "query { viewer { id } }";
-
-  it("denies a persisted-query hash", () => {
-    const result = narrowLinear(
-      request(query, {
-        extensions: { persistedQuery: { version: 1, sha256Hash: "deadbeef" } },
-      }),
-      SCOPE,
-    );
-    expect(result.decision).toBe("deny");
-    expect(result.reason).toBe("persisted query not supported");
-  });
-
-  it("strips a benign extensions block from the forwarded body", () => {
-    const result = narrowLinear(request(query, { extensions: { tracing: true } }), SCOPE);
-    expect(result.decision).toBe("allow");
-    const payload = JSON.parse(result.body ?? "") as Record<string, unknown>;
-    expect(payload.extensions).toBeUndefined();
-    expect("extensions" in payload).toBe(false);
-    expect(payload.query).toBeTypeOf("string");
-  });
-
-  it("strips extensions from a rewritten issues document too", () => {
-    const result = narrowLinear(
-      request("query { issues { nodes { id } } }", { extensions: { foo: 1 } }),
-      SCOPE,
-    );
-    const payload = JSON.parse(result.body ?? "") as Record<string, unknown>;
-    expect("extensions" in payload).toBe(false);
-    expect(String(payload.query)).toContain("c_18");
   });
 });

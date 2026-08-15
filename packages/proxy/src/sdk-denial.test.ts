@@ -116,8 +116,8 @@ describe("the official @linear/sdk on a denied call", () => {
     const apiUrl = await boot();
     const linear = client(apiUrl);
 
-    // A typed SDK method, denied by NARROW: `projects` has no proven relation
-    // to the mission's customer.
+    // A typed SDK method, denied by NARROW: `projects` is not one of the root
+    // fields the connector can narrow to a customer.
     await expect(linear.projects()).rejects.toBeInstanceOf(LinearError);
     try {
       await linear.projects();
@@ -126,7 +126,7 @@ describe("the official @linear/sdk on a denied call", () => {
       // The SDK built one of ITS typed errors and surfaced a message — not an
       // opaque transport failure.
       expect(error.errors?.[0]?.message ?? "").toContain(
-        "no proven relation to mission customer",
+        "root field `projects` is not narrowable",
       );
       // …and what it surfaces carries the fix, not just the complaint.
       expect(error.errors?.[0]?.message ?? "").toContain("customer:acme");
