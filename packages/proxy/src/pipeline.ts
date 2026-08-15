@@ -21,7 +21,7 @@ import { withMissuraCursor, withVendorCursor } from "./cursor-swap";
 import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
-import { GITHUB_NOT_FOUND_MESSAGE, type NarrowFn } from "./narrow";
+import { notFoundMessage, type NarrowFn } from "./narrow";
 import { refill } from "./refill";
 import { traceIdOf } from "./trace";
 import {
@@ -198,14 +198,14 @@ export async function handle(
     if (narrowed.decision === "deny") {
       const reason = narrowed.reason ?? "narrowed out of mission scope";
       emitEvent(deps, ctx, claimsDenial(verdict, reason), reason);
-      const github404 = narrowed.denyShape === "github404";
+      const absence = notFoundMessage(narrowed.denyShape);
       return deny({
-        status: github404 ? 404 : 403,
+        status: absence === undefined ? 403 : 404,
         code: narrowed.denialCode ?? "missura_out_of_mission_scope",
         reason,
-        // The vendor's own absence message, unchanged: a repo outside the
-        // mission and a repo that never existed answer the same bytes.
-        ...(github404 ? { vendorMessage: GITHUB_NOT_FOUND_MESSAGE } : {}),
+        // The vendor's own absence message, unchanged: a target outside the
+        // mission and one that never existed answer the same bytes.
+        ...(absence === undefined ? {} : { vendorMessage: absence }),
         scopeSize: narrowed.missionScopeSize,
         ...mission,
       });

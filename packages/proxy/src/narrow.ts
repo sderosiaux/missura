@@ -31,6 +31,13 @@ export interface NarrowPostCheck {
   injectedSelection: InjectedSelection;
 }
 
+/**
+ * The vendor absences a connector may ask a refusal to imitate. One member per
+ * REST connection, because each vendor spells absence its own way and a client
+ * that cannot parse a refusal never acts on it.
+ */
+export type DenyShape = "github404" | "zendesk404";
+
 export interface NarrowResult {
   decision: "allow" | "deny";
   /** Rewritten request target (query qualifiers forced in, for instance). */
@@ -38,11 +45,11 @@ export interface NarrowResult {
   /** Rewritten request body (a narrowed GraphQL document/variables). */
   body?: string;
   /**
-   * `github404` answers with GitHub's own not-found shape: no enumeration. It
-   * also names the shape a fail-closed FILTER must take on an ALLOW, so a
-   * refusal on the way back looks like the vendor's own "not found" too.
+   * Which vendor's own "not found" a refusal wears: no enumeration. It also
+   * names the shape a fail-closed FILTER must take on an ALLOW, so a refusal on
+   * the way back looks like the vendor's own absence too.
    */
-  denyShape?: "github404";
+  denyShape?: DenyShape;
   reason?: string;
   /**
    * Which §4.8bis remediation the refusal deserves. Absent ⇒ "out of mission
@@ -93,6 +100,43 @@ export const GITHUB_NOT_FOUND_MESSAGE = "Not Found";
  * the vendor is asked, so they carry the block (see `deny.ts`).
  */
 export const GITHUB_NOT_FOUND_BODY = `{"message":"${GITHUB_NOT_FOUND_MESSAGE}"}`;
+
+/**
+ * Zendesk's own not-found, byte for byte, verified against the published
+ * reference (developer.zendesk.com, Users API): `{"error":"RecordNotFound",
+ * "description":"Not found"}`. Same role as the GitHub pair — the bare body is
+ * what a refusal decided AFTER the vendor answered carries, so an object that
+ * exists out of scope and one that never existed are the same bytes.
+ */
+export const ZENDESK_NOT_FOUND_MESSAGE = "Not found";
+export const ZENDESK_NOT_FOUND_BODY = `{"error":"RecordNotFound","description":"${ZENDESK_NOT_FOUND_MESSAGE}"}`;
+
+/**
+ * The vendor's own absence, per shape. Kept as one table so the request side
+ * (which pins the top-level message) and the response side (which returns the
+ * whole body) cannot drift into two different "not found"s for one vendor.
+ */
+const NOT_FOUND: Record<DenyShape, { message: string; body: string }> = {
+  github404: { message: GITHUB_NOT_FOUND_MESSAGE, body: GITHUB_NOT_FOUND_BODY },
+  zendesk404: {
+    message: ZENDESK_NOT_FOUND_MESSAGE,
+    body: ZENDESK_NOT_FOUND_BODY,
+  },
+};
+
+/**
+ * The vendor message a request-side refusal must pin, or `undefined` when the
+ * connector named no shape — which is what keeps a refusal at 403 rather than
+ * borrowing a 404 nobody asked for.
+ */
+export function notFoundMessage(shape: DenyShape | undefined): string | undefined {
+  return shape === undefined ? undefined : NOT_FOUND[shape].message;
+}
+
+/** The body a fail-closed FILTER answers with, in the vendor's own envelope. */
+export function notFoundBody(shape: DenyShape | undefined): string {
+  return shape === undefined ? NOT_FOUND_GRAPHQL_BODY : NOT_FOUND[shape].body;
+}
 
 /**
  * The GraphQL fail-closed body: what an agent gets when the vendor answered and

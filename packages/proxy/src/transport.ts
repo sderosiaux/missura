@@ -57,6 +57,13 @@ const DROPPED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
  * contract). `x-github-request-id` is here so a user can quote one line to
  * vendor support.
  *
+ * Zendesk spells its budget differently — `X-Rate-Limit` and
+ * `X-Rate-Limit-Remaining`, with `Retry-After` on a 429 (developer.zendesk.com,
+ * Rate limits) — so both vendors' spellings are listed rather than one
+ * normalized. `zendesk-ratelimit-inflight-jobs` is deliberately absent: it
+ * reports on the job-queue endpoints the Zendesk catalog never allows, so
+ * relaying it would publish a budget for calls that can never be made.
+ *
  * What stays out is what belongs to the connection or to OUR credential:
  * `set-cookie` would hand the agent vendor session state, and
  * `x-oauth-scopes` / `x-accepted-oauth-scopes` describe the privileges of the
@@ -72,6 +79,8 @@ export const FORWARDED_RESPONSE_HEADERS: readonly string[] = [
   "x-ratelimit-used",
   "x-ratelimit-reset",
   "x-ratelimit-resource",
+  "x-rate-limit",
+  "x-rate-limit-remaining",
   "retry-after",
   "x-github-request-id",
   "link",

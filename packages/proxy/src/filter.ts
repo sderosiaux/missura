@@ -2,8 +2,8 @@ import type { FilterPlan, FilterRule } from "@missura/core";
 import { honestList, isRecord, stripAt } from "./filter-json";
 import { isOwned } from "./filter-owner";
 import {
-  GITHUB_NOT_FOUND_BODY,
   NOT_FOUND_GRAPHQL_BODY,
+  notFoundBody,
   OUT_OF_SCOPE_REASON,
   type NarrowPostCheck,
   type NarrowResult,
@@ -272,22 +272,19 @@ export function planFromPostCheck(check: NarrowPostCheck): FilterPlan {
  * own unit test — it goes when `NarrowPostCheck` goes.
  */
 export function filterTask(narrowed: NarrowResult): FilterTask | undefined {
-  const notFoundBody =
-    narrowed.denyShape === "github404"
-      ? GITHUB_NOT_FOUND_BODY
-      : NOT_FOUND_GRAPHQL_BODY;
+  const vendorNotFound = notFoundBody(narrowed.denyShape);
   if (narrowed.filterPlan !== undefined) {
     return {
       plan: narrowed.filterPlan,
       denyReason: UNFILTERABLE_REASON,
-      notFoundBody,
+      notFoundBody: vendorNotFound,
     };
   }
   if (narrowed.postCheck !== undefined) {
     return {
       plan: planFromPostCheck(narrowed.postCheck),
       denyReason: OUT_OF_SCOPE_REASON,
-      notFoundBody,
+      notFoundBody: vendorNotFound,
     };
   }
   return undefined;
