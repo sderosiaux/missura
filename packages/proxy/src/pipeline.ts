@@ -17,7 +17,7 @@ import {
   UNKNOWN_VERDICT,
   type RequestContext,
 } from "./audit";
-import { missuraCursor, vendorCursor } from "./cursor-swap";
+import { withMissuraCursor, withVendorCursor } from "./cursor-swap";
 import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
@@ -210,38 +210,27 @@ export async function handle(
         ...mission,
       });
     }
-    let outbound: IncomingShape = {
-      ...req,
-      path: narrowed.path ?? req.path,
-      body: narrowed.body ?? req.body,
-    };
-
     // The agent paginates with handles of ours, never with vendor positions.
-    // One that we did not issue to THIS mission is refused here rather than
+    // One we did not issue to THIS mission is refused here rather than
     // forwarded: it would resume the walk somewhere nothing authorized.
-    const pagination = narrowed.filterPlan?.pagination;
-    if (pagination !== undefined) {
-      const swapped = vendorCursor(
-        outbound.body,
-        pagination,
-        claims.id,
-        deps.cursors,
-      );
-      if (swapped === undefined) {
-        emitEvent(
-          deps,
-          ctx,
-          claimsDenial(verdict, CURSOR_REASON),
-          CURSOR_REASON,
-        );
-        return deny({
-          status: 403,
-          code: "missura_out_of_mission_scope",
-          reason: CURSOR_REASON,
-          ...mission,
-        });
-      }
-      outbound = { ...outbound, body: swapped.body };
+    const outbound = withVendorCursor(
+      {
+        ...req,
+        path: narrowed.path ?? req.path,
+        body: narrowed.body ?? req.body,
+      },
+      narrowed.filterPlan,
+      claims.id,
+      deps.cursors,
+    );
+    if (outbound === undefined) {
+      emitEvent(deps, ctx, claimsDenial(verdict, CURSOR_REASON), CURSOR_REASON);
+      return deny({
+        status: 403,
+        code: "missura_out_of_mission_scope",
+        reason: CURSOR_REASON,
+        ...mission,
+      });
     }
 
     // Re-resolved from the rewritten target: NARROW is trusted to shrink a
@@ -285,11 +274,12 @@ export async function handle(
     // Last, and on every response the rule describes: the vendor's position is
     // replaced by a handle. Doing it only on a walked answer would make the
     // cursor's own format say that a walk happened.
-    if (pagination === undefined) return served;
-    return {
-      ...served,
-      body: missuraCursor(served.body, pagination, claims.id, deps.cursors),
-    };
+    return withMissuraCursor(
+      served,
+      narrowed.filterPlan,
+      claims.id,
+      deps.cursors,
+    );
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.
     return deny({

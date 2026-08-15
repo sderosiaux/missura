@@ -1,6 +1,7 @@
-import type { CursorStore, PaginationRule } from "@missura/core";
+import type { CursorStore, FilterPlan, PaginationRule } from "@missura/core";
 import { isRecord } from "./filter-json";
 import { replaceAt, valueAt } from "./refill-page";
+import type { IncomingShape, ResponseShape } from "./transport";
 
 /**
  * The two places a pagination cursor crosses the boundary, and the only two
@@ -33,7 +34,7 @@ function text(body: string | Uint8Array): string {
 }
 
 /** `undefined` ⇒ the agent sent a handle we cannot vouch for: refuse. */
-export function vendorCursor(
+function vendorCursor(
   body: string,
   rule: PaginationRule,
   missionId: string,
@@ -58,7 +59,7 @@ export function vendorCursor(
 }
 
 /** The answer with our handle where the vendor put its position. */
-export function missuraCursor(
+function missuraCursor(
   body: string | Uint8Array,
   rule: PaginationRule,
   missionId: string,
@@ -77,4 +78,33 @@ export function missuraCursor(
   if (typeof cursor !== "string" || cursor.length === 0) return body;
   const sealed = replaceAt(parsed, path, cursors.issue(missionId, cursor));
   return sealed === undefined ? body : JSON.stringify(sealed);
+}
+
+/**
+ * The two stages the pipeline actually calls, so it never has to know the shape
+ * of a pagination rule. A plan without one leaves both a no-op.
+ */
+
+/** `undefined` ⇒ deny: the agent paginated with a handle that is not its own. */
+export function withVendorCursor(
+  req: IncomingShape,
+  plan: FilterPlan | undefined,
+  missionId: string,
+  cursors: CursorStore,
+): IncomingShape | undefined {
+  const rule = plan?.pagination;
+  if (rule === undefined) return req;
+  const swapped = vendorCursor(req.body, rule, missionId, cursors);
+  return swapped === undefined ? undefined : { ...req, body: swapped.body };
+}
+
+export function withMissuraCursor(
+  res: ResponseShape,
+  plan: FilterPlan | undefined,
+  missionId: string,
+  cursors: CursorStore,
+): ResponseShape {
+  const rule = plan?.pagination;
+  if (rule === undefined) return res;
+  return { ...res, body: missuraCursor(res.body, rule, missionId, cursors) };
 }
