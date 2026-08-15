@@ -9,6 +9,7 @@
     "FeedSummarySchedule",
     "FrequencyResolutionType",
     "InitiativeTab",
+    "InitiativeUpdateHealthType",
     "IntegrationService",
     "IssueSharedAccessDisallowedField",
     "JSONObject",
@@ -1139,6 +1140,113 @@
         }
       },
       "excluded": {}
+    },
+    "InitiativeUpdate": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "body": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "commentCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "comments": {
+          "type": "CommentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "diff": {
+          "type": "JSONObject",
+          "nullable": true,
+          "list": false
+        },
+        "diffMarkdown": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "editedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "health": {
+          "type": "InitiativeUpdateHealthType",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "initiative": {
+          "type": "Initiative",
+          "nullable": false,
+          "list": false
+        },
+        "isDiffHidden": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isStale": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "reactionData": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "reactions": {
+          "type": "Reaction",
+          "nullable": false,
+          "list": true
+        },
+        "slugId": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "user": {
+          "type": "User",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "create": "non-query-method",
+        "initiativeId": "synthesized-id-getter",
+        "unarchive": "non-query-method",
+        "update": "non-query-method",
+        "userId": "synthesized-id-getter"
+      }
     },
     "Issue": {
       "fields": {
@@ -2596,6 +2704,114 @@
         }
       },
       "excluded": {}
+    },
+    "ProjectUpdate": {
+      "fields": {
+        "archivedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "body": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "commentCount": {
+          "type": "number",
+          "nullable": false,
+          "list": false
+        },
+        "comments": {
+          "type": "CommentConnection",
+          "nullable": false,
+          "list": false
+        },
+        "createdAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "diff": {
+          "type": "JSONObject",
+          "nullable": true,
+          "list": false
+        },
+        "diffMarkdown": {
+          "type": "string",
+          "nullable": true,
+          "list": false
+        },
+        "editedAt": {
+          "type": "Date",
+          "nullable": true,
+          "list": false
+        },
+        "health": {
+          "type": "ProjectUpdateHealthType",
+          "nullable": false,
+          "list": false
+        },
+        "id": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "isDiffHidden": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "isStale": {
+          "type": "boolean",
+          "nullable": false,
+          "list": false
+        },
+        "project": {
+          "type": "Project",
+          "nullable": false,
+          "list": false
+        },
+        "reactionData": {
+          "type": "JSONObject",
+          "nullable": false,
+          "list": false
+        },
+        "reactions": {
+          "type": "Reaction",
+          "nullable": false,
+          "list": true
+        },
+        "slugId": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "updatedAt": {
+          "type": "Date",
+          "nullable": false,
+          "list": false
+        },
+        "url": {
+          "type": "string",
+          "nullable": false,
+          "list": false
+        },
+        "user": {
+          "type": "User",
+          "nullable": false,
+          "list": false
+        }
+      },
+      "excluded": {
+        "archive": "non-query-method",
+        "create": "non-query-method",
+        "delete": "non-query-method",
+        "projectId": "synthesized-id-getter",
+        "unarchive": "non-query-method",
+        "update": "non-query-method",
+        "userId": "synthesized-id-getter"
+      }
     },
     "Reaction": {
       "fields": {

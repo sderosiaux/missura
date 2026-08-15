@@ -42,6 +42,8 @@ export const METADATA_SAFETY: Readonly<Record<string, string>> = {
     "scalars only — its `organization` getter is a root query with no backing private field and was EXCLUDED",
   Favorite:
     "a user's own bookmark row; `customer` and `issue` are NULLABLE singles the response filter can null out, `children` is a FavoriteConnection (metadata nodes)",
+  InitiativeUpdate:
+    "a status post ON an initiative — how the workspace reports its own delivery, the same reading as `Project` and `ProjectMilestone`, which it reports on: written by a workspace member, addressed to the workspace, owned by no customer; `user` is a metadata single and `reactions` a list of METADATA, `initiative` returns the unclassified `Initiative` (denied by type), and `comments` is a CommentConnection — collection, see the table below",
   IssueLabel:
     "workspace label; relations are metadata singles, but `issues` is an IssueConnection — collection, see the table below",
   IssueRelation:
@@ -55,6 +57,8 @@ export const METADATA_SAFETY: Readonly<Record<string, string>> = {
     "delivery container shared across customers; `convertedFromIssue` is a nullable single, but `comments`, `issues` and `needs` are collections of customer-scoped types — see the table below",
   ProjectMilestone:
     "project-owned marker; `project` and `documentContent` are singles, `issues` is an IssueConnection — collection, see the table below",
+  ProjectUpdate:
+    "a status post ON a project — the project's own health over time, so it inherits `Project`'s classification: the body is the team's report on delivery, not a customer's data, and a project spans customers anyway; `project` and `user` are metadata singles, `reactions` a list of METADATA, and `comments` is a CommentConnection — collection, see the table below",
   Reaction:
     "an emoji row; `comment` and `issue` are NULLABLE singles the response filter can null out, everything else is a metadata single or a scalar",
   Team: "the workspace unit; every relation is a metadata single except `issues`, an IssueConnection — the M2 escape, now visible by type (see the table below)",
@@ -108,9 +112,11 @@ export const METADATA_CUSTOMER_COLLECTIONS: Readonly<
   Record<string, readonly string[]>
 > = {
   Cycle: ["issues", "uncompletedIssuesUponClose"],
+  InitiativeUpdate: ["comments"],
   IssueLabel: ["issues"],
   Project: ["comments", "issues", "needs"],
   ProjectMilestone: ["issues"],
+  ProjectUpdate: ["comments"],
   Team: ["issues"],
   User: ["assignedIssues", "createdIssues", "delegatedIssues"],
   WorkflowState: ["issues"],

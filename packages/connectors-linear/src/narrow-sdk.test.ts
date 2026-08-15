@@ -1,5 +1,5 @@
 import { LinearClient } from "@linear/sdk";
-import { Kind, parse, print, visit, type ASTNode, type SelectionNode } from "graphql";
+import { Kind, parse, type SelectionNode } from "graphql";
 import { describe, expect, it } from "vitest";
 import { narrowLinear, type LinearNarrowResult } from "./narrow";
 import { typeClass } from "./schema/classification";
@@ -39,25 +39,6 @@ async function sdkRequest(call: (client: LinearClient) => unknown): Promise<stri
   const body = bodies[0];
   if (body === undefined) throw new Error("the SDK sent no request");
   return body;
-}
-
-/**
- * The two fields that still block the criterion, removed from the REAL document
- * so the rest of it can be asserted. `Reaction.initiativeUpdate` and
- * `Reaction.projectUpdate` return `InitiativeUpdate` and `ProjectUpdate`, which
- * nobody has classified — deny-by-default applies to the TYPE, so they refuse
- * the whole document. Classifying them is a product call (are a project's status
- * posts customer data?) and it is deliberately NOT made here.
- */
-const UNCLASSIFIED_FIELDS: readonly string[] = ["initiativeUpdate", "projectUpdate"];
-
-function withoutUnclassified(body: string): string {
-  const payload = JSON.parse(body) as Record<string, unknown>;
-  const pruned = visit(parse(String(payload.query)), {
-    Field: (node: { name: { value: string } }) =>
-      UNCLASSIFIED_FIELDS.includes(node.name.value) ? null : undefined,
-  } as never) as ASTNode;
-  return JSON.stringify({ ...payload, query: print(pruned) });
 }
 
 function forwardedQuery(result: LinearNarrowResult, sent: string): string {
@@ -137,7 +118,7 @@ describe("the @linear/sdk typed methods under a customer-scoped mission", () => 
   it.each(METHODS)(
     "$name is ALLOWED with a plan covering every customer-scoped path it selects",
     async ({ call, root, rootType }: Method) => {
-      const sent = withoutUnclassified(await sdkRequest(call));
+      const sent = await sdkRequest(call);
       const result = narrowLinear(sent, SCOPE);
 
       expect(result.reason).toBeUndefined();
@@ -163,7 +144,7 @@ describe("the @linear/sdk typed methods under a customer-scoped mission", () => 
   it.each(METHODS)(
     "$name carries the ownership route on every object the plan guards",
     async ({ call }: Method) => {
-      const sent = withoutUnclassified(await sdkRequest(call));
+      const sent = await sdkRequest(call);
       const result = narrowLinear(sent, SCOPE);
 
       for (const rule of result.filterPlan?.rules ?? []) {
@@ -194,21 +175,36 @@ describe("the @linear/sdk typed methods under a customer-scoped mission", () => 
   });
 
   /**
-   * The remaining blocker, pinned so it cannot be forgotten and cannot grow.
-   * When someone classifies these two types, this test fails — and the two
-   * above should then run against the untouched SDK document.
+   * The criterion itself, on the bytes the SDK sends and nothing else: no
+   * pruning, no hand-copied document, no field removed to make it fit.
+   * `Reaction.initiativeUpdate` and `Reaction.projectUpdate` were the last two
+   * blockers — a status post on a project or an initiative is workspace
+   * furniture, so both types are metadata (decided 2026-08-15).
    */
-  it("is blocked by exactly two unclassified types, and nothing else", async () => {
-    const blockers: string[] = [];
-    for (const method of METHODS) {
-      const result = narrowLinear(await sdkRequest(method.call), SCOPE);
-      expect(result.decision).toBe("deny");
-      blockers.push(result.reason ?? "");
-    }
+  it.each(METHODS)(
+    "$name is allowed exactly as the SDK generates it — nothing pruned first",
+    async ({ call }: Method) => {
+      const result = narrowLinear(await sdkRequest(call), SCOPE);
 
-    for (const reason of blockers) {
-      expect(reason).toMatch(/`Reaction\.(initiativeUpdate|projectUpdate)`/);
-      expect(reason).toContain("a type the connector has not classified");
-    }
-  });
+      expect(result.reason).toBeUndefined();
+      expect(result.decision).toBe("allow");
+    },
+  );
+
+  /**
+   * What keeps that decision safe: the SDK only ever selects `{ id }` on a
+   * status post, and the one route from a status post back to customer data —
+   * its `comments` — is a collection of a customer-scoped type under metadata,
+   * denied by the same rule that closes `team { issues { … } }`.
+   */
+  it.each(["initiativeUpdate", "projectUpdate"])(
+    "still refuses `Reaction.%s { comments { … } }` — a status post's comments are customer data",
+    (field: string) => {
+      const query = `query { issue(id:"i1") { id reactions { ${field} { comments { nodes { id } } } } } }`;
+      const result = narrowLinear(JSON.stringify({ query }), SCOPE);
+
+      expect(result.decision).toBe("deny");
+      expect(result.reason ?? "").toContain(".comments` is a collection of customer-scoped");
+    },
+  );
 });
