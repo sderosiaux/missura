@@ -1,10 +1,10 @@
-import type { PaginationRule } from "@missura/core";
+import type { PaginationCursor, PaginationRule } from "@missura/core";
 import { isRecord } from "./filter-json";
 import type { IncomingShape } from "./transport";
 
 /**
  * The shape half of the REFILL: reading a page of a collection out of a
- * response, and writing a cursor into the next request. No policy here — these
+ * response, and asking the vendor for the one after it. No policy here — these
  * decide shape, never allow or deny. Everything rebuilds instead of mutating,
  * for the same reason the filter does: the parsed body is shared.
  *
@@ -12,15 +12,36 @@ import type { IncomingShape } from "./transport";
  * caller turns that into "return what we already have", never into a guess.
  */
 
+/** How to ask the vendor for the page after the one we just read. */
+export type NextPage =
+  | { source: "body-path"; cursor: string }
+  | { source: "query-page"; page: number };
+
+/**
+ * Where the response being read came from — the two things the body itself can
+ * no longer say once the FILTER has been over it.
+ */
+export interface PageOrigin {
+  /** Objects the filter removed from this very response. */
+  removed: number;
+  /**
+   * The position this response was fetched at, or absent for the agent's own
+   * first request (the rule already names that one).
+   */
+  at: NextPage | undefined;
+}
+
 /** One vendor page, once we could prove it has the shape the rule describes. */
 export interface VendorPage {
   root: Record<string, unknown>;
   connection: Record<string, unknown>;
   nodes: readonly unknown[];
+  /** Relay's page info as the vendor sent it; empty under `query-page`. */
   pageInfo: Record<string, unknown>;
+  /** The vendor says there may be objects after this page. */
   hasNextPage: boolean;
-  /** Absent when the vendor gave no usable cursor: the walk stops there. */
-  endCursor: string | undefined;
+  /** Absent when there is no usable way to ask for more: the walk stops. */
+  next: NextPage | undefined;
 }
 
 function valueAt(root: unknown, path: readonly string[]): unknown {
@@ -39,8 +60,8 @@ function replaceAt(
   value: unknown,
 ): Record<string, unknown> | undefined {
   const [head, ...rest] = path;
-  // An empty path would mean "replace the whole container", which no rule can
-  // legitimately ask for here — it fails closed instead of rewriting the body.
+  // An empty path would mean "replace the whole container", which the callers
+  // handle themselves — reaching it here is a rule that names no field.
   if (head === undefined || !isRecord(root)) return undefined;
   if (!Object.hasOwn(root, head)) return undefined;
   if (rest.length === 0) return { ...root, [head]: value };
@@ -54,16 +75,65 @@ function text(body: string | Uint8Array): string {
 }
 
 /**
+ * The Relay half: `hasNextPage` / `endCursor` inside the page info object the
+ * rule points at. A vendor that spells them otherwise is one whose connector
+ * must not emit a `pagination` rule at all — the answer here is a short page,
+ * never an invented one.
+ */
+function relayPage(
+  connection: Record<string, unknown>,
+  cursor: Extract<PaginationCursor, { source: "body-path" }>,
+): Pick<VendorPage, "pageInfo" | "hasNextPage" | "next"> | undefined {
+  const pageInfo = valueAt(connection, cursor.pageInfo);
+  if (!isRecord(pageInfo)) return undefined;
+  const hasNextPage = pageInfo.hasNextPage;
+  if (typeof hasNextPage !== "boolean") return undefined;
+  const endCursor = pageInfo.endCursor;
+  const usable = typeof endCursor === "string" && endCursor.length > 0;
+  return {
+    pageInfo,
+    hasNextPage,
+    next: usable ? { source: "body-path", cursor: endCursor } : undefined,
+  };
+}
+
+/**
+ * The page-number half. REST publishes no page info, so "is there more" is read
+ * off the SIZE of the vendor page — and the size the vendor sent is not the one
+ * left in the body, because the filter already removed objects from it. Hence
+ * `removed`: `nodes.length + removed` is what the vendor actually answered, and
+ * a page shorter than `pageSize` is the last one.
+ *
+ * Without that count a short page would be unreadable — "the vendor ran out"
+ * and "we hid all of it" look identical from the outside, which is the whole
+ * point of the filter and exactly why the walk cannot infer it from the body.
+ */
+function numberedPage(
+  nodes: readonly unknown[],
+  origin: PageOrigin,
+  cursor: Extract<PaginationCursor, { source: "query-page" }>,
+): Pick<VendorPage, "pageInfo" | "hasNextPage" | "next"> {
+  const served = nodes.length + origin.removed;
+  const here =
+    origin.at?.source === "query-page" ? origin.at.page : cursor.page;
+  return {
+    pageInfo: {},
+    hasNextPage: served >= cursor.pageSize,
+    next: { source: "query-page", page: here + 1 },
+  };
+}
+
+/**
  * A page, or `undefined` if the body is not the collection the rule promised.
  *
- * `hasNextPage` / `endCursor` are the Relay connection spelling, which is what
- * `PaginationRule.pageInfo` points at. A vendor that spells them otherwise is
- * one whose connector must not emit a `pagination` rule at all: the answer here
- * is a short page, never an invented one.
+ * `origin` is ignored under `body-path`, where the vendor states `hasNextPage`
+ * itself and filtering cannot change it — see `numberedPage` for why the other
+ * style cannot do without it.
  */
 export function readPage(
   body: string | Uint8Array,
   rule: PaginationRule,
+  origin: PageOrigin,
 ): VendorPage | undefined {
   let root: unknown;
   try {
@@ -76,22 +146,12 @@ export function readPage(
   if (!isRecord(connection)) return undefined;
   const nodes = connection[rule.nodes];
   if (!Array.isArray(nodes)) return undefined;
-  const pageInfo = valueAt(connection, rule.pageInfo);
-  if (!isRecord(pageInfo)) return undefined;
-  const hasNextPage = pageInfo.hasNextPage;
-  if (typeof hasNextPage !== "boolean") return undefined;
-  const endCursor = pageInfo.endCursor;
-  return {
-    root,
-    connection,
-    nodes,
-    pageInfo,
-    hasNextPage,
-    endCursor:
-      typeof endCursor === "string" && endCursor.length > 0
-        ? endCursor
-        : undefined,
-  };
+  const paging =
+    rule.cursor.source === "body-path"
+      ? relayPage(connection, rule.cursor)
+      : numberedPage(nodes, origin, rule.cursor);
+  if (paging === undefined) return undefined;
+  return { root, connection, nodes, ...paging };
 }
 
 function writeLeaf(
@@ -111,15 +171,10 @@ function writeLeaf(
   return { ...root, [head]: child };
 }
 
-/**
- * The same request, one page further: the narrowed body with the vendor's
- * cursor written where the connector said its document reads it. Anything else
- * about the request — path, headers, method — is untouched, so the extra call
- * is the agent's own query and gets the agent's own narrowing.
- */
-export function withCursor(
+/** The narrowed request body with the vendor's cursor written into it. */
+function bodyWithCursor(
   req: IncomingShape,
-  rule: PaginationRule,
+  path: readonly string[],
   cursor: string,
 ): IncomingShape | undefined {
   let parsed: unknown;
@@ -128,14 +183,54 @@ export function withCursor(
   } catch {
     return undefined;
   }
-  const next = writeLeaf(parsed, rule.cursorPath, cursor);
+  const next = writeLeaf(parsed, path, cursor);
   if (next === undefined) return undefined;
   return { ...req, body: JSON.stringify(next) };
 }
 
 /**
- * The merged answer: the first page's body, with our nodes, our page info and
- * counts that describe what WE return.
+ * The same request target with one query parameter set to the next page. The
+ * base is a placeholder: `req.path` is already the narrowed, origin-checked
+ * target, and only its query string is rewritten here.
+ */
+function targetWithPage(
+  req: IncomingShape,
+  param: string,
+  page: number,
+): IncomingShape | undefined {
+  let url: URL;
+  try {
+    url = new URL(req.path, "https://vendor.invalid");
+  } catch {
+    return undefined;
+  }
+  url.searchParams.set(param, String(page));
+  return { ...req, path: `${url.pathname}${url.search}` };
+}
+
+/**
+ * The same request, one page further: the narrowed request with the vendor's
+ * own idea of "next" written where the connector said it goes. Anything else
+ * about it — path, headers, method, the rest of the query — is untouched, so
+ * the extra call is the agent's own request and gets the agent's own narrowing.
+ */
+export function withNext(
+  req: IncomingShape,
+  rule: PaginationRule,
+  next: NextPage,
+): IncomingShape | undefined {
+  if (rule.cursor.source === "body-path" && next.source === "body-path") {
+    return bodyWithCursor(req, rule.cursor.cursorPath, next.cursor);
+  }
+  if (rule.cursor.source === "query-page" && next.source === "query-page") {
+    return targetWithPage(req, rule.cursor.param, next.page);
+  }
+  return undefined;
+}
+
+/**
+ * The merged answer: the first page's body, with our nodes and — under Relay —
+ * our page info.
  *
  * It is built from the FIRST page on purpose — key order, and every field of
  * the collection we did not touch, come from the page the agent would have got
@@ -152,8 +247,12 @@ export function mergedBody(
   pageInfo: Record<string, unknown>,
 ): string | undefined {
   const connection = { ...first.connection, [rule.nodes]: nodes };
-  const merged = replaceAt(connection, rule.pageInfo, pageInfo);
+  const merged =
+    rule.cursor.source === "body-path"
+      ? replaceAt(connection, rule.cursor.pageInfo, pageInfo)
+      : connection;
   if (merged === undefined) return undefined;
+  if (rule.path.length === 0) return JSON.stringify(merged);
   const root = replaceAt(first.root, rule.path, merged);
   return root === undefined ? undefined : JSON.stringify(root);
 }

@@ -76,9 +76,12 @@ export function plan(requested: number): FilterPlan {
     pagination: {
       path: ["data", "issues"],
       nodes: "nodes",
-      pageInfo: ["pageInfo"],
       requested,
-      cursorPath: ["variables", "after"],
+      cursor: {
+        source: "body-path",
+        pageInfo: ["pageInfo"],
+        cursorPath: ["variables", "after"],
+      },
     },
   };
 }

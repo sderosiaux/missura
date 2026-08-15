@@ -4,7 +4,9 @@ import { narrowGithub } from "./narrow";
 const SCOPE = { githubRepos: ["acme-corp/product", "acme-corp/infra"] };
 
 function q(path: string | undefined): string {
-  return new URL(path ?? "", "https://vendor.invalid").searchParams.get("q") ?? "";
+  return (
+    new URL(path ?? "", "https://vendor.invalid").searchParams.get("q") ?? ""
+  );
 }
 
 function search(query: string, scope = SCOPE): ReturnType<typeof narrowGithub> {
@@ -110,6 +112,66 @@ describe("narrowGithub — the /search/issues filter plan", () => {
     expect(result.decision).toBe("deny");
     expect(result.denyShape).toBe("github404");
   });
+});
+
+/**
+ * REST search paginates with `page`/`per_page` in the QUERY string, not with a
+ * Relay cursor in a request body. Without a rule the proxy could act on, a
+ * filtered search answered short — and a short page at index N says "the object
+ * at index N is not yours", which walks a foreign repo's interleaving one index
+ * at a time.
+ */
+describe("narrowGithub — /search/issues pagination", () => {
+  it("describes the page the agent asked for", () => {
+    const rule = narrowGithub("/search/issues?q=bug&per_page=25&page=4", SCOPE)
+      .filterPlan?.pagination;
+
+    expect(rule?.path).toEqual([]);
+    expect(rule?.nodes).toBe("items");
+    expect(rule?.requested).toBe(25);
+    expect(rule?.cursor).toEqual({
+      source: "query-page",
+      param: "page",
+      page: 4,
+      pageSize: 25,
+    });
+  });
+
+  it("falls back to GitHub's own defaults", () => {
+    const rule = search("bug").filterPlan?.pagination;
+
+    expect(rule?.requested).toBe(30);
+    expect(rule?.cursor).toEqual({
+      source: "query-page",
+      param: "page",
+      page: 1,
+      pageSize: 30,
+    });
+  });
+
+  it("clamps to the largest page GitHub will actually send", () => {
+    const rule = narrowGithub("/search/issues?q=bug&per_page=500", SCOPE)
+      .filterPlan?.pagination;
+
+    expect(rule?.requested).toBe(100);
+  });
+
+  it("rewrites the spelling the agent used, never a second one", () => {
+    const rule = narrowGithub("/search/issues?q=bug&Page=2", SCOPE).filterPlan
+      ?.pagination;
+
+    expect(rule?.cursor).toMatchObject({ param: "Page", page: 2 });
+  });
+
+  it.each(["page=0", "page=x", "page=2&page=3", "per_page=-1"])(
+    "emits no rule rather than walk from a page it cannot name: %s",
+    (params) => {
+      const result = narrowGithub(`/search/issues?q=bug&${params}`, SCOPE);
+
+      expect(result.decision).toBe("allow");
+      expect(result.filterPlan?.pagination).toBeUndefined();
+    },
+  );
 });
 
 describe("narrowGithub — /search/issues parameter keys", () => {

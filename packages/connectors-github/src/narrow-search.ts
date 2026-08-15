@@ -1,6 +1,10 @@
-import type { FilterPlan } from "@missura/core";
+import type { FilterPlan, PaginationRule } from "@missura/core";
 import { isVendorName, type CanonicalRequest } from "./narrow-path";
-import { deny, REPO_NOT_IN_MISSION, type GithubNarrowResult } from "./narrow-result";
+import {
+  deny,
+  REPO_NOT_IN_MISSION,
+  type GithubNarrowResult,
+} from "./narrow-result";
 
 const AMBIGUOUS_Q = "the search query parameter was given more than once";
 const UNNAMEABLE_REPO = "mission repo outside GitHub's own naming charset";
@@ -66,7 +70,10 @@ function repositoryUrls(
  * Nothing is injected and nothing is stripped: the discriminator is a field
  * GitHub sends on every item, so the ownership proof costs the agent nothing.
  */
-function searchFilterPlan(repositoryOwners: readonly string[]): FilterPlan {
+function searchFilterPlan(
+  repositoryOwners: readonly string[],
+  pagination: PaginationRule | undefined,
+): FilterPlan {
   return {
     rules: [
       {
@@ -80,6 +87,69 @@ function searchFilterPlan(repositoryOwners: readonly string[]): FilterPlan {
       },
     ],
     strip: [],
+    ...(pagination === undefined ? {} : { pagination }),
+  };
+}
+
+/** GitHub's own defaults and ceiling for a search page. */
+const DEFAULT_PER_PAGE = 30;
+const MAX_PER_PAGE = 100;
+
+interface PageParam {
+  /** The spelling the agent used, so a rewrite replaces it instead of adding one. */
+  name: string;
+  value: number;
+}
+
+/**
+ * One positive-integer query parameter, matched case-insensitively like `q`.
+ *
+ * `undefined` — not a number, not positive, or given twice — means we cannot
+ * say which page the agent asked for, so no pagination rule is emitted and the
+ * agent gets a short page. That is the safe half of the tradeoff: a refill
+ * driven by a page number we guessed wrong would re-issue the agent's query
+ * against a position it never asked about.
+ */
+function pageParam(
+  params: URLSearchParams,
+  name: string,
+  fallback: number,
+): PageParam | undefined {
+  const found = [...params].filter(([key]) => key.toLowerCase() === name);
+  if (found.length === 0) return { name, value: fallback };
+  const only = found.length === 1 ? found[0] : undefined;
+  if (only === undefined) return undefined;
+  if (!/^[1-9][0-9]*$/.test(only[1])) return undefined;
+  return { name: only[0], value: Number(only[1]) };
+}
+
+/**
+ * How the proxy walks `/search/issues` forward: REST pages, not Relay cursors.
+ *
+ * Without it a filtered search answered short, and a short page is a per-index
+ * oracle — `per_page=1&page=N&sort=created&order=asc` reads back the exact
+ * interleaving of a foreign repo's issues against the mission's own, hence
+ * their count and their approximate dates.
+ *
+ * `per_page` is clamped to GitHub's own ceiling because that is the largest
+ * page the vendor will send: reading "is there more" off a page size the vendor
+ * would never honour would end the walk on its first call.
+ */
+function searchPagination(params: URLSearchParams): PaginationRule | undefined {
+  const page = pageParam(params, "page", 1);
+  const perPage = pageParam(params, "per_page", DEFAULT_PER_PAGE);
+  if (page === undefined || perPage === undefined) return undefined;
+  const pageSize = Math.min(perPage.value, MAX_PER_PAGE);
+  return {
+    path: [],
+    nodes: "items",
+    requested: pageSize,
+    cursor: {
+      source: "query-page",
+      param: page.name,
+      page: page.value,
+      pageSize,
+    },
   };
 }
 
@@ -122,13 +192,14 @@ export function narrowSearchIssues(
   const queries = [...params].filter(([name]) => name.toLowerCase() === "q");
   if (queries.length > 1) return deny(AMBIGUOUS_Q);
 
+  const pagination = searchPagination(params);
   const allow = (path: string): GithubNarrowResult => ({
     decision: "allow",
     path,
     // Names the shape a fail-closed FILTER must take on the way back: GitHub's
     // own not-found, so a refusal is indistinguishable from absence.
     denyShape: "github404",
-    filterPlan: searchFilterPlan(repositoryOwners),
+    filterPlan: searchFilterPlan(repositoryOwners, pagination),
   });
 
   const raw = queries[0]?.[1] ?? "";

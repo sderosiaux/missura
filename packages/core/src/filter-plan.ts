@@ -100,35 +100,81 @@ export interface FilterRule {
 }
 
 /**
+ * How the vendor is asked for the page after this one — the only part of
+ * pagination that differs between the two API styles v0 speaks, expressed as a
+ * choice the connector makes rather than a special case the proxy discovers.
+ *
+ * A connector picks the variant its vendor actually implements. There is no
+ * third answer and no fallback: a vendor whose pagination is neither of these
+ * gets no `PaginationRule` at all, which costs short pages and nothing else.
+ */
+export type PaginationCursor =
+  /**
+   * Relay connections (Linear GraphQL): an opaque cursor read out of the
+   * response's page info and written back into the request BODY.
+   */
+  | {
+      source: "body-path";
+      /**
+       * Path to the page info object, relative to the connection:
+       * `["pageInfo"]`. It carries `hasNextPage` and `endCursor`, Relay's own
+       * spelling — a vendor that spells them otherwise must emit no rule.
+       */
+      pageInfo: readonly string[];
+      /**
+       * Path INSIDE the JSON request body where the next cursor is written:
+       * `["variables","after"]`. Every parent must already exist — the proxy
+       * writes a value, it never invents a request shape.
+       */
+      cursorPath: readonly string[];
+    }
+  /**
+   * Page numbers in the request QUERY string (GitHub REST search). There is no
+   * cursor and no `hasNextPage`: the next request is the same one with the page
+   * number raised by one, and the collection is finished when a vendor page
+   * comes back holding fewer objects than it could.
+   */
+  | {
+      source: "query-page";
+      /** Query parameter carrying the page number: `"page"`. */
+      param: string;
+      /** The page number the agent's own request asked for (1-based). */
+      page: number;
+      /**
+       * Objects one vendor page holds — the agent's `per_page`. A vendor page
+       * that came back shorter than this is the last one, which is the only
+       * "there is no more" this style of pagination offers.
+       */
+      pageSize: number;
+    };
+
+/**
  * Where the paginated collection is, and how to ask the vendor for its next
  * page — the minimum the proxy needs to REFILL a page filtering made short,
  * without learning the vendor's query language.
  *
  * A connector emits this only when it can guarantee the re-issued request means
- * "the same query, one page further": the document it narrowed must bind the
- * variable at `cursorPath` to the collection's `after:` argument. At most one
- * per plan — two collections in one document cannot share a single cursor, and
- * a connector that sees two must emit none rather than refill the wrong one.
+ * "the same query, one page further". At most one per plan — two collections in
+ * one document cannot share a single cursor, and a connector that sees two must
+ * emit none rather than refill the wrong one.
  */
 export interface PaginationRule {
-  /** Path from the body root to the connection object: `["data","issues"]`. */
+  /**
+   * Path from the body root to the connection object: `["data","issues"]`.
+   * EMPTY when the collection object is the body root itself, which is how
+   * REST answers a search (`{total_count, items}`).
+   */
   path: readonly string[];
-  /** Key of the node list inside it: `"nodes"`. */
+  /** Key of the node list inside it: `"nodes"`, `"items"`. */
   nodes: string;
-  /** Path to the page info object, relative to the connection: `["pageInfo"]`. */
-  pageInfo: readonly string[];
   /**
    * How many objects the agent asked for. The proxy walks until it has this
    * many authorized ones, and never returns more — an answer longer than the
    * page the agent requested would itself say that pages were walked.
    */
   requested: number;
-  /**
-   * Path INSIDE the JSON request body where the next cursor is written:
-   * `["variables","after"]`. Every parent must already exist — the proxy
-   * writes a value, it never invents a request shape.
-   */
-  cursorPath: readonly string[];
+  /** How to ask for the page after this one. */
+  cursor: PaginationCursor;
 }
 
 /**

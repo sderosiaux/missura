@@ -1,13 +1,13 @@
 import type { CatalogDecision, MissionClaims } from "@missura/core";
 import type { RequestContext } from "./audit";
 import type { FilterTask } from "./filter";
-import { forward, type ForwardDeps } from "./forward";
 import {
-  mergedBody,
-  readPage,
-  withCursor,
-  type VendorPage,
-} from "./refill-page";
+  forward,
+  upstreamTarget,
+  type ForwardDeps,
+  type ForwardOutcome,
+} from "./forward";
+import { mergedBody, readPage, withNext, type VendorPage } from "./refill-page";
 import type { IncomingShape, ResponseShape } from "./transport";
 
 /**
@@ -52,7 +52,12 @@ export const REFILL_BUDGET_MS = 10_000;
 
 /** Everything an extra call needs, exactly as the first one had it. */
 export interface RefillCall {
-  target: URL;
+  /**
+   * The narrowed request, exactly as the first call carried it. The upstream
+   * TARGET is re-resolved from it on every extra call rather than carried
+   * alongside: a page-numbered walk rewrites the query string, so a target
+   * fixed at the first call would re-ask for the very page we already have.
+   */
   req: IncomingShape;
   verdict: CatalogDecision;
   ctx: RequestContext;
@@ -98,18 +103,22 @@ async function walkPages(
   };
   if (rule === undefined) return walk;
   for (let calls = 0; walk.nodes.length < requested; calls += 1) {
-    const cursor = walk.last.endCursor;
+    const after = walk.last.next;
     if (
       calls >= MAX_REFILL_CALLS ||
       elapsed(deps, call.ctx) >= REFILL_BUDGET_MS
     )
       return { ...walk, stopped: true };
-    if (cursor === undefined) return { ...walk, stopped: true };
-    const next = withCursor(call.req, rule, cursor);
+    if (after === undefined) return { ...walk, stopped: true };
+    const next = withNext(call.req, rule, after);
     if (next === undefined) return { ...walk, stopped: true };
+    // Re-resolved from the rewritten target, exactly as the pipeline does after
+    // NARROW: the walk shrinks or advances a request, never moves its origin.
+    const target = upstreamTarget(deps, next.path);
+    if (target === undefined) return { ...walk, stopped: true };
     const res = await forward(
       deps,
-      call.target,
+      target,
       next,
       call.verdict,
       call.ctx,
@@ -119,7 +128,7 @@ async function walkPages(
     // A refused or failed extra call is not a page: the filter may have failed
     // closed on it, and its body is then the vendor's own not-found.
     if (res.status !== status) return { ...walk, stopped: true };
-    const page = readPage(res.body, rule);
+    const page = readPage(res.body, rule, { removed: res.removed, at: after });
     if (page === undefined) return { ...walk, stopped: true };
     walk.nodes.push(...page.nodes);
     walk.last = page;
@@ -144,12 +153,11 @@ function mergedPageInfo(
 ): Record<string, unknown> {
   const hasNextPage =
     walk.stopped || !walk.exhausted || kept < walk.nodes.length;
+  const last = walk.last.next;
   return {
     ...first.pageInfo,
     hasNextPage,
-    ...(walk.last.endCursor === undefined
-      ? {}
-      : { endCursor: walk.last.endCursor }),
+    ...(last?.source === "body-path" ? { endCursor: last.cursor } : {}),
   };
 }
 
@@ -172,12 +180,15 @@ function mergedPageInfo(
 export async function refill(
   deps: ForwardDeps,
   call: RefillCall,
-  first: ResponseShape,
+  first: ForwardOutcome,
 ): Promise<ResponseShape> {
   const filter = call.filter;
   const rule = filter?.plan.pagination;
   if (filter === undefined || rule === undefined) return first;
-  const page = readPage(first.body, rule);
+  const page = readPage(first.body, rule, {
+    removed: first.removed,
+    at: undefined,
+  });
   if (page === undefined) return first;
   if (page.nodes.length >= rule.requested || !page.hasNextPage) return first;
 

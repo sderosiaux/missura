@@ -242,7 +242,7 @@ export async function handle(
     );
     return await refill(
       deps,
-      { target, req: outbound, verdict, ctx, filter, claims },
+      { req: outbound, verdict, ctx, filter, claims },
       answer,
     );
   } catch {

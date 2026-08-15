@@ -18,6 +18,19 @@ import {
   type ResponseShape,
 } from "./transport";
 
+/**
+ * One vendor round-trip, plus the one fact about it the REFILL walk needs.
+ *
+ * `removed` is how many objects the FILTER took out of THIS response. It exists
+ * because page-numbered pagination has no `hasNextPage`: the vendor page's real
+ * length is `nodes + removed`, and without it "the vendor ran out" and "we hid
+ * all of it" are the same short page. It is a fact about the decision, never
+ * part of the answer — nothing serializes it.
+ */
+export interface ForwardOutcome extends ResponseShape {
+  removed: number;
+}
+
 /** What talking to the vendor needs: the credential, the origin, a fetch. */
 export interface ForwardDeps extends AuditDeps {
   /** The vendor credential, read from the vault once at boot — never logged. */
@@ -101,21 +114,23 @@ export async function forward(
   ctx: RequestContext,
   filter?: FilterTask,
   claims?: MissionClaims,
-): Promise<ResponseShape> {
+): Promise<ForwardOutcome> {
   const deny = (
     status: number,
     code: "missura_upstream_error" | "missura_response_too_large",
     reason: string,
     headers?: Record<string, string>,
-  ): ResponseShape =>
-    denialResponse(deps.provider, {
+  ): ForwardOutcome => ({
+    ...denialResponse(deps.provider, {
       status,
       code,
       reason,
       claims,
       now: deps.now?.(),
       headers,
-    });
+    }),
+    removed: 0,
+  });
   let response: Response;
   try {
     // Origin + the normalized target only: never the raw client path, and
@@ -176,15 +191,21 @@ export async function forward(
         status: response.status,
         headers: refusalHeaders(headers),
         body: filtered.body,
+        removed: 0,
       };
     }
     // How many objects the mission was not allowed to see is part of the
     // record: an ALLOW that removed objects is not the same event as one that
     // had nothing to remove.
     emitEvent(deps, ctx, verdict, undefined, filtered.objectsRemoved);
-    return { status: response.status, headers, body: filtered.body };
+    return {
+      status: response.status,
+      headers,
+      body: filtered.body,
+      removed: filtered.objectsRemoved,
+    };
   }
 
   emitEvent(deps, ctx, verdict);
-  return { status: response.status, headers, body: payload };
+  return { status: response.status, headers, body: payload, removed: 0 };
 }
