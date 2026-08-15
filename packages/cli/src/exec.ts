@@ -28,6 +28,12 @@ export interface ExecOptions {
  * from the child's environment rather than merely not added: the whole point
  * of a mission is that the agent cannot reach the vendor without the proxy,
  * and an inherited key would silently give it a second, unaudited path.
+ *
+ * What this is not: a sandbox. The child runs as the same user, so it can read
+ * ~/.missura — operator.key mints it a mission of its own, vault.key plus
+ * vault.json decrypt the vendor credentials outright. Stripping the
+ * environment removes the accident, not the capability; containment is a
+ * container or a separate user (SPEC §3).
  */
 const STRIPPED: ReadonlySet<string> = new Set(["LINEAR_API_KEY", "GITHUB_TOKEN"]);
 
