@@ -29,6 +29,7 @@ function decodePayload(token: string): Record<string, unknown> {
 const MISSION = {
   id: "msn_482",
   purpose: "support case 482",
+  actor: "sam@acme.io",
   scope: { customer: "acme", repos: ["acme-corp/product"] },
   connections: ["linear", "github"],
   allow: ["search", "read"] as const,
@@ -40,6 +41,7 @@ describe("mission token", () => {
     const claims = verifyMissionToken(token, { key: KEY });
     expect(claims.id).toBe("msn_482");
     expect(claims.purpose).toBe("support case 482");
+    expect(claims.actor).toBe("sam@acme.io");
     expect(claims.scope.customer).toBe("acme");
     expect(claims.allow).toEqual(["search", "read"]);
     expect(claims.jti).toMatch(/^[0-9a-f-]{36}$/);
@@ -132,6 +134,20 @@ describe("mission token", () => {
     ).toThrow(/expired/i);
   });
 
+  it("rejects a validly signed token with no actor claim", () => {
+    const noActor: Record<string, unknown> = { ...MISSION };
+    delete noActor.actor;
+    const token = forge({
+      ...noActor,
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
+      /invalid claims: actor/i,
+    );
+  });
+
   it("rejects non-string elements in connections", () => {
     const token = forge({
       ...MISSION,
@@ -180,6 +196,7 @@ describe("dev token", () => {
     );
     expect(claims.id).toBe("msn_dev");
     expect(claims.purpose).toBe("m1 dev token — scope all");
+    expect(claims.actor).toBe("dev@local");
   });
 
   it("scopes all: empty scope, both connections, read + search", () => {

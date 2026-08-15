@@ -15,6 +15,7 @@ export const VENDOR_HEADER = `Bearer ${VENDOR_SECRET}`;
 export const CLAIMS: MissionClaims = {
   id: "msn_dev",
   purpose: "test",
+  actor: "tester@local",
   scope: {},
   connections: ["linear", "github"],
   allow: ["read"],

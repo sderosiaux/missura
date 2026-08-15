@@ -239,6 +239,7 @@ describe("proxy server — github listener", () => {
       {
         id: "msn_linear_only",
         purpose: "test",
+        actor: "tester@local",
         scope: {},
         connections: ["linear"],
         allow: ["read", "search"],

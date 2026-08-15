@@ -8,6 +8,8 @@ export interface MissionScope {
 export interface MissionInput {
   id: string;
   purpose: string;
+  /** Human (or service) accountable for the mission — provenance, never authz. */
+  actor: string;
   scope: MissionScope;
   connections: string[];
   allow: readonly string[];
@@ -66,6 +68,7 @@ function validateClaims(value: unknown): MissionClaims {
   const checks: readonly (readonly [string, boolean])[] = [
     ["id", typeof c.id === "string"],
     ["purpose", typeof c.purpose === "string"],
+    ["actor", typeof c.actor === "string"],
     ["jti", typeof c.jti === "string"],
     ["iat", isFiniteNumber(c.iat)],
     ["exp", isFiniteNumber(c.exp)],
@@ -153,6 +156,7 @@ export function signDevToken(opts: {
     {
       id: "msn_dev",
       purpose: "m1 dev token — scope all",
+      actor: "dev@local",
       scope: {},
       connections: ["linear", "github"],
       allow: ["read", "search"],
