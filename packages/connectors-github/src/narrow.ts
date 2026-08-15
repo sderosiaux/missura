@@ -1,10 +1,5 @@
 import { decideGithub } from "./catalog";
-import {
-  canonicalize,
-  DUMMY_BASE,
-  isVendorName,
-  type CanonicalRequest,
-} from "./narrow-path";
+import { canonicalize, isVendorName, type CanonicalRequest } from "./narrow-path";
 import {
   deny,
   NOT_IN_CATALOG_SCOPE,
@@ -12,6 +7,7 @@ import {
   UNDECODABLE_PATH,
   type GithubNarrowResult,
 } from "./narrow-result";
+import { narrowSearchIssues } from "./narrow-search";
 
 export type { GithubNarrowResult } from "./narrow-result";
 
@@ -51,31 +47,6 @@ function narrowRepoPath(
   if (!isVendorName(owner) || !isVendorName(repo)) return deny(NOT_A_REPO_NAME);
   if (!inScope(owner, repo, githubRepos)) return deny(REPO_NOT_IN_MISSION);
   return allowCanonical(canonical);
-}
-
-const QUALIFIER_PREFIXES = ["repo:", "org:", "user:"];
-
-/** True when `term` is an agent-supplied repo/org/user qualifier (case-insensitive). */
-function isStrippedQualifier(term: string): boolean {
-  const lowered = term.toLowerCase();
-  return QUALIFIER_PREFIXES.some((prefix) => lowered.startsWith(prefix));
-}
-
-function narrowSearchIssues(
-  canonical: CanonicalRequest,
-  githubRepos: readonly string[],
-): GithubNarrowResult {
-  if (githubRepos.length === 0) return deny(REPO_NOT_IN_MISSION);
-
-  const url = new URL(`${canonical.path}${canonical.search}`, DUMMY_BASE);
-  const rawQ = url.searchParams.get("q") ?? "";
-  const kept = rawQ
-    .split(/\s+/)
-    .filter((term) => term.length > 0 && !isStrippedQualifier(term));
-  const forced = githubRepos.map((repo) => `repo:${repo}`);
-  url.searchParams.set("q", [...kept, ...forced].join(" "));
-
-  return { decision: "allow", path: url.pathname + url.search };
 }
 
 /**
