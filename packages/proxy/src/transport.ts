@@ -8,6 +8,21 @@ export const JSON_HEADERS: Record<string, string> = {
   "content-type": "application/json",
 };
 
+/** One inbound request, already read off the wire (headers lowercased). */
+export interface IncomingShape {
+  method: string;
+  /** Path plus query string, exactly as the client sent it. */
+  path: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface ResponseShape {
+  status: number;
+  headers: Record<string, string>;
+  body: string | Uint8Array;
+}
+
 /**
  * Headers the proxy never forwards. `authorization` is replaced by the vendor
  * credential and `host` must be recomputed by the client for the upstream
@@ -48,6 +63,19 @@ export function errorBody(code: string, reason?: string): string {
   return JSON.stringify({
     error: reason === undefined ? { code } : { code, reason },
   });
+}
+
+/** The one shape every refusal takes: a code, an optional reason, nothing else. */
+export function jsonError(
+  status: number,
+  code: string,
+  reason?: string,
+): ResponseShape {
+  return {
+    status,
+    headers: { ...JSON_HEADERS },
+    body: errorBody(code, reason),
+  };
 }
 
 export function bearerToken(

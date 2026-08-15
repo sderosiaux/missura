@@ -1,46 +1,29 @@
-import type {
-  CatalogDecision,
-  DecisionEvent,
-  MissionClaims,
-  Provider,
-} from "@missura/core";
+import type { CatalogDecision, MissionClaims } from "@missura/core";
 import {
-  applyPostCheck,
-  GITHUB_NOT_FOUND_BODY,
-  OUT_OF_SCOPE_REASON,
-  type NarrowFn,
-  type NarrowPostCheck,
-} from "./narrow";
+  ACTION_REASON,
+  CONNECTION_REASON,
+  claimsDenial,
+  emitEvent,
+  ESCAPE_REASON,
+  REVOKED_REASON,
+  UNKNOWN_VERDICT,
+  type RequestContext,
+} from "./audit";
+import { forward, upstreamTarget, type ForwardDeps } from "./forward";
+import { GITHUB_NOT_FOUND_BODY, type NarrowFn } from "./narrow";
 import { traceIdOf } from "./trace";
 import {
   bearerToken,
-  errorBody,
-  FORWARDED_RESPONSE_HEADERS,
-  hasBody,
+  jsonError,
   JSON_HEADERS,
-  readCapped,
-  upstreamHeaders,
+  type IncomingShape,
+  type ResponseShape,
 } from "./transport";
 
 export { MAX_RESPONSE_BYTES } from "./transport";
+export type { IncomingShape, ResponseShape } from "./transport";
 
-/** One inbound request, already read off the wire (headers lowercased). */
-export interface IncomingShape {
-  method: string;
-  /** Path plus query string, exactly as the client sent it. */
-  path: string;
-  headers: Record<string, string>;
-  body: string;
-}
-
-export interface ResponseShape {
-  status: number;
-  headers: Record<string, string>;
-  body: string | Uint8Array;
-}
-
-export interface PipelineDeps {
-  provider: Provider;
+export interface PipelineDeps extends ForwardDeps {
   verifyToken(token: string): MissionClaims;
   decide(req: { method: string; path: string; body: string }): CatalogDecision;
   /**
@@ -50,175 +33,6 @@ export interface PipelineDeps {
   isRevoked(jti: string): boolean;
   /** The connector's NARROW: rewrites, denies, or registers a post-check. */
   narrow: NarrowFn;
-  /** The vendor credential, read from the vault once at boot — never logged. */
-  vendorAuthHeader(): string;
-  upstreamBase: string;
-  fetchImpl: typeof fetch;
-  emit(ev: DecisionEvent): void;
-  now?(): number;
-}
-
-/** Reason recorded when the vendor answered but the answer was refused. */
-const TOO_LARGE_REASON = "response too large (after upstream call)";
-
-function jsonError(
-  status: number,
-  code: string,
-  reason?: string,
-): ResponseShape {
-  return {
-    status,
-    headers: { ...JSON_HEADERS },
-    body: errorBody(code, reason),
-  };
-}
-
-/**
- * Everything the audit record knows about the request that is not the verdict:
- * who (`actor`), what for (`purpose`) and the caller's trace, filled in as
- * soon as the claims are verified.
- */
-interface RequestContext {
-  missionId: string;
-  startedAt: number;
-  actor?: string;
-  purpose?: string;
-  traceId?: string;
-}
-
-/**
- * The audit record is part of the answer, not a side effect: if it cannot be
- * written the request fails closed (500) rather than serving an unlogged
- * decision. Callers therefore let `emit` throw.
- */
-function emitEvent(
-  deps: PipelineDeps,
-  ctx: RequestContext,
-  decision: CatalogDecision,
-  reason?: string,
-): void {
-  const now = deps.now?.() ?? Date.now();
-  deps.emit({
-    ts: new Date(now).toISOString(),
-    provider: deps.provider,
-    operation: decision.operation,
-    action: decision.action,
-    decision: decision.decision,
-    reason: reason ?? decision.reason,
-    missionId: ctx.missionId,
-    latencyMs: Math.max(0, now - ctx.startedAt),
-    ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
-    ...(ctx.purpose === undefined ? {} : { purpose: ctx.purpose }),
-    ...(ctx.traceId === undefined ? {} : { traceId: ctx.traceId }),
-  });
-}
-
-/** Reason for every request target that would leave the connector's origin. */
-const ESCAPE_REASON = "path escapes upstream origin";
-const CONNECTION_REASON = "connection not in mission";
-const REVOKED_REASON = "revoked";
-const ACTION_REASON = "action not allowed by mission";
-
-/** A claims denial keeps the catalog's operation/action so the log stays readable. */
-function claimsDenial(
-  verdict: CatalogDecision,
-  reason: string,
-): CatalogDecision {
-  return { ...verdict, decision: "deny", reason };
-}
-
-const UNKNOWN_VERDICT: CatalogDecision = {
-  decision: "deny",
-  operation: "unknown",
-  action: "unknown",
-  reason: "unknown",
-};
-
-/**
- * Resolves the request target against the upstream base instead of
- * concatenating it. A client may send an absolute (`https://evil.com/x`) or
- * protocol-relative (`//evil.com/x`) request target; string concatenation
- * would hand that origin the injected vendor credential. Anything that does
- * not resolve back onto the upstream origin is refused.
- */
-function upstreamTarget(deps: PipelineDeps, path: string): URL | undefined {
-  let url: URL;
-  try {
-    url = new URL(path, deps.upstreamBase);
-    if (url.origin !== new URL(deps.upstreamBase).origin) return undefined;
-  } catch {
-    return undefined;
-  }
-  return url;
-}
-
-async function forward(
-  deps: PipelineDeps,
-  target: URL,
-  req: IncomingShape,
-  verdict: CatalogDecision,
-  ctx: RequestContext,
-  postCheck?: NarrowPostCheck,
-): Promise<ResponseShape> {
-  let response: Response;
-  try {
-    // Origin + the normalized target only: never the raw client path, and
-    // never a fragment (which does not belong on the wire).
-    const url = `${target.origin}${target.pathname}${target.search}`;
-    response = await deps.fetchImpl(url, {
-      method: req.method,
-      headers: upstreamHeaders(req.headers, deps.vendorAuthHeader()),
-      ...(hasBody(req.method) && req.body.length > 0 ? { body: req.body } : {}),
-    });
-  } catch {
-    // The upstream error is deliberately swallowed: its message can carry the
-    // vendor host, and an injected credential could surface in a wrapped error.
-    emitEvent(deps, ctx, verdict, "upstream_error");
-    return jsonError(502, "missura_upstream_error");
-  }
-
-  const payload = await readCapped(response);
-  if (payload === undefined) {
-    // The vendor was reached, so the record says so — the request is denied
-    // on the way back, not on the way out.
-    emitEvent(
-      deps,
-      ctx,
-      { ...verdict, decision: "deny", reason: TOO_LARGE_REASON },
-      TOO_LARGE_REASON,
-    );
-    return jsonError(502, "missura_response_too_large");
-  }
-  const headers: Record<string, string> = {};
-  for (const name of FORWARDED_RESPONSE_HEADERS) {
-    const value = response.headers.get(name);
-    if (value !== null) headers[name] = value;
-  }
-
-  if (postCheck !== undefined) {
-    const checked = applyPostCheck(
-      postCheck,
-      new TextDecoder().decode(payload),
-    );
-    if (!checked.ok) {
-      emitEvent(
-        deps,
-        ctx,
-        { ...verdict, decision: "deny", reason: OUT_OF_SCOPE_REASON },
-        OUT_OF_SCOPE_REASON,
-      );
-      return {
-        status: response.status,
-        headers: { ...JSON_HEADERS },
-        body: checked.body,
-      };
-    }
-    emitEvent(deps, ctx, verdict);
-    return { status: response.status, headers, body: checked.body };
-  }
-
-  emitEvent(deps, ctx, verdict);
-  return { status: response.status, headers, body: payload };
 }
 
 /**
