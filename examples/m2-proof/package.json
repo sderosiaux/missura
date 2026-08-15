@@ -1,0 +1,19 @@
+{
+  "name": "@missura/example-m2-proof",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint via root eslint' && exit 0"
+  },
+  "dependencies": {
+    "@linear/sdk": "^90.0.0",
+    "octokit": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
