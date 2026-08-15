@@ -29,6 +29,26 @@ const LINEAR_ERROR_TYPE: Record<DenialCode, string> = {
 };
 
 /**
+ * Zendesk answers an absence with `{"error":"RecordNotFound","description":
+ * "Not found"}` and a failed search with `{"error":"unavailable",
+ * "description":…}` — so `{error, description}` is the envelope, and `error`
+ * is a short vendor-defined name.
+ *
+ * Only `RecordNotFound` could be verified against the published reference, so
+ * only the two codes that must be INDISTINGUISHABLE FROM ABSENCE borrow it —
+ * an out-of-scope organization and a target we refused to decode both answer
+ * exactly what a record that never existed answers. Every other code carries
+ * its own name rather than an invented Zendesk one: guessing the vendor's
+ * vocabulary for a 401 would make our refusals lie about which vendor
+ * condition occurred, and no client is better off for it.
+ */
+const ZENDESK_RECORD_NOT_FOUND = "RecordNotFound";
+const ZENDESK_ABSENCE_CODES: ReadonlySet<DenialCode> = new Set([
+  "missura_out_of_mission_scope",
+  "missura_invalid_target",
+]);
+
+/**
  * The refusal in the shape the vendor's own SDK parses, with the missura block
  * riding along — in addition to the vendor envelope, never instead of it
  * (SPEC §12). An error the SDK cannot parse is worse than useless to an agent:
@@ -60,6 +80,15 @@ export function vendorDenialBody(
           },
         },
       ],
+    });
+  }
+  if (provider === "zendesk") {
+    return JSON.stringify({
+      error: ZENDESK_ABSENCE_CODES.has(denial.code)
+        ? ZENDESK_RECORD_NOT_FOUND
+        : denial.code,
+      description: message,
+      missura: denial,
     });
   }
   return JSON.stringify({ message, missura: denial });

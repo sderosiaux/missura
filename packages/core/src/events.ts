@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-export type Provider = "linear" | "github";
+export type Provider = "linear" | "github" | "zendesk";
 export type Decision = "allow" | "deny";
 
 export interface DecisionEvent {

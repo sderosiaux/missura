@@ -30,6 +30,9 @@ const LINEAR_READ = "query { issues(first: 20) { nodes { id title } } }";
 const LINEAR_SMALL = "query { issues(first: 10) { nodes { id title } } }";
 const GITHUB_SEARCH = "GET /search/issues?q=<your terms>";
 const GITHUB_SMALL = "GET /search/issues?q=<your terms>&per_page=10";
+const ZENDESK_SEARCH = "GET /api/v2/search?query=type:ticket <your terms>";
+const ZENDESK_SMALL =
+  "GET /api/v2/search?query=type:ticket <your terms>&per_page=10";
 
 /**
  * The FIELD a denial reason refused, by the connectors' own convention: a
@@ -63,11 +66,28 @@ function isLinear(ctx: Ctx): boolean {
 }
 
 /**
+ * The same shape as the GitHub wording and for the same reason: the COUNT of
+ * the mission's organizations is a fact about the agent's own grant, so "not
+ * among your 3" is equally true for an organization that exists and for one
+ * that never did. The alternative it offers needs no identifier either —
+ * missura forces the mission's organizations into the search query, so the
+ * agent has nothing to name.
+ */
+function zendeskOutOfScope(ctx: Ctx): string {
+  const orgs =
+    ctx.scopeSize === undefined
+      ? `your mission covers ${ctx.scope}`
+      : `your mission covers ${String(ctx.scopeSize)} organization${ctx.scopeSize === 1 ? "" : "s"}`;
+  return `${orgs}, and this request names one that is not among them. Target an organization your mission covers, or search instead: missura forces your mission's organizations into \`GET /api/v2/search\`, so a search needs no \`organization:\` qualifier of yours.`;
+}
+
+/**
  * Identical for a target that exists and for one that never did: the count is
  * the mission's, the alternative needs no name, and nothing here is a function
  * of what was refused.
  */
 function outOfScope(ctx: Ctx): string {
+  if (ctx.provider === "zendesk") return zendeskOutOfScope(ctx);
   if (isLinear(ctx)) {
     const head =
       ctx.field === undefined
@@ -111,7 +131,26 @@ export function remediationFor(code: DenialCode, ctx: Ctx): string {
   }
 }
 
+/**
+ * The runnable shapes, per connection. One table rather than a chain of
+ * ternaries: a new connection that forgets a column is a type error here,
+ * where the alternative is silently handing an agent another vendor's syntax.
+ */
+const SHAPES: Record<
+  Provider,
+  { read: string; small: string; entry: string }
+> = {
+  linear: { read: LINEAR_READ, small: LINEAR_SMALL, entry: "POST /graphql" },
+  github: { read: GITHUB_SEARCH, small: GITHUB_SMALL, entry: GITHUB_SEARCH },
+  zendesk: {
+    read: ZENDESK_SEARCH,
+    small: ZENDESK_SMALL,
+    entry: ZENDESK_SEARCH,
+  },
+};
+
 export function tryInsteadFor(code: DenialCode, ctx: Ctx): readonly string[] {
+  const shape = SHAPES[ctx.provider];
   switch (code) {
     // Nothing about the request fixes an identity or availability problem, so
     // nothing is suggested: a shape that cannot work is worse than none.
@@ -124,10 +163,10 @@ export function tryInsteadFor(code: DenialCode, ctx: Ctx): readonly string[] {
       return [];
     case "missura_request_too_large":
     case "missura_response_too_large":
-      return isLinear(ctx) ? [LINEAR_SMALL] : [GITHUB_SMALL];
+      return [shape.small];
     case "missura_invalid_target":
-      return isLinear(ctx) ? ["POST /graphql"] : [GITHUB_SEARCH];
+      return [shape.entry];
     default:
-      return isLinear(ctx) ? [LINEAR_READ] : [GITHUB_SEARCH];
+      return [shape.read];
   }
 }
