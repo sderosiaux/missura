@@ -562,6 +562,10 @@ const GUARANTEES = [
     body: "Requests checked before the call, responses filtered after.",
   },
   {
+    label: "Nothing copied, nothing indexed",
+    body: "Bodies pass through in memory. Missura never stores or embeds your vendor data — the audit trail keeps metadata only.",
+  },
+  {
     label: "Provenance built in",
     body: "Every allow, narrow, and deny lands in an audit trail — explainable to auditors and incident responders alike.",
   },
