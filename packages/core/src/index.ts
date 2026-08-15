@@ -5,5 +5,7 @@ export * from "./filter-plan";
 export * from "./keys";
 export * from "./missions";
 export * from "./remediation";
+export * from "./remediation-envelope";
+export * from "./remediation-types";
 export * from "./token";
 export * from "./vault";
