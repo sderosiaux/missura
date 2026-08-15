@@ -7,6 +7,7 @@
     "build": "tsc --noEmit",
     "lint": "echo 'lint via root eslint' && exit 0"
   },
+  "//dependencies": "The official vendor SDKs, unmodified, are the proof: M2 claims an agent can point @linear/sdk and octokit at a missura port and have them work. Hand-rolled fetch calls would prove something weaker. Example-only — no package under packages/ depends on either.",
   "dependencies": {
     "@linear/sdk": "^90.0.0",
     "octokit": "^5.0.5"
