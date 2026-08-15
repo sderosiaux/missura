@@ -38,6 +38,19 @@ export interface Operation {
    * thing the catalog refuses on the human's production tenant.
    */
   skipDirect?: boolean;
+  /**
+   * Declared, never issued — by EITHER half.
+   *
+   * For an operation whose verdict depends on the MISSION rather than on the
+   * request: a repository the mission holds by path refuses routes that the
+   * same repository, held whole, serves. This run mints one mission, so it
+   * cannot observe both; issuing these under the mission it does have would
+   * record a classification for a mission nobody ran. They stay in the manifest
+   * — the coverage claim is a property of the connector, not of a run — and
+   * read `not_observed`, which the manifest already keeps distinct from
+   * `compatible` for exactly this reason.
+   */
+  declaredOnly?: boolean;
 }
 
 /** Where a vendor's own API lives, and what a direct call has to carry. */

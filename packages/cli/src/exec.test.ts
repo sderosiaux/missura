@@ -167,4 +167,67 @@ describe("missura exec", () => {
     ]);
     expect(payload.connections).toEqual(["github"]);
   }, 30_000);
+
+  /**
+   * The whole point, at the surface a human touches: one shared repository, one
+   * directory per customer, and a mission that reaches exactly one of them.
+   * `/**` is the one sugar — a path prefix is recursive by definition, and the
+   * suffix only says so out loud.
+   */
+  it("takes a path prefix on --repo, `/**` and all", async () => {
+    const h = await inited();
+
+    const result = await run(
+      execArgv(
+        [
+          "--repo",
+          "acme-corp/customer-data:granola-transcripts/abcam/**",
+          "--purpose",
+          "p",
+        ],
+        DUMP,
+      ),
+      h.io,
+    );
+
+    expect(result.code).toBe(0);
+    const token = childEnv(h).MISSION_TOKEN ?? "";
+    const payload = JSON.parse(
+      Buffer.from(token.slice(4).split(".")[0] ?? "", "base64url").toString(
+        "utf8",
+      ),
+    ) as { scope: { repos?: string[] }; connections: string[] };
+    expect(payload.scope.repos).toEqual([
+      "acme-corp/customer-data:granola-transcripts/abcam/**",
+    ]);
+    expect(payload.connections).toEqual(["github"]);
+  }, 30_000);
+
+  /**
+   * Before a token exists, not at the first request it would have decided: a
+   * scope spelling nobody can read must not become a mission at all.
+   */
+  it("refuses a --repo whose path prefix cannot be read, before minting", async () => {
+    const h = await inited();
+
+    const result = await run(
+      execArgv(["--repo", "acme-corp/data:../escape", "--purpose", "p"], "0"),
+      h.io,
+    );
+
+    expect(result.code).toBe(1);
+    expect(h.err.join("\n")).toMatch(/path prefix/i);
+  });
+
+  it("refuses a glob dialect on --repo rather than guessing what it meant", async () => {
+    const h = await inited();
+
+    const result = await run(
+      execArgv(["--repo", "acme-corp/data:granola/*", "--purpose", "p"], "0"),
+      h.io,
+    );
+
+    expect(result.code).toBe(1);
+    expect(h.err.join("\n")).toMatch(/glob/i);
+  });
 });

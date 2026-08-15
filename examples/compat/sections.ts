@@ -69,6 +69,10 @@ async function runAll(
 ): Promise<Observation[]> {
   const out: Observation[] = [];
   for (const operation of operations) {
+    // Declared-only operations describe a MISSION this run did not mint; see
+    // `Operation.declaredOnly`. They reach the manifest through the specs, not
+    // through an observation.
+    if (operation.declaredOnly === true) continue;
     out.push(await runOperation(operation, ctx));
   }
   return out;

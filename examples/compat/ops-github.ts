@@ -39,13 +39,27 @@ function get(specification: OperationSpec, path: string): Operation {
   return { spec: specification, method: "GET", path };
 }
 
+/**
+ * What a repository entry buys depends on HOW the mission holds the repository.
+ * Held whole (`owner/name`), these are served under the scope check below.
+ * Held by PATH (`owner/name:some/path`), every one of them is refused: an
+ * issue, a pull request and the repository object name no directory, so nothing
+ * on them proves which path — which customer — they belong to.
+ */
+const PATH_SCOPED_REFUSAL =
+  "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one";
+
 function repoScoped(operation: string, request: string): OperationSpec {
   return spec({
     operation,
     request,
-    narrowed: ["refused unless {owner}/{repo} is a repository the mission covers"],
+    narrowed: [
+      "refused unless {owner}/{repo} is a repository the mission covers",
+      PATH_SCOPED_REFUSAL,
+    ],
   });
 }
+
 
 export function githubOperations(targets: GithubTargets): Operation[] {
   const repo = targets.repo;
@@ -66,7 +80,16 @@ export function githubOperations(targets: GithubTargets): Operation[] {
       `/repos/${repo}/pulls?per_page=${String(PAGE)}&state=all`,
     ),
     get(
-      repoScoped("repos.contents.get", "GET /repos/{owner}/{repo}/contents"),
+      // NOT `repoScoped`: `contents` is the one route a path prefix CAN bound,
+      // so a path-scoped mission does not refuse it outright — it refuses the
+      // part of it above the path (see the declared-only entries below).
+      spec({
+        operation: "repos.contents.get",
+        request: "GET /repos/{owner}/{repo}/contents",
+        narrowed: [
+          "refused unless {owner}/{repo} is a repository the mission covers",
+        ],
+      }),
       `/repos/${repo}/contents`,
     ),
     get(
@@ -126,7 +149,52 @@ export function githubOperations(targets: GithubTargets): Operation[] {
     );
   }
 
+  /**
+   * The path-scoped contract, DECLARED and not issued: it is a property of a
+   * MISSION this run does not mint (see `Operation.declaredOnly`). One mission
+   * cannot hold the same repository both whole and by path, and the live half
+   * mints one — so these read `not_observed`, which the manifest keeps distinct
+   * from `compatible` for exactly this reason.
+   */
   out.push(
+    {
+      spec: spec({
+        operation: "repos.contents.get (path-scoped mission)",
+        request: "GET /repos/{owner}/{repo}/contents/{path}",
+        narrowed: [
+          "under a `owner/name:some/path` entry, served only AT OR BELOW that path",
+          "the prefix is checked on the DECODED, dot-collapsed path and the same path is forwarded, so `%2F`, `%252f` and `..` cannot leave it",
+          "compared per segment and case-sensitively — `abcam` is not `abcam-corp`, and git paths are case-sensitive",
+        ],
+      }),
+      method: "GET",
+      path: `/repos/${repo}/contents/{path}`,
+      declaredOnly: true,
+    },
+    {
+      spec: spec({
+        operation: "refused.path-scoped.ancestor-listing",
+        request: "GET /repos/{owner}/{repo}/contents/{a parent of the mission's path}",
+        refused: [
+          "a listing whose own path is a strict ancestor of the mission's path enumerates the directories beside it — in a shared repository that is the customer list",
+        ],
+      }),
+      method: "GET",
+      path: `/repos/${repo}/contents/{parent}`,
+      declaredOnly: true,
+    },
+    {
+      spec: spec({
+        operation: "refused.path-scoped.search",
+        request: "GET /search/issues?q=<your terms>",
+        refused: [
+          "a search result names no path, so nothing in one could be proven to belong to the path the mission covers — path-scoped entries are dropped from the forced qualifiers, and a mission with no whole-repository entry left refuses the route",
+        ],
+      }),
+      method: "GET",
+      path: "/search/issues",
+      declaredOnly: true,
+    },
     {
       spec: spec({
         operation: "refused.identity",

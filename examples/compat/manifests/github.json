@@ -14,6 +14,26 @@
       ]
     },
     {
+      "operation": "refused.path-scoped.ancestor-listing",
+      "request": "GET /repos/{owner}/{repo}/contents/{a parent of the mission's path}",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "a listing whose own path is a strict ancestor of the mission's path enumerates the directories beside it — in a shared repository that is the customer list"
+      ]
+    },
+    {
+      "operation": "refused.path-scoped.search",
+      "request": "GET /search/issues?q=<your terms>",
+      "classification": "not_observed",
+      "narrowed": [],
+      "filtered": [],
+      "refused": [
+        "a search result names no path, so nothing in one could be proven to belong to the path the mission covers — path-scoped entries are dropped from the forced qualifiers, and a mission with no whole-repository entry left refuses the route"
+      ]
+    },
+    {
       "operation": "refused.uncatalogued",
       "request": "GET /repos/{owner}/{repo}/collaborators",
       "classification": "not_observed",
@@ -44,11 +64,24 @@
       "refused": []
     },
     {
+      "operation": "repos.contents.get (path-scoped mission)",
+      "request": "GET /repos/{owner}/{repo}/contents/{path}",
+      "classification": "not_observed",
+      "narrowed": [
+        "under a `owner/name:some/path` entry, served only AT OR BELOW that path",
+        "the prefix is checked on the DECODED, dot-collapsed path and the same path is forwarded, so `%2F`, `%252f` and `..` cannot leave it",
+        "compared per segment and case-sensitively — `abcam` is not `abcam-corp`, and git paths are case-sensitive"
+      ],
+      "filtered": [],
+      "refused": []
+    },
+    {
       "operation": "repos.get",
       "request": "GET /repos/{owner}/{repo}",
       "classification": "not_observed",
       "narrowed": [
-        "refused unless {owner}/{repo} is a repository the mission covers"
+        "refused unless {owner}/{repo} is a repository the mission covers",
+        "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one"
       ],
       "filtered": [],
       "refused": []
@@ -58,7 +91,8 @@
       "request": "GET /repos/{owner}/{repo}/issues/{number}/comments?per_page=2",
       "classification": "not_observed",
       "narrowed": [
-        "refused unless {owner}/{repo} is a repository the mission covers"
+        "refused unless {owner}/{repo} is a repository the mission covers",
+        "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one"
       ],
       "filtered": [],
       "refused": []
@@ -68,7 +102,8 @@
       "request": "GET /repos/{owner}/{repo}/issues/{number}",
       "classification": "not_observed",
       "narrowed": [
-        "refused unless {owner}/{repo} is a repository the mission covers"
+        "refused unless {owner}/{repo} is a repository the mission covers",
+        "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one"
       ],
       "filtered": [],
       "refused": []
@@ -78,7 +113,8 @@
       "request": "GET /repos/{owner}/{repo}/issues?per_page=2&state=all",
       "classification": "not_observed",
       "narrowed": [
-        "refused unless {owner}/{repo} is a repository the mission covers"
+        "refused unless {owner}/{repo} is a repository the mission covers",
+        "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one"
       ],
       "filtered": [],
       "refused": []
@@ -88,7 +124,8 @@
       "request": "GET /repos/{owner}/{repo}/pulls/{number}",
       "classification": "not_observed",
       "narrowed": [
-        "refused unless {owner}/{repo} is a repository the mission covers"
+        "refused unless {owner}/{repo} is a repository the mission covers",
+        "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one"
       ],
       "filtered": [],
       "refused": []
@@ -98,7 +135,8 @@
       "request": "GET /repos/{owner}/{repo}/pulls?per_page=2&state=all",
       "classification": "not_observed",
       "narrowed": [
-        "refused unless {owner}/{repo} is a repository the mission covers"
+        "refused unless {owner}/{repo} is a repository the mission covers",
+        "refused outright when the mission holds this repository by PATH (`owner/name:some/path`) — nothing here names a path, so nothing here can be bounded by one"
       ],
       "filtered": [],
       "refused": []
