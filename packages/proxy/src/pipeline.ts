@@ -19,6 +19,7 @@ import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
 import { GITHUB_NOT_FOUND_MESSAGE, type NarrowFn } from "./narrow";
+import { refill } from "./refill";
 import { traceIdOf } from "./trace";
 import {
   bearerToken,
@@ -226,14 +227,23 @@ export async function handle(
 
     // FILTER runs last, on the vendor's answer: the request was allowed to run,
     // and what comes back is cut down to what the mission proves it may see.
-    return await forward(
+    // REFILL then repairs the page filtering made short — bounded, and through
+    // this same `forward`, so there is one path to the vendor and one audit
+    // record per call.
+    const filter = filterTask(narrowed);
+    const answer = await forward(
       deps,
       target,
       outbound,
       verdict,
       ctx,
-      filterTask(narrowed),
+      filter,
       claims,
+    );
+    return await refill(
+      deps,
+      { target, req: outbound, verdict, ctx, filter, claims },
+      answer,
     );
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.

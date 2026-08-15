@@ -100,12 +100,50 @@ export interface FilterRule {
 }
 
 /**
+ * Where the paginated collection is, and how to ask the vendor for its next
+ * page — the minimum the proxy needs to REFILL a page filtering made short,
+ * without learning the vendor's query language.
+ *
+ * A connector emits this only when it can guarantee the re-issued request means
+ * "the same query, one page further": the document it narrowed must bind the
+ * variable at `cursorPath` to the collection's `after:` argument. At most one
+ * per plan — two collections in one document cannot share a single cursor, and
+ * a connector that sees two must emit none rather than refill the wrong one.
+ */
+export interface PaginationRule {
+  /** Path from the body root to the connection object: `["data","issues"]`. */
+  path: readonly string[];
+  /** Key of the node list inside it: `"nodes"`. */
+  nodes: string;
+  /** Path to the page info object, relative to the connection: `["pageInfo"]`. */
+  pageInfo: readonly string[];
+  /**
+   * How many objects the agent asked for. The proxy walks until it has this
+   * many authorized ones, and never returns more — an answer longer than the
+   * page the agent requested would itself say that pages were walked.
+   */
+  requested: number;
+  /**
+   * Path INSIDE the JSON request body where the next cursor is written:
+   * `["variables","after"]`. Every parent must already exist — the proxy
+   * writes a value, it never invents a request shape.
+   */
+  cursorPath: readonly string[];
+}
+
+/**
  * Everything the proxy must do to one response. A plan with no rules and
  * nothing to strip is not an error — it means the answer needs no repair, and
  * the body is returned byte for byte.
  */
 export interface FilterPlan {
   rules: readonly FilterRule[];
+  /**
+   * Absent ⇒ the proxy never issues a second upstream call for this request.
+   * A connector that cannot describe its pagination gets short pages, which is
+   * the safe half of the tradeoff.
+   */
+  pagination?: PaginationRule;
   /**
    * Absolute paths (body root first) to fields that must be removed on the way
    * out, whatever the ownership verdict: everything else NARROW widened, and

@@ -105,6 +105,25 @@ const COUNT_FIELDS: readonly string[] = [
  * request-side walk must refuse BEFORE the call. This is the backstop for when
  * it did not.
  */
+/**
+ * The count rule again, after a REFILL merged several pages into one: a number
+ * that survived `recount` on each page described that page, so next to the
+ * merged list it must describe the merged list. Anything wider was already
+ * removed page by page and cannot reappear here.
+ */
+export function recountTo(
+  container: Record<string, unknown>,
+  total: number,
+): Record<string, unknown> {
+  let out = container;
+  for (const field of COUNT_FIELDS) {
+    if (!Object.hasOwn(out, field)) continue;
+    if (typeof out[field] !== "number") continue;
+    out = { ...out, [field]: total };
+  }
+  return out;
+}
+
 export function recount(
   container: Record<string, unknown>,
   before: number,
