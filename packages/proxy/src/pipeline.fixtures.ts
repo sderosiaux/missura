@@ -2,6 +2,7 @@ import type {
   CatalogDecision,
   DecisionEvent,
   MissionClaims,
+  MissuraDenial,
 } from "@missura/core";
 import { passThroughNarrow } from "./narrow";
 import type { IncomingShape, PipelineDeps } from "./pipeline";
@@ -48,6 +49,26 @@ export interface Harness {
 
 export function bodyText(body: string | Uint8Array): string {
   return typeof body === "string" ? body : new TextDecoder().decode(body);
+}
+
+/**
+ * The missura block, read out of the vendor envelope that carries it — a
+ * refusal is a GitHub REST error with a `missura` key, or a GraphQL error with
+ * the block under `extensions.missura` (SPEC §4.8bis). Reading it this way is
+ * the assertion: a block a test can only reach by parsing the vendor shape is
+ * a block an SDK can reach too.
+ */
+export function restDenial(body: string | Uint8Array): MissuraDenial {
+  return (JSON.parse(bodyText(body)) as { missura: MissuraDenial }).missura;
+}
+
+export function graphqlDenial(body: string | Uint8Array): MissuraDenial {
+  const parsed = JSON.parse(bodyText(body)) as {
+    errors: { extensions: { missura: MissuraDenial } }[];
+  };
+  const first = parsed.errors[0];
+  if (first === undefined) throw new Error("no GraphQL error in the envelope");
+  return first.extensions.missura;
 }
 
 export function harness(

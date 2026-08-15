@@ -192,6 +192,9 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@linear/sdk':
+        specifier: ^90.0.0
+        version: 90.0.0(graphql@16.14.2)
       '@types/node':
         specifier: ^22
         version: 22.20.1

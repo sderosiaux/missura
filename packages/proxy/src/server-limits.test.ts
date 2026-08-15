@@ -22,10 +22,10 @@ describe("proxy server — limits and lifecycle", () => {
       },
       body: "x".repeat(MAX_BODY_BYTES + 1),
     });
-    const payload = (await res.json()) as { error: { code: string } };
+    const payload = (await res.json()) as { missura: { code: string } };
 
     expect(res.status).toBe(413);
-    expect(payload.error.code).toBe("missura_request_too_large");
+    expect(payload.missura.code).toBe("missura_request_too_large");
     expect(live.upstream?.received).toHaveLength(0);
     expect(events).toHaveLength(1);
     expect(events[0]?.decision).toBe("deny");

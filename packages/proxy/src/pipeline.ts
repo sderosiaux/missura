@@ -1,22 +1,27 @@
-import type { CatalogDecision, MissionClaims } from "@missura/core";
+import {
+  MissionExpiredError,
+  type CatalogDecision,
+  type MissionClaims,
+} from "@missura/core";
 import {
   ACTION_REASON,
   CONNECTION_REASON,
   claimsDenial,
   emitEvent,
   ESCAPE_REASON,
+  EXPIRED_REASON,
   REVOKED_REASON,
+  UNAUTHENTICATED_REASON,
   UNKNOWN_VERDICT,
   type RequestContext,
 } from "./audit";
+import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
-import { GITHUB_NOT_FOUND_BODY, type NarrowFn } from "./narrow";
+import { GITHUB_NOT_FOUND_MESSAGE, type NarrowFn } from "./narrow";
 import { traceIdOf } from "./trace";
 import {
   bearerToken,
-  jsonError,
-  JSON_HEADERS,
   type IncomingShape,
   type ResponseShape,
 } from "./transport";
@@ -37,12 +42,38 @@ export interface PipelineDeps extends ForwardDeps {
 }
 
 /**
+ * A token that fails to verify says nothing — except when it fails on the
+ * clock. The signature is checked before the expiry, so an expired mission is
+ * the one rejection that still knows a real grant, and the agent can be told
+ * "your mission expired, ask the operator" instead of the useless "invalid
+ * token" a forged bearer gets.
+ */
+function verified(
+  deps: PipelineDeps,
+  token: string | undefined,
+): {
+  claims?: MissionClaims;
+  expired?: MissionClaims;
+} {
+  if (token === undefined) return {};
+  try {
+    return { claims: deps.verifyToken(token) };
+  } catch (err) {
+    return err instanceof MissionExpiredError ? { expired: err.claims } : {};
+  }
+}
+
+/**
  * authn → revocation → connections → catalog → action → narrow → origin
  * re-validation → forward → filter → audit.
  *
  * Deny by default at every step: the upstream is reached only after a mission
  * token verified and a catalog ALLOW, and any thrown error (catalog, audit
  * sink, bug) becomes a 500 instead of falling through to the vendor.
+ *
+ * Every refusal leaves through `denialResponse`, in the vendor's own envelope
+ * with an actionable missura block attached (SPEC §4.8bis) — a refusal an SDK
+ * cannot parse never reaches the agent that has to act on it.
  */
 export async function handle(
   deps: PipelineDeps,
@@ -50,29 +81,34 @@ export async function handle(
 ): Promise<ResponseShape> {
   const startedAt = deps.now?.() ?? Date.now();
   const traceId = traceIdOf(req.headers.traceparent);
+  const deny = (options: DenialOptions): ResponseShape =>
+    denialResponse(deps.provider, options);
   try {
-    const token = bearerToken(req.headers);
-    let claims: MissionClaims | undefined;
-    if (token !== undefined) {
-      try {
-        claims = deps.verifyToken(token);
-      } catch {
-        claims = undefined;
-      }
-    }
+    const { claims, expired } = verified(deps, bearerToken(req.headers));
     const anonymous: RequestContext = {
-      missionId: "unknown",
+      missionId: expired?.id ?? "unknown",
       startedAt,
       ...(traceId === undefined ? {} : { traceId }),
     };
     if (claims === undefined) {
+      const reason =
+        expired === undefined ? UNAUTHENTICATED_REASON : EXPIRED_REASON;
       emitEvent(deps, anonymous, {
         decision: "deny",
         operation: "unknown",
         action: "unknown",
-        reason: "authn: missing or invalid mission token",
+        reason,
       });
-      return jsonError(401, "missura_unauthorized");
+      return deny({
+        status: 401,
+        code:
+          expired === undefined
+            ? "missura_unauthenticated"
+            : "missura_mission_expired",
+        reason,
+        claims: expired,
+        now: startedAt,
+      });
     }
 
     const ctx: RequestContext = {
@@ -82,6 +118,7 @@ export async function handle(
       purpose: claims.purpose,
       ...(traceId === undefined ? {} : { traceId }),
     };
+    const mission = { claims, now: startedAt };
 
     // A signature that still verifies says nothing about a mission an operator
     // has since called back. The list is read here, per request, so a revoke
@@ -93,7 +130,12 @@ export async function handle(
         claimsDenial(UNKNOWN_VERDICT, REVOKED_REASON),
         REVOKED_REASON,
       );
-      return jsonError(401, "missura_unauthorized", REVOKED_REASON);
+      return deny({
+        status: 401,
+        code: "missura_mission_revoked",
+        reason: REVOKED_REASON,
+        ...mission,
+      });
     }
 
     // The mission decides which connections it may touch. Separate ports are a
@@ -101,7 +143,12 @@ export async function handle(
     // work against another listener just because the agent aimed at its port.
     if (!claims.connections.includes(deps.provider)) {
       emitEvent(deps, ctx, claimsDenial(UNKNOWN_VERDICT, CONNECTION_REASON));
-      return jsonError(403, "missura_denied", CONNECTION_REASON);
+      return deny({
+        status: 403,
+        code: "missura_connection_not_in_mission",
+        reason: CONNECTION_REASON,
+        ...mission,
+      });
     }
 
     const verdict = deps.decide({
@@ -111,14 +158,25 @@ export async function handle(
     });
     if (verdict.decision === "deny") {
       emitEvent(deps, ctx, verdict);
-      return jsonError(403, "missura_denied", verdict.reason);
+      return deny({
+        status: 403,
+        code: "missura_operation_not_in_catalog",
+        reason: verdict.reason,
+        ...mission,
+      });
     }
 
     // The catalog says what the connector can serve; the mission says what
     // this agent may do with it. An ALLOW the mission does not cover is a deny.
     if (!claims.allow.includes(verdict.action)) {
       emitEvent(deps, ctx, claimsDenial(verdict, ACTION_REASON));
-      return jsonError(403, "missura_denied", ACTION_REASON);
+      return deny({
+        status: 403,
+        code: "missura_action_not_allowed",
+        reason: ACTION_REASON,
+        requiredAction: verdict.action,
+        ...mission,
+      });
     }
 
     // NARROW runs last, on an already-cataloged request: it shrinks what the
@@ -130,13 +188,17 @@ export async function handle(
     if (narrowed.decision === "deny") {
       const reason = narrowed.reason ?? "narrowed out of mission scope";
       emitEvent(deps, ctx, claimsDenial(verdict, reason), reason);
-      return narrowed.denyShape === "github404"
-        ? {
-            status: 404,
-            headers: { ...JSON_HEADERS },
-            body: GITHUB_NOT_FOUND_BODY,
-          }
-        : jsonError(403, "missura_denied", reason);
+      const github404 = narrowed.denyShape === "github404";
+      return deny({
+        status: github404 ? 404 : 403,
+        code: narrowed.denialCode ?? "missura_out_of_mission_scope",
+        reason,
+        // The vendor's own absence message, unchanged: a repo outside the
+        // mission and a repo that never existed answer the same bytes.
+        ...(github404 ? { vendorMessage: GITHUB_NOT_FOUND_MESSAGE } : {}),
+        scopeSize: narrowed.missionScopeSize,
+        ...mission,
+      });
     }
     const outbound: IncomingShape = {
       ...req,
@@ -154,7 +216,12 @@ export async function handle(
         { ...verdict, decision: "deny", reason: ESCAPE_REASON },
         ESCAPE_REASON,
       );
-      return jsonError(403, "missura_denied", ESCAPE_REASON);
+      return deny({
+        status: 403,
+        code: "missura_invalid_target",
+        reason: ESCAPE_REASON,
+        ...mission,
+      });
     }
 
     // FILTER runs last, on the vendor's answer: the request was allowed to run,
@@ -166,9 +233,14 @@ export async function handle(
       verdict,
       ctx,
       filterTask(narrowed),
+      claims,
     );
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.
-    return jsonError(500, "missura_internal");
+    return deny({
+      status: 500,
+      code: "missura_internal",
+      reason: "missura failed while deciding this request",
+    });
   }
 }

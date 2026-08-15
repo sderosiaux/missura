@@ -23,6 +23,14 @@ export interface RequestContext {
   traceId?: string;
 }
 
+/** No token, or one whose signature this proxy cannot verify. */
+export const UNAUTHENTICATED_REASON = "authn: missing or invalid mission token";
+/**
+ * Signature valid, clock past `exp`. Kept apart from the line above because it
+ * is the one authn failure that still describes a real mission, and the agent
+ * gets told which — its own.
+ */
+export const EXPIRED_REASON = "mission expired";
 /** Reasons a verified token still does not get through. */
 export const REVOKED_REASON = "revoked";
 export const CONNECTION_REASON = "connection not in mission";

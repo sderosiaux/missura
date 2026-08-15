@@ -71,10 +71,15 @@ describe("proxy server — linear listener", () => {
         query: "mutation M { issueCreate(input: {}) { success } }",
       }),
     });
-    const payload = (await res.json()) as { error: { code: string } };
+    const payload = (await res.json()) as {
+      errors: { extensions: { missura: { code: string } } }[];
+    };
 
     expect(res.status).toBe(403);
-    expect(payload.error.code).toBe("missura_denied");
+    // GraphQL-shaped, because that is what the vendor's SDK parses.
+    expect(payload.errors[0]?.extensions.missura.code).toBe(
+      "missura_operation_not_in_catalog",
+    );
     expect(live.upstream?.received).toHaveLength(0);
   });
 
@@ -89,12 +94,13 @@ describe("proxy server — linear listener", () => {
       body: JSON.stringify({ query: "query Q { viewer { id } }" }),
     });
     const payload = (await res.json()) as {
-      error: { code: string; reason: string };
+      errors: { extensions: { missura: { code: string; reason: string } } }[];
     };
 
     expect(res.status).toBe(403);
-    expect(payload.error.code).toBe("missura_denied");
-    expect(payload.error.reason).toContain("/oauth/token");
+    const denial = payload.errors[0]?.extensions.missura;
+    expect(denial?.code).toBe("missura_operation_not_in_catalog");
+    expect(denial?.reason).toContain("/oauth/token");
     expect(live.upstream?.received).toHaveLength(0);
   });
 
@@ -129,10 +135,10 @@ describe("proxy server — github listener", () => {
   it("answers 401 without a mission token and never reaches the vendor", async () => {
     const { githubUrl } = await boot();
     const res = await fetch(`${githubUrl}/repos/octocat/hello-world`);
-    const payload = (await res.json()) as { error: { code: string } };
+    const payload = (await res.json()) as { missura: { code: string } };
 
     expect(res.status).toBe(401);
-    expect(payload.error.code).toBe("missura_unauthorized");
+    expect(payload.missura.code).toBe("missura_unauthenticated");
     expect(live.upstream?.received).toHaveLength(0);
   });
 
@@ -153,11 +159,12 @@ describe("proxy server — github listener", () => {
       headers: { authorization: `Bearer ${linearOnly}` },
     });
     const payload = (await res.json()) as {
-      error: { code: string; reason: string };
+      missura: { code: string; reason: string };
     };
 
     expect(res.status).toBe(403);
-    expect(payload.error.reason).toBe("connection not in mission");
+    expect(payload.missura.code).toBe("missura_connection_not_in_mission");
+    expect(payload.missura.reason).toBe("connection not in mission");
     expect(live.upstream?.received).toHaveLength(0);
   });
 

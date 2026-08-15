@@ -101,25 +101,6 @@ export const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 
 const BEARER = "bearer ";
 
-export function errorBody(code: string, reason?: string): string {
-  return JSON.stringify({
-    error: reason === undefined ? { code } : { code, reason },
-  });
-}
-
-/** The one shape every refusal takes: a code, an optional reason, nothing else. */
-export function jsonError(
-  status: number,
-  code: string,
-  reason?: string,
-): ResponseShape {
-  return {
-    status,
-    headers: { ...JSON_HEADERS },
-    body: errorBody(code, reason),
-  };
-}
-
 export function bearerToken(
   headers: Record<string, string>,
 ): string | undefined {

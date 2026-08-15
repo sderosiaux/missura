@@ -1,16 +1,16 @@
-import type { CatalogDecision } from "@missura/core";
+import type { CatalogDecision, MissionClaims } from "@missura/core";
 import {
   emitEvent,
   TOO_LARGE_REASON,
   type AuditDeps,
   type RequestContext,
 } from "./audit";
+import { denialResponse } from "./deny";
 import { applyFilterPlan, type FilterTask } from "./filter";
 import {
   FILTER_INVALIDATED_RESPONSE_HEADERS,
   FORWARDED_RESPONSE_HEADERS,
   hasBody,
-  jsonError,
   JSON_HEADERS,
   readCapped,
   upstreamHeaders,
@@ -100,7 +100,22 @@ export async function forward(
   verdict: CatalogDecision,
   ctx: RequestContext,
   filter?: FilterTask,
+  claims?: MissionClaims,
 ): Promise<ResponseShape> {
+  const deny = (
+    status: number,
+    code: "missura_upstream_error" | "missura_response_too_large",
+    reason: string,
+    headers?: Record<string, string>,
+  ): ResponseShape =>
+    denialResponse(deps.provider, {
+      status,
+      code,
+      reason,
+      claims,
+      now: deps.now?.(),
+      headers,
+    });
   let response: Response;
   try {
     // Origin + the normalized target only: never the raw client path, and
@@ -115,22 +130,32 @@ export async function forward(
     // The upstream error is deliberately swallowed: its message can carry the
     // vendor host, and an injected credential could surface in a wrapped error.
     emitEvent(deps, ctx, verdict, "upstream_error");
-    return jsonError(502, "missura_upstream_error");
+    return deny(
+      502,
+      "missura_upstream_error",
+      "the vendor could not be reached",
+    );
   }
 
+  const headers = relayedHeaders(response, filter !== undefined);
   const payload = await readCapped(response);
   if (payload === undefined) {
     // The vendor was reached, so the record says so — the request is denied
-    // on the way back, not on the way out.
+    // on the way back, not on the way out, and it keeps the headers an answer
+    // would have carried.
     emitEvent(
       deps,
       ctx,
       { ...verdict, decision: "deny", reason: TOO_LARGE_REASON },
       TOO_LARGE_REASON,
     );
-    return jsonError(502, "missura_response_too_large");
+    return deny(
+      502,
+      "missura_response_too_large",
+      TOO_LARGE_REASON,
+      refusalHeaders(headers),
+    );
   }
-  const headers = relayedHeaders(response, filter !== undefined);
 
   if (filter !== undefined) {
     const filtered = applyFilterPlan(

@@ -148,10 +148,25 @@ export async function githubChecks(
       ? SMUGGLED_REPO
       : "octokit/octokit.js";
     const body = await expectStatus(`${githubBase()}/repos/${other}`, token, 404);
-    if (body !== '{"message":"Not Found"}') {
+    const parsed = JSON.parse(body) as {
+      message?: string;
+      missura?: { remediation?: string };
+    };
+    // GitHub's own message at the top level, so it still reads as absence; the
+    // remediation rides underneath and is built from the mission alone, so it
+    // must not name the repo it refused (SPEC §4.8bis).
+    if (parsed.message !== "Not Found") {
       throw new Error(`404 but not GitHub-shaped: ${body}`);
     }
-    return `${other} → 404 {"message":"Not Found"}`;
+    const remediation = parsed.missura?.remediation ?? "";
+    if (remediation.length === 0) {
+      throw new Error(`404 carried no remediation: ${body}`);
+    }
+    const [owner] = other.split("/");
+    if (remediation.toLowerCase().includes((owner ?? other).toLowerCase())) {
+      throw new Error(`remediation named the refused target: ${remediation}`);
+    }
+    return `${other} → 404 "Not Found" + remediation`;
   });
 
   await check(results, "github search — smuggled repo: qualifier is stripped", async () => {

@@ -1,4 +1,4 @@
-import type { FilterPlan, MissionClaims } from "@missura/core";
+import type { DenialCode, FilterPlan, MissionClaims } from "@missura/core";
 
 /**
  * What NARROW had to add to the query to make the ownership check possible,
@@ -41,6 +41,20 @@ export interface NarrowResult {
    */
   denyShape?: "github404";
   reason?: string;
+  /**
+   * Which §4.8bis remediation the refusal deserves. Absent ⇒ "out of mission
+   * scope", the safe default: it is derived from the mission alone, so a
+   * connector that says nothing cannot accidentally produce a remediation that
+   * describes the target.
+   */
+  denialCode?: DenialCode;
+  /**
+   * How many targets the mission resolves to in this connector's terms — the
+   * COUNT only. "Your mission covers 3 repositories" is a fact about the
+   * agent's own grant and reads identically whether the refused repo exists or
+   * not; naming any of them would not.
+   */
+  missionScopeSize?: number;
   postCheck?: NarrowPostCheck;
   /**
    * What the proxy must do to the response: which objects to prove, which
@@ -62,8 +76,20 @@ export type NarrowFn = (
  */
 export const passThroughNarrow: NarrowFn = () => ({ decision: "allow" });
 
-/** GitHub's own not-found body, byte for byte. */
-export const GITHUB_NOT_FOUND_BODY = '{"message":"Not Found"}';
+/** GitHub's own not-found message, byte for byte. */
+export const GITHUB_NOT_FOUND_MESSAGE = "Not Found";
+
+/**
+ * GitHub's own not-found body, byte for byte.
+ *
+ * Used where a refusal must carry NOTHING else: on the way back, when the
+ * vendor already answered and the filter proved the object foreign. A missura
+ * block there would be the enumeration oracle itself — an object that never
+ * existed gets the vendor's bare 404, so an object that exists out of scope
+ * must get exactly the same bytes. Request-side refusals are decided before
+ * the vendor is asked, so they carry the block (see `deny.ts`).
+ */
+export const GITHUB_NOT_FOUND_BODY = `{"message":"${GITHUB_NOT_FOUND_MESSAGE}"}`;
 
 /**
  * A GraphQL not-found: Linear answers 200 with an `errors` array, so an object

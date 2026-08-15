@@ -4,5 +4,6 @@ export * from "./events";
 export * from "./filter-plan";
 export * from "./keys";
 export * from "./missions";
+export * from "./remediation";
 export * from "./token";
 export * from "./vault";

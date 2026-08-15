@@ -134,7 +134,16 @@ describe("missura run — operator plane and NARROW wired", () => {
         headers: auth,
       });
       expect(foreign.status).toBe(404);
-      expect(await foreign.text()).toBe('{"message":"Not Found"}');
+      // GitHub's own not-found message, with the mission-derived remediation
+      // riding underneath — the count of repos the mission covers, never the
+      // one it refused (SPEC §4.8bis).
+      const refusal = (await foreign.json()) as {
+        message: string;
+        missura: { code: string; remediation: string };
+      };
+      expect(refusal.message).toBe("Not Found");
+      expect(refusal.missura.code).toBe("missura_out_of_mission_scope");
+      expect(refusal.missura.remediation).not.toContain("octokit");
       expect(calls).toHaveLength(0);
 
       // In-mission repo reaches the vendor.

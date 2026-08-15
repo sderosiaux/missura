@@ -12,8 +12,14 @@ import {
   type DecisionEvent,
   type Provider,
 } from "@missura/core";
+import { denialResponse } from "./deny";
 import type { NarrowFn } from "./narrow";
-import { handle, type IncomingShape, type PipelineDeps } from "./pipeline";
+import {
+  handle,
+  type IncomingShape,
+  type PipelineDeps,
+  type ResponseShape,
+} from "./pipeline";
 
 export const DEFAULT_LINEAR_PORT = 8481;
 export const DEFAULT_GITHUB_PORT = 8482;
@@ -91,14 +97,30 @@ function readBody(req: IncomingMessage): Promise<string | undefined> {
   });
 }
 
-function send(
-  res: ServerResponse,
-  status: number,
-  headers: Record<string, string>,
-  body: Buffer,
-): void {
-  res.writeHead(status, { ...headers, "content-length": String(body.length) });
+function send(res: ServerResponse, out: ResponseShape): void {
+  const body = Buffer.from(out.body);
+  res.writeHead(out.status, {
+    ...out.headers,
+    "content-length": String(body.length),
+  });
   res.end(body);
+}
+
+const REQUEST_TOO_LARGE_REASON = "request too large";
+
+/**
+ * The two refusals that never reach the pipeline — the inbound cap and a
+ * transport-level failure — take the same vendor-shaped, actionable form as
+ * every other one (SPEC §4.8bis). An SDK does not know which layer refused it,
+ * so a bare `{error:{code}}` here would be the one denial it cannot parse.
+ */
+function transportDenial(
+  deps: PipelineDeps,
+  status: number,
+  code: "missura_request_too_large" | "missura_internal",
+  reason: string,
+): ResponseShape {
+  return denialResponse(deps.provider, { status, code, reason });
 }
 
 /**
@@ -131,11 +153,11 @@ function listener(
           emitTooLarge(deps, startedAt);
           send(
             res,
-            413,
-            { "content-type": "application/json" },
-            Buffer.from(
-              JSON.stringify({ error: { code: "missura_request_too_large" } }),
-              "utf8",
+            transportDenial(
+              deps,
+              413,
+              "missura_request_too_large",
+              REQUEST_TOO_LARGE_REASON,
             ),
           );
           return;
@@ -146,17 +168,16 @@ function listener(
           headers: requestHeaders(req),
           body,
         };
-        const out = await handle(deps, incoming);
-        send(res, out.status, out.headers, Buffer.from(out.body));
+        send(res, await handle(deps, incoming));
       } catch {
         // Transport-level failure (socket error, malformed request): fail closed.
         send(
           res,
-          500,
-          { "content-type": "application/json" },
-          Buffer.from(
-            JSON.stringify({ error: { code: "missura_internal" } }),
-            "utf8",
+          transportDenial(
+            deps,
+            500,
+            "missura_internal",
+            "missura failed before the request could be decided",
           ),
         );
       }

@@ -8,6 +8,7 @@ import {
   bodyText,
   harness,
   request,
+  restDenial,
 } from "./pipeline.fixtures";
 
 describe("pipeline — authn (step 1)", () => {
@@ -18,9 +19,7 @@ describe("pipeline — authn (step 1)", () => {
     expect(res.status).toBe(401);
     expect(h.fetchCount()).toBe(0);
     expect(res.headers["content-type"]).toBe("application/json");
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_unauthorized" },
-    });
+    expect(restDenial(res.body).code).toBe("missura_unauthenticated");
   });
 
   it("rejects a non-Bearer Authorization header with 401 and never calls upstream", async () => {
@@ -65,14 +64,15 @@ describe("pipeline — authn (step 1)", () => {
 });
 
 describe("pipeline — catalog deny (step 2)", () => {
-  it("answers 403 missura_denied with the catalog reason and never calls upstream", async () => {
+  it("answers 403 with the catalog reason and never calls upstream", async () => {
     const h = harness({ decide: (): CatalogDecision => DENY });
     const res = await handle(h.deps, request({ path: "/user" }));
 
     expect(res.status).toBe(403);
     expect(h.fetchCount()).toBe(0);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_denied", reason: DENY.reason },
+    expect(restDenial(res.body)).toMatchObject({
+      code: "missura_operation_not_in_catalog",
+      reason: DENY.reason,
     });
     expect(res.headers["content-type"]).toBe("application/json");
   });

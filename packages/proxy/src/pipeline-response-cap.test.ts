@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { handle, MAX_RESPONSE_BYTES } from "./pipeline";
-import { bodyText, harness, request } from "./pipeline.fixtures";
+import { harness, request, restDenial } from "./pipeline.fixtures";
 
 /**
  * A vendor double whose body is a stream: `pulls` counts how many chunks the
@@ -65,9 +65,7 @@ describe("pipeline — upstream response cap (10 MB)", () => {
     const res = await handle(h.deps, request());
 
     expect(res.status).toBe(502);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_response_too_large" },
-    });
+    expect(restDenial(res.body).code).toBe("missura_response_too_large");
     // One chunk may be pulled by the stream's own queuing strategy before the
     // proxy ever sees the response; what matters is that the proxy dropped the
     // body instead of draining 11 MB of it.
@@ -83,9 +81,7 @@ describe("pipeline — upstream response cap (10 MB)", () => {
     const res = await handle(h.deps, request());
 
     expect(res.status).toBe(502);
-    expect(JSON.parse(bodyText(res.body))).toEqual({
-      error: { code: "missura_response_too_large" },
-    });
+    expect(restDenial(res.body).code).toBe("missura_response_too_large");
     // The read stops just past the cap instead of buffering the whole body.
     expect(upstream.pulls()).toBeLessThan(20);
   });

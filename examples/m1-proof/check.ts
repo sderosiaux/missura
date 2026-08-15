@@ -90,10 +90,27 @@ async function check(
   }
 }
 
+/** The missura block, wherever the vendor envelope carries it (SPEC §4.8bis). */
+interface MissuraBlock {
+  code?: string;
+  reason?: string;
+  remediation?: string;
+}
+
+function missuraBlock(body: unknown): MissuraBlock | undefined {
+  const rest = (body as { missura?: MissuraBlock }).missura;
+  if (rest !== undefined) return rest;
+  const graphql = (
+    body as { errors?: { extensions?: { missura?: MissuraBlock } }[] }
+  ).errors?.[0]?.extensions?.missura;
+  return graphql;
+}
+
 /**
  * Denials are asserted over raw fetch rather than through the SDKs: the SDKs
  * wrap transport errors and hide the status code, and the contract under test
- * is exactly `403 + missura_denied`.
+ * is a 403 whose body is VENDOR-shaped — a GraphQL `errors` array or a REST
+ * `message` — carrying the missura block next to it, never instead of it.
  */
 async function expectDenied(
   url: string,
@@ -109,14 +126,16 @@ async function expectDenied(
     },
   });
   const body: unknown = await res.json().catch(() => ({}));
-  const code = (body as { error?: { code?: string } }).error?.code;
-  if (res.status !== 403 || code !== "missura_denied") {
+  const block = missuraBlock(body);
+  if (res.status !== 403 || block === undefined) {
     throw new Error(
-      `expected 403 missura_denied, got ${String(res.status)} ${String(code)}`,
+      `expected 403 with a missura block, got ${String(res.status)} ${JSON.stringify(body)}`,
     );
   }
-  const reason = (body as { error?: { reason?: string } }).error?.reason ?? "";
-  return `403 missura_denied — ${reason}`;
+  if ((block.remediation ?? "").length === 0) {
+    throw new Error(`denial carried no remediation: ${JSON.stringify(block)}`);
+  }
+  return `403 ${String(block.code)} — ${String(block.reason)}`;
 }
 
 /** The shape `endpoint.merge` returns: request options with a headers bag. */

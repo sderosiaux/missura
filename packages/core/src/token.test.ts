@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   MAX_TTL_SECONDS,
+  MissionExpiredError,
   signDevToken,
   signMissionToken,
   verifyMissionToken,
@@ -72,6 +73,39 @@ describe("mission token", () => {
       now: Date.now() - 3_600_000, // minted an hour ago: already expired
     });
     expect(() => verifyMissionToken(token, { key: KEY })).toThrow(/expired/i);
+  });
+
+  /**
+   * The signature is checked before the clock, so an expiry rejection is the
+   * one refusal that still knows a real mission. Carrying its claims is what
+   * lets a denial say "your mission for customer:acme expired" instead of the
+   * unhelpful "invalid token" a garbage bearer gets.
+   */
+  it("carries the verified claims on an expiry rejection", () => {
+    const token = signMissionToken(MISSION, {
+      key: KEY,
+      ttlSeconds: 60,
+      now: Date.now() - 3_600_000,
+    });
+    try {
+      verifyMissionToken(token, { key: KEY });
+      expect.unreachable("expected an expiry rejection");
+    } catch (err) {
+      expect(err).toBeInstanceOf(MissionExpiredError);
+      expect((err as MissionExpiredError).claims.purpose).toBe(MISSION.purpose);
+    }
+  });
+
+  it("does not report a forged, unsigned token as merely expired", () => {
+    const token = forge({
+      ...MISSION,
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: 0,
+      exp: 1,
+    });
+    expect(() =>
+      verifyMissionToken(`${token}tampered`, { key: KEY }),
+    ).not.toThrow(MissionExpiredError);
   });
 
   it("rejects a validly signed token whose payload has no exp", () => {
