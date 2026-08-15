@@ -47,6 +47,7 @@ import {
 } from "./entity-graph";
 import type { EntityGraphReader } from "./entity-graph-store";
 import { githubRepoScopeKey, parseGithubRepoScope } from "./github-scope";
+import type { MissionScope } from "./token";
 
 /** What a mission was scoped to, before the graph is consulted. */
 export type ScopeRequest =
@@ -221,6 +222,30 @@ function whyNoEntity(refs: readonly EntityLinkRef[]): DegradeReason {
   if (statuses.includes("proposed")) return "link_proposed";
   if (statuses.includes("broken")) return "link_broken";
   return "link_rejected";
+}
+
+/**
+ * What a mission's scope asks the graph, or nothing at all.
+ *
+ * `undefined` is a real answer, not a failure: a scope naming only explicit
+ * repositories is enforced without the graph ever being opened. The graph only
+ * ever ADDS systems, so it can never be a prerequisite for getting value.
+ *
+ * A scope that is both an entity and a native id is refused. Two meanings for
+ * one scope is one meaning too many, and picking either would be a guess about
+ * what the operator meant to grant.
+ */
+export function scopeRequestFor(scope: MissionScope): ScopeRequest | undefined {
+  if (scope.native !== undefined) {
+    if (scope.customer !== undefined) {
+      throw new Error("mission scope names both a customer and a native id");
+    }
+    return { kind: "native", system: scope.native.system, id: scope.native.id };
+  }
+  if (scope.customer !== undefined) {
+    return { kind: "entity", key: `customer:${scope.customer}` };
+  }
+  return undefined;
 }
 
 export function resolveScopeFromGraph(

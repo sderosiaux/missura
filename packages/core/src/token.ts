@@ -1,8 +1,22 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import type { LinkSystem } from "./entity-graph";
 
 export interface MissionScope {
   customer?: string;
   repos?: string[];
+  /**
+   * A mission scoped DIRECTLY to one native id, with no entity behind it — the
+   * shape an event hands you: a Zendesk webhook carries `organization_id`, not
+   * a business name.
+   *
+   * It is single-system by construction: the graph may widen it to the other
+   * systems of the entity that confirms this id, and can do nothing else. A
+   * deployment with no graph at all still mints and still works, which is why
+   * this field exists beside `customer` rather than being expressed through it.
+   *
+   * `customer` and `native` are mutually exclusive — see `scopeRequestFor`.
+   */
+  native?: { system: LinkSystem; id: string };
 }
 
 export interface MissionInput {
