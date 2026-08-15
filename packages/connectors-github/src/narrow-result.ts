@@ -1,3 +1,5 @@
+import type { FilterPlan } from "@missura/core";
+
 /**
  * Structurally identical to the proxy's `NarrowResult`/`denyShape` — declared
  * here because a connector never imports the proxy (see packages/proxy/src/narrow.ts
@@ -7,9 +9,18 @@ export interface GithubNarrowResult {
   decision: "allow" | "deny";
   /** Rewritten request target (forced `repo:` qualifiers, for instance). */
   path?: string;
-  /** `github404` answers with GitHub's own not-found shape: no enumeration. */
+  /**
+   * `github404` answers with GitHub's own not-found shape: no enumeration. On
+   * an ALLOW it names the shape a fail-closed FILTER must take, so a refusal
+   * on the way back reads as the vendor's own "not found" too.
+   */
   denyShape?: "github404";
   reason?: string;
+  /**
+   * What the proxy must do to the response: which objects to prove ours, which
+   * fields to take back. This is how a query we let run is made safe.
+   */
+  filterPlan?: FilterPlan;
 }
 
 export const REPO_NOT_IN_MISSION = "repo not in mission";

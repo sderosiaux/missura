@@ -7,6 +7,7 @@ import {
 } from "./audit";
 import { applyFilterPlan, type FilterTask } from "./filter";
 import {
+  FILTER_INVALIDATED_RESPONSE_HEADERS,
   FORWARDED_RESPONSE_HEADERS,
   hasBody,
   jsonError,
@@ -44,6 +45,25 @@ export function upstreamTarget(
     return undefined;
   }
   return url;
+}
+
+/**
+ * The vendor headers the agent is allowed to see, minus the ones a filter plan
+ * invalidates. `filtered` is "a plan applied to this response", not "the plan
+ * removed something": a header that appears only on untouched pages tells the
+ * agent which pages held objects it may not see.
+ */
+function relayedHeaders(
+  response: Response,
+  filtered: boolean,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const name of FORWARDED_RESPONSE_HEADERS) {
+    if (filtered && FILTER_INVALIDATED_RESPONSE_HEADERS.has(name)) continue;
+    const value = response.headers.get(name);
+    if (value !== null) headers[name] = value;
+  }
+  return headers;
 }
 
 /**
@@ -88,11 +108,7 @@ export async function forward(
     );
     return jsonError(502, "missura_response_too_large");
   }
-  const headers: Record<string, string> = {};
-  for (const name of FORWARDED_RESPONSE_HEADERS) {
-    const value = response.headers.get(name);
-    if (value !== null) headers[name] = value;
-  }
+  const headers = relayedHeaders(response, filter !== undefined);
 
   if (filter !== undefined) {
     const filtered = applyFilterPlan(

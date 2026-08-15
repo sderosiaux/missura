@@ -47,8 +47,50 @@ const DROPPED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
   "accept-encoding",
 ]);
 
-/** The only upstream response headers echoed back: no cookies, no vendor metadata. */
-export const FORWARDED_RESPONSE_HEADERS: readonly string[] = ["content-type"];
+/**
+ * The only upstream response headers echoed back — an explicit allowlist, and
+ * never a passthrough.
+ *
+ * M1 relayed `content-type` alone, which meant an SDK behind the proxy could
+ * not see the vendor's rate-limit budget or its `Retry-After` and had to guess
+ * when to back off (SPEC §12: same API, so the retry signals are part of the
+ * contract). `x-github-request-id` is here so a user can quote one line to
+ * vendor support.
+ *
+ * What stays out is what belongs to the connection or to OUR credential:
+ * `set-cookie` would hand the agent vendor session state, and
+ * `x-oauth-scopes` / `x-accepted-oauth-scopes` describe the privileges of the
+ * credential the agent never holds. `etag` and `last-modified` are absent for
+ * the same reason `link` is dropped below — they describe the vendor's body,
+ * not the one we return, and a conditional request built on them would answer
+ * 304 for a body the agent never received.
+ */
+export const FORWARDED_RESPONSE_HEADERS: readonly string[] = [
+  "content-type",
+  "x-ratelimit-limit",
+  "x-ratelimit-remaining",
+  "x-ratelimit-used",
+  "x-ratelimit-reset",
+  "x-ratelimit-resource",
+  "retry-after",
+  "x-github-request-id",
+  "link",
+];
+
+/**
+ * Relayed headers that stop being true the moment a filter plan applies.
+ *
+ * `link` carries GitHub's own pagination cursors, computed over the UNFILTERED
+ * result set: its `next` page continues the vendor's page 1, not ours, so
+ * following it walks a list whose sizes we changed. It is dropped whenever a
+ * plan applied — not merely whenever the plan removed something. Present-if-
+ * nothing-was-removed would answer, header by header, the question "did this
+ * page contain objects I am not allowed to see", which is the enumeration
+ * oracle filtering exists to close.
+ */
+export const FILTER_INVALIDATED_RESPONSE_HEADERS: ReadonlySet<string> = new Set(
+  ["link"],
+);
 
 /**
  * Upstream responses are capped at 10 MB (SPEC: JSON ≤ 10 MB), the same cap
