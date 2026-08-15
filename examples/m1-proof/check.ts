@@ -5,6 +5,9 @@
  *   missura init && missura run          # terminal 1
  *   MISSURA_TOKEN=$(missura token) pnpm demo:m1
  *
+ * `pnpm demo:m1` sets MISSURA_LIVE=1; without it this script refuses to run,
+ * because it hits real vendor APIs.
+ *
  * It drives the OFFICIAL vendor SDKs — @linear/sdk and octokit, unmodified —
  * at the proxy instead of the vendor, with ZERO vendor credentials in this
  * process's environment. Reads succeed, everything uncataloged is denied.
@@ -28,6 +31,22 @@ interface CheckResult {
 function fail(message: string): never {
   process.stderr.write(`${message}\n`);
   process.exit(1);
+}
+
+/**
+ * This script talks to real vendors through a running proxy: it is not a test
+ * and must never be picked up by one. The opt-in is explicit so a CI runner,
+ * a watcher or a stray `tsx check.ts` stops here instead of hitting the
+ * network with someone's workspace credentials.
+ */
+function assertLive(): void {
+  if (process.env.MISSURA_LIVE !== "1") {
+    fail(
+      "refusing to run: this is a live proof against real vendor APIs.\n" +
+        "Start the proxy (missura run), then: MISSURA_TOKEN=$(missura token) pnpm demo:m1\n" +
+        "To run this file directly, set MISSURA_LIVE=1.",
+    );
+  }
 }
 
 /**
@@ -79,7 +98,7 @@ async function check(
 async function expectDenied(
   url: string,
   token: string,
-  init: RequestInit = {},
+  init: Omit<RequestInit, "headers"> & { headers?: Record<string, string> } = {},
 ): Promise<string> {
   const res = await fetch(url, {
     ...init,
@@ -100,26 +119,48 @@ async function expectDenied(
   return `403 missura_denied — ${reason}`;
 }
 
+/** The shape `endpoint.merge` returns: request options with a headers bag. */
+interface EndpointOptions extends Record<string, unknown> {
+  headers?: Record<string, string>;
+}
+
+/**
+ * The `request` an auth-strategy hook receives: callable, and carrying the
+ * `endpoint` builder Octokit uses to turn a route into request options.
+ */
+interface HookRequest {
+  (options: EndpointOptions): Promise<unknown>;
+  endpoint: {
+    merge(route: string, parameters: Record<string, unknown>): EndpointOptions;
+  };
+}
+
+interface MissionTokenAuth {
+  (): Promise<{ type: string }>;
+  hook(
+    request: HookRequest,
+    route: string,
+    parameters: Record<string, unknown>,
+  ): Promise<unknown>;
+}
+
 /**
  * Octokit's built-in token strategy sends `token <t>`, and its constructor
  * ignores a `headers` option entirely — so the mission token is installed
  * through the official auth-strategy extension point instead, as `Bearer`.
  */
-function missionTokenAuth(token: string) {
-  const auth = async (): Promise<{ type: string }> => ({ type: "missura" });
+function missionTokenAuth(token: string): MissionTokenAuth {
+  const auth = (): Promise<{ type: string }> =>
+    Promise.resolve({ type: "missura" });
   return Object.assign(auth, {
     hook: async (
-      request: (options: unknown) => Promise<unknown>,
+      request: HookRequest,
       route: string,
       parameters: Record<string, unknown>,
     ): Promise<unknown> => {
-      const endpoint = (
-        request as unknown as {
-          endpoint: { merge: (r: string, p: unknown) => Record<string, unknown> };
-        }
-      ).endpoint.merge(route, parameters);
+      const endpoint = request.endpoint.merge(route, parameters);
       endpoint.headers = {
-        ...(endpoint.headers as Record<string, string>),
+        ...endpoint.headers,
         authorization: `Bearer ${token}`,
       };
       return request(endpoint);
@@ -138,6 +179,7 @@ function table(results: CheckResult[]): string {
 }
 
 async function main(): Promise<void> {
+  assertLive();
   const envDetail = assertNoVendorCredentials();
   const token = requireToken();
   const repo = process.env.MISSURA_GITHUB_REPO?.trim() ?? DEFAULT_REPO;
@@ -151,7 +193,7 @@ async function main(): Promise<void> {
   const linear = new LinearClient({ accessToken: token, apiUrl: LINEAR_URL });
   const octokit = new Octokit({
     baseUrl: GITHUB_BASE,
-    authStrategy: () => missionTokenAuth(token),
+    authStrategy: (): MissionTokenAuth => missionTokenAuth(token),
   });
 
   const results: CheckResult[] = [

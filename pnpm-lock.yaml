@@ -64,6 +64,25 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  examples/m1-proof:
+    dependencies:
+      '@linear/sdk':
+        specifier: ^90.0.0
+        version: 90.0.0(graphql@16.14.2)
+      octokit:
+        specifier: ^5.0.5
+        version: 5.0.5
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      tsx:
+        specifier: ^4
+        version: 4.23.12
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   packages/cli:
     dependencies:
       '@missura/core':
