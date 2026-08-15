@@ -1,4 +1,4 @@
-import { OperationTypeNode, parse } from "graphql";
+import { Kind, OperationTypeNode, parse } from "graphql";
 import type { Exchange } from "./classify";
 
 /**
@@ -35,7 +35,7 @@ export function assertQueryOnly(document: string): void {
     );
   }
   for (const definition of parsed.definitions) {
-    if (definition.kind !== "OperationDefinition") continue;
+    if (definition.kind !== Kind.OPERATION_DEFINITION) continue;
     if (definition.operation !== OperationTypeNode.QUERY) {
       throw new WriteAttemptError(
         `refusing to send a GraphQL ${definition.operation}: this suite is read-only`,

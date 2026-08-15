@@ -269,9 +269,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
     unsafe,
     notes: headers.notes,
     objectsRemoved,
-    ...(rewritten && upstream !== undefined
-      ? { observedNarrowing: upstream }
-      : {}),
+    ...(rewritten ? { observedNarrowing: upstream } : {}),
     ...(diff === undefined ? {} : { diff }),
   };
 }
