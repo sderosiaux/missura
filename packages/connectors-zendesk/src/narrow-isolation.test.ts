@@ -187,9 +187,38 @@ describe("a mission scoped to one organization cannot reach another", () => {
     ).toEqual([]);
   });
 
+  /**
+   * A comment publishes no owner at all, so the plan proves NOTHING about the
+   * answer — which means the whole isolation of this route rests on the parent
+   * proof, and the property to state is that the proof is aimed at the ticket
+   * and judged against the mission's own organizations. The proxy refuses the
+   * listing when that ticket's `organization_id` is not one of them, and it
+   * refuses it identically when the ticket does not exist.
+   */
   it("not by a comment on a foreign ticket", () => {
     const result = narrowZendesk("/api/v2/tickets/35436/comments", SCOPE);
-    expect(result.decision).toBe("deny");
+    const proof = result.parentProof;
+
+    expect(planOf(result).rules).toEqual([]);
+    expect(proof?.probe.path).toBe("/api/v2/tickets/35436");
+    expect(proof?.ownerPath).toEqual(["ticket", "organization_id"]);
+    // The mission's own set, and nothing wider: B is never in it.
+    expect(result.missionOwnerIds).toEqual([A]);
+    expect(result.missionOwnerIds).not.toContain(B);
+  });
+
+  /**
+   * The proof key names the PARENT and nothing about the child, so it cannot be
+   * made to stand for a different ticket by dressing up the child request.
+   */
+  it("not by a proof key an agent can steer with the child request", () => {
+    const keys = [
+      "/api/v2/tickets/35436/comments",
+      "/api/v2/tickets/35436/comments?page=9",
+      `/api/v2/tickets/35436/comments?include=users&organization=${B}`,
+    ].map((path) => narrowZendesk(path, SCOPE).parentProof?.key);
+
+    expect(new Set(keys)).toEqual(new Set(["ticket:35436"]));
   });
 });
 

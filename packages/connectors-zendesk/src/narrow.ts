@@ -1,7 +1,8 @@
-import type { FilterPlan } from "@missura/core";
+import type { FilterPlan, ParentProof } from "@missura/core";
 import { decideZendesk } from "./catalog";
 import { canonicalize, isVendorId, type CanonicalRequest } from "./narrow-path";
 import {
+  commentsPlan,
   listPlan,
   offsetPagination,
   organizationPlan,
@@ -9,7 +10,6 @@ import {
   usesCursorPagination,
 } from "./narrow-plan";
 import {
-  COMMENTS_UNPROVABLE,
   CURSOR_PAGINATION,
   deny,
   NO_ORGANIZATION_IN_SCOPE,
@@ -150,14 +150,64 @@ function organizations(
   );
 }
 
+/**
+ * A ticket's comments: allowed, behind a proof of the ticket itself.
+ *
+ * VERIFIED ABSENCE is what makes the proof necessary. A comment publishes
+ * `attachments, audit_id, author_id, body, created_at, html_body, id, metadata,
+ * plain_body, public, type, uploads, via` — no organization and no ticket — its
+ * only sideload is `include=users`, and `comments` is not a ticket sideload. No
+ * single call returns the comments and the owning organization together, so
+ * nothing in this answer can be judged and the plan carries no ownership rule.
+ *
+ * The whole decision therefore rests on `/api/v2/tickets/{id}`, which the proxy
+ * fetches first and proves by its `organization_id` — the same discriminator
+ * every other Zendesk object here is judged by. A ticket outside the mission, a
+ * ticket that never existed and a probe that failed all refuse identically, so
+ * the id in the path is not an oracle.
+ *
+ * The proof key names the TICKET alone, so paging through one ticket's comments
+ * costs one probe and no more.
+ */
+function ticketProof(id: string): ParentProof {
+  return {
+    key: `ticket:${id}`,
+    probe: { method: "GET", path: `/api/v2/tickets/${id}`, body: "" },
+    ownerPath: ["ticket", "organization_id"],
+  };
+}
+
+function comments(
+  canonical: CanonicalRequest,
+  id: string,
+  organizationIds: readonly string[],
+): ZendeskNarrowResult {
+  const params = withoutSideloads(new URLSearchParams(canonical.search));
+  if (usesCursorPagination(params)) return deny(CURSOR_PAGINATION);
+  const allowed = allow(
+    `${canonical.path}${query(params)}`,
+    commentsPlan(offsetPagination(params, "comments")),
+  );
+  if (allowed.decision === "deny") return allowed;
+  return {
+    ...allowed,
+    parentProof: ticketProof(id),
+    // The proxy compares the probe's owner against these. An empty set owns
+    // nothing, which is why a mission with no organization is refused above.
+    missionOwnerIds: [...organizationIds],
+  };
+}
+
 function tickets(
   canonical: CanonicalRequest,
   organizationIds: readonly string[],
 ): ZendeskNarrowResult {
+  const id = canonical.segments[3];
   const tail = canonical.segments[4];
-  // Refused identically whichever ticket is named: the refusal is a property of
-  // the endpoint, so it can say nothing about the target.
-  if (tail === "comments") return deny(COMMENTS_UNPROVABLE);
+  if (tail === "comments") {
+    if (id === undefined || !isVendorId(id)) return deny(NOT_IN_CATALOG_SCOPE);
+    return comments(canonical, id, organizationIds);
+  }
   if (tail !== undefined) return deny(NOT_IN_CATALOG_SCOPE);
   return objectById(canonical, "ticket", "ticket", organizationIds);
 }
@@ -229,16 +279,19 @@ export function narrowZendesk(
 }
 
 /**
- * Attached once, at the exit, so no refusal can be added without it. The count
+ * Attached once, at the exit, so no result can be built without it. The count
  * is what the remediation is built from — "your mission covers 3 organizations"
  * reads the same whether the refused one exists or not, which is the whole
  * point (SPEC §4.8bis).
+ *
+ * On ALLOWs too, and not for decoration: a request the proxy lets through can
+ * still be refused later, by the FILTER or by a PARENT PROOF, and that refusal
+ * has to carry the same remediation as one taken here. A count attached only to
+ * denials would leave the late ones speechless.
  */
 function withScopeSize(
   result: ZendeskNarrowResult,
   size: number,
 ): ZendeskNarrowResult {
-  return result.decision === "deny"
-    ? { ...result, missionScopeSize: size }
-    : result;
+  return { ...result, missionScopeSize: size };
 }

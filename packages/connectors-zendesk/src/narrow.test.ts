@@ -113,31 +113,92 @@ describe("narrowZendesk — an object named by id", () => {
 
 describe("narrowZendesk — a ticket's comments", () => {
   /**
-   * VERIFIED ABSENCE, not an omission. A Zendesk ticket comment carries
-   * `attachments, audit_id, author_id, body, created_at, html_body, id,
-   * metadata, plain_body, public, type, uploads, via` — no organization, and no
-   * ticket either. The endpoint's only sideload is `include=users`
-   * (developer.zendesk.com, Ticket Comments), and `comments` is not among the
-   * ticket sideloads, so no single call returns both the comments and the
-   * ticket's organization.
+   * VERIFIED ABSENCE, and the reason this endpoint needs a PARENT PROOF. A
+   * Zendesk ticket comment carries `attachments, audit_id, author_id, body,
+   * created_at, html_body, id, metadata, plain_body, public, type, uploads,
+   * via` — no organization, and no ticket either. The endpoint's only sideload
+   * is `include=users` (developer.zendesk.com, Ticket Comments), and `comments`
+   * is not among the ticket sideloads, so no single call returns both the
+   * comments and the ticket's organization.
    *
-   * Which leaves resolving the ticket first — a second hop this connector does
-   * not make — or forwarding a read whose owner cannot be resolved. An object
-   * whose owner cannot be resolved is foreign, so the refusal is the same rule
-   * every other object here is judged by.
+   * So nothing in the answer can be proven, and the plan does not pretend
+   * otherwise: it carries no ownership rule at all. The whole decision rests on
+   * the ticket named in the PATH, which the proxy fetches first.
    */
-  it("refuses the listing rather than forward what it cannot prove", () => {
+  it("allows the listing behind a proof of the ticket that owns it", () => {
     const result = narrowZendesk("/api/v2/tickets/35436/comments", SCOPE);
-    expect(result.decision).toBe("deny");
+    expect(result.decision).toBe("allow");
     expect(result.denyShape).toBe("zendesk404");
-    expect(result.reason).toContain("organization");
-    expect(result.filterPlan).toBeUndefined();
+    expect(result.parentProof).toEqual({
+      key: "ticket:35436",
+      probe: { method: "GET", path: "/api/v2/tickets/35436", body: "" },
+      ownerPath: ["ticket", "organization_id"],
+    });
   });
 
-  it("refuses it identically whichever ticket is named", () => {
-    const mine = narrowZendesk("/api/v2/tickets/1/comments", SCOPE);
-    const foreign = narrowZendesk("/api/v2/tickets/2/comments", SCOPE);
-    expect(mine).toEqual(foreign);
+  it("proves nothing from the comments themselves", () => {
+    const result = narrowZendesk("/api/v2/tickets/35436/comments", SCOPE);
+    expect(plan(result).rules).toEqual([]);
+  });
+
+  it("hands the proxy the mission's organizations, and their count", () => {
+    const result = narrowZendesk("/api/v2/tickets/35436/comments", SCOPE);
+    expect(result.missionOwnerIds).toEqual(SCOPE.zendeskOrganizationIds);
+    expect(result.missionScopeSize).toBe(2);
+  });
+
+  /** One ticket, one proof: paging through its comments must not re-probe. */
+  it("asks for the same proof whichever page of comments is asked for", () => {
+    const first = narrowZendesk("/api/v2/tickets/35436/comments", SCOPE);
+    const later = narrowZendesk(
+      "/api/v2/tickets/35436/comments?page=4&per_page=25",
+      SCOPE,
+    );
+    expect(later.parentProof).toEqual(first.parentProof);
+  });
+
+  it("walks the comments forward on the agent's own page number", () => {
+    const result = narrowZendesk(
+      "/api/v2/tickets/35436/comments?page=2&per_page=25",
+      SCOPE,
+    );
+    expect(plan(result).pagination).toEqual({
+      path: [],
+      nodes: "comments",
+      requested: 25,
+      cursor: { source: "query-page", param: "page", page: 2, pageSize: 25 },
+    });
+  });
+
+  it("refuses cursor pagination here like everywhere else", () => {
+    const result = narrowZendesk(
+      "/api/v2/tickets/35436/comments?page[size]=100",
+      SCOPE,
+    );
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("per_page");
+  });
+
+  /**
+   * The attachments refusal, honoured in the one place a comment could route
+   * around it. `/api/v2/attachments/*` is denied by name because a
+   * `content_url` points at a host outside this connection — and a comment
+   * carries those very URLs inline. Handing them over would give the agent the
+   * second hop the catalog refuses to proxy.
+   */
+  it("takes back the attachment URLs the catalog refuses by name", () => {
+    const stripped = plan(
+      narrowZendesk("/api/v2/tickets/35436/comments", SCOPE),
+    ).strip;
+    expect(stripped).toContainEqual(["comments", "*", "attachments"]);
+    expect(stripped).toContainEqual(["comments", "*", "uploads"]);
+    expect(stripped).toContainEqual(["next_page"]);
+  });
+
+  it("still refuses a mission that resolves to no organization", () => {
+    const result = narrowZendesk("/api/v2/tickets/35436/comments", NONE);
+    expect(result.decision).toBe("deny");
+    expect(result.parentProof).toBeUndefined();
   });
 });
 

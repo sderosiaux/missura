@@ -107,6 +107,41 @@ export function listPlan(
   };
 }
 
+/**
+ * A comment's attachment URLs, taken back on the way out.
+ *
+ * `/api/v2/attachments/*` and every `attachments` segment are refused BY NAME
+ * (see `catalog-refusals.ts`): a `content_url` points at a host outside this
+ * connection, which missura does not proxy because it cannot filter it. A
+ * comment carries those very URLs inline, so leaving them in would hand the
+ * agent the second hop the catalog refuses — the refusal would hold at the
+ * endpoint and leak through the body. `uploads` is the same family.
+ *
+ * The cost is honest and small: an agent reads a comment without being told
+ * where its files live, which is exactly what the attachment refusal already
+ * says it may not learn from us.
+ */
+const COMMENT_ATTACHMENTS: readonly (readonly string[])[] = [
+  ["comments", "*", "attachments"],
+  ["comments", "*", "uploads"],
+];
+
+/**
+ * A ticket's comments. NO ownership rule, and that is the honest shape: a
+ * comment publishes no organization and no ticket, so nothing in this response
+ * can be proven. The whole decision was taken before the call, by proving the
+ * ticket named in the path (`ParentProof`).
+ */
+export function commentsPlan(
+  pagination: PaginationRule | undefined,
+): FilterPlan {
+  return {
+    rules: [],
+    strip: [...VENDOR_POSITIONS, ...COMMENT_ATTACHMENTS],
+    ...(pagination === undefined ? {} : { pagination }),
+  };
+}
+
 interface PageParam {
   /** The spelling the agent used, so a rewrite replaces it instead of adding one. */
   name: string;

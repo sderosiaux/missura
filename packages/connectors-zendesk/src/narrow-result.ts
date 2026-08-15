@@ -1,4 +1,4 @@
-import type { DenialCode, FilterPlan } from "@missura/core";
+import type { DenialCode, FilterPlan, ParentProof } from "@missura/core";
 
 /**
  * Structurally identical to the proxy's `NarrowResult`/`denyShape` — declared
@@ -26,6 +26,18 @@ export interface ZendeskNarrowResult {
    * fields to take back. This is how a query we let run is made safe.
    */
   filterPlan?: FilterPlan;
+  /**
+   * A parent to prove before this request runs, for the one route whose objects
+   * publish no owner of their own: a ticket's comments, proven through the
+   * ticket named in the path.
+   */
+  parentProof?: ParentProof;
+  /**
+   * The mission's organization ids, for the stages that have no `FilterRule` to
+   * read them from. Never serialized to the agent — a refusal may carry the
+   * COUNT, never the members.
+   */
+  missionOwnerIds?: readonly string[];
 }
 
 export const ORG_NOT_IN_MISSION = "organization not in mission";
@@ -35,21 +47,6 @@ export const NOT_IN_CATALOG_SCOPE = "path not narrowable under a mission scope";
 export const UNDECODABLE_PATH = "path is not decodable";
 export const AMBIGUOUS_QUERY =
   "the search `query` parameter was given more than once";
-
-/**
- * The comment refusal, spelled out where the audit log will quote it.
- *
- * A Zendesk ticket comment publishes no organization and no ticket
- * (`attachments, audit_id, author_id, body, created_at, html_body, id,
- * metadata, plain_body, public, type, uploads, via`), its only sideload is
- * `include=users`, and `comments` is not a ticket sideload — so no single call
- * returns the comments and the owning organization together. Proving one would
- * mean resolving its ticket first, which is a second hop this connector does
- * not make. An object whose owner cannot be resolved is foreign; a whole
- * listing of them is a refusal.
- */
-export const COMMENTS_UNPROVABLE =
-  "a ticket comment carries no organization and Zendesk publishes no sideload that supplies one, so this listing cannot be proven to belong to your mission — read the ticket itself instead";
 
 /**
  * Cursor pagination is Zendesk's modern shape and the one its docs recommend,

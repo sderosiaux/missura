@@ -12,6 +12,7 @@
   "dependencies": {
     "@missura/connectors-github": "workspace:*",
     "@missura/connectors-linear": "workspace:*",
+    "@missura/connectors-zendesk": "workspace:*",
     "@missura/core": "workspace:*"
   },
   "devDependencies": {

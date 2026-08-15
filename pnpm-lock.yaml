@@ -223,6 +223,9 @@ importers:
       '@missura/connectors-linear':
         specifier: workspace:*
         version: link:../connectors-linear
+      '@missura/connectors-zendesk':
+        specifier: workspace:*
+        version: link:../connectors-zendesk
       '@missura/core':
         specifier: workspace:*
         version: link:../core
