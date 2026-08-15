@@ -42,6 +42,13 @@ function isFiniteNumber(value: unknown): boolean {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+/** An array claim is valid only if every element is a string — no coercion. */
+function isStringArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
 /** Fails closed: a missing or mistyped claim rejects the token, never defaults. */
 function validateClaims(value: unknown): MissionClaims {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -60,8 +67,8 @@ function validateClaims(value: unknown): MissionClaims {
         c.scope !== null &&
         !Array.isArray(c.scope),
     ],
-    ["connections", Array.isArray(c.connections)],
-    ["allow", Array.isArray(c.allow)],
+    ["connections", isStringArray(c.connections)],
+    ["allow", isStringArray(c.allow)],
   ];
   for (const [field, ok] of checks) {
     if (!ok) throw new Error(`invalid claims: ${field}`);
@@ -111,4 +118,25 @@ export function verifyMissionToken(
   const now = Math.floor((opts.now ?? Date.now()) / 1000);
   if (claims.exp <= now) throw new Error("token expired");
   return claims;
+}
+
+/**
+ * M1 scope-all developer token. Real, scoped missions arrive in M2 — this
+ * helper exists so the data plane can be exercised without a mission source,
+ * and it grants only read/search on the two M1 connections.
+ */
+export function signDevToken(opts: {
+  key: Buffer;
+  ttlSeconds: number;
+}): string {
+  return signMissionToken(
+    {
+      id: "msn_dev",
+      purpose: "m1 dev token — scope all",
+      scope: {},
+      connections: ["linear", "github"],
+      allow: ["read", "search"],
+    },
+    opts,
+  );
 }

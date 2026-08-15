@@ -26,4 +26,21 @@ export default tseslint.config(
       "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
     },
   },
+  {
+    // The M1 proof is a standalone script, but it is the artefact a reader
+    // trusts the most — it gets the same rails as packages/**, minus the file
+    // size cap (one script, one story).
+    files: ["examples/**/*.ts"],
+    extends: [
+      ...tseslint.configs.strictTypeChecked,
+      ...tseslint.configs.stylisticTypeChecked,
+    ],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      "@typescript-eslint/explicit-function-return-type": "error",
+      "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
 );

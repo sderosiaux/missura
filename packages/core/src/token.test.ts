@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { signMissionToken, verifyMissionToken } from "./token";
+import { signDevToken, signMissionToken, verifyMissionToken } from "./token";
 
 const KEY = Buffer.from("k".repeat(32));
 
@@ -124,5 +124,79 @@ describe("mission token", () => {
     expect(() =>
       verifyMissionToken(token, { key: KEY, now: (iat + 60) * 1000 }),
     ).toThrow(/expired/i);
+  });
+
+  it("rejects non-string elements in connections", () => {
+    const token = forge({
+      ...MISSION,
+      connections: ["linear", 42],
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
+      /invalid claims: connections/i,
+    );
+  });
+
+  it("rejects non-string elements in allow", () => {
+    const token = forge({
+      ...MISSION,
+      allow: ["read", { admin: true }],
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
+      /invalid claims: allow/i,
+    );
+  });
+
+  it("rejects nested arrays smuggled into allow", () => {
+    const token = forge({
+      ...MISSION,
+      allow: [["read"]],
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
+      /invalid claims: allow/i,
+    );
+  });
+});
+
+describe("dev token", () => {
+  it("verifies with the same key and carries the dev mission id", () => {
+    const claims = verifyMissionToken(
+      signDevToken({ key: KEY, ttlSeconds: 3600 }),
+      { key: KEY },
+    );
+    expect(claims.id).toBe("msn_dev");
+    expect(claims.purpose).toBe("m1 dev token — scope all");
+  });
+
+  it("scopes all: empty scope, both connections, read + search", () => {
+    const claims = verifyMissionToken(
+      signDevToken({ key: KEY, ttlSeconds: 60 }),
+      { key: KEY },
+    );
+    expect(claims.scope).toEqual({});
+    expect(claims.connections).toEqual(["linear", "github"]);
+    expect(claims.allow).toEqual(["read", "search"]);
+  });
+
+  it("honours the ttl", () => {
+    const claims = verifyMissionToken(
+      signDevToken({ key: KEY, ttlSeconds: 900 }),
+      { key: KEY },
+    );
+    expect(claims.exp - claims.iat).toBe(900);
+  });
+
+  it("refuses a weak key", () => {
+    expect(() =>
+      signDevToken({ key: Buffer.from("k".repeat(31)), ttlSeconds: 60 }),
+    ).toThrow(/key/i);
   });
 });
