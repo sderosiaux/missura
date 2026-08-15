@@ -1,13 +1,11 @@
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname } from "node:path";
-import { SECRET_FILE_MODE } from "./keys";
+  fileStamp,
+  parseState,
+  writeState,
+  type StateFile,
+} from "./mission-state";
 import {
   signMissionToken,
   verifyMissionToken,
@@ -33,10 +31,6 @@ export interface MissionRecord extends CreateMission {
 /** Capabilities a mission grants in M2 — read-only, deliberately. */
 const ALLOW = ["read", "search"] as const;
 
-interface StateFile {
-  missions: MissionRecord[];
-}
-
 function requireText(field: string, value: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new Error(`${field} is required and must not be empty`);
@@ -44,65 +38,20 @@ function requireText(field: string, value: string): string {
   return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Fails closed: a state file we cannot fully parse is an error, not an empty list. */
-function parseState(raw: string): MissionRecord[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("mission state file is not valid JSON");
-  }
-  if (!isRecord(parsed) || !Array.isArray(parsed.missions)) {
-    throw new Error("mission state file is malformed: missions");
-  }
-  return parsed.missions.map((entry: unknown): MissionRecord => {
-    if (
-      !isRecord(entry) ||
-      typeof entry.id !== "string" ||
-      typeof entry.jti !== "string" ||
-      typeof entry.purpose !== "string" ||
-      typeof entry.actor !== "string" ||
-      typeof entry.createdAt !== "number" ||
-      typeof entry.expiresAt !== "number" ||
-      typeof entry.ttlSeconds !== "number" ||
-      !isRecord(entry.scope)
-    ) {
-      throw new Error("mission state file is malformed: mission entry");
-    }
-    return entry as unknown as MissionRecord;
-  });
-}
-
-/**
- * Identity of the state file's current content, cheap enough for the hot path:
- * one `stat`, no read. Size alone would miss an equal-length rewrite and
- * mtime alone can be coarse, so the two are used together.
- */
-function fileStamp(path: string): string | undefined {
-  try {
-    const stats = statSync(path);
-    return `${String(stats.mtimeMs)}:${String(stats.size)}`;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Missions and their revocations, persisted as plain JSON (mode 0600). The file
  * holds no token material: a record is a description of a grant, never a
  * bearer of it, so leaking the state file leaks no capability.
  *
- * Every mutation writes synchronously — a revoke that survives only in memory
- * would be a revoke that a crash silently undoes.
+ * Every mutation writes synchronously and atomically (temp file + rename) — a
+ * revoke that survived only in memory would be a revoke a crash silently
+ * undoes, and a half-written file would parse as a shorter mission list.
  *
  * The file, not this object, is the store: `missura revoke` runs in a different
  * process from `missura run`, so an instance that only ever read at
  * construction would keep honouring a mission an operator called back, until
- * expiry. Every read path therefore re-reads the file when it changed.
+ * expiry. Every read path therefore re-reads the file when it changed, and
+ * every write path merges what the file holds before replacing it.
  *
  * Failure semantics, deliberately asymmetric:
  *   - file missing, unreadable, or unparseable → keep the last known-good view.
@@ -136,39 +85,51 @@ export class MissionStore {
     }
   }
 
+  /** The earliest revocation wins: a re-read can add one, never move it later. */
+  private noteRevoked(jti: string, revokedAt: number): void {
+    const known = this.revoked.get(jti);
+    if (known === undefined || revokedAt < known) this.revoked.set(jti, revokedAt);
+  }
+
   /**
    * Takes on a freshly read view of the file, then re-applies every revocation
    * this instance already knows about: the file can only ever add to them.
    */
-  private adopt(records: MissionRecord[]): void {
-    for (const record of records) {
-      const known = this.revoked.get(record.jti);
-      if (
-        record.revokedAt !== undefined &&
-        (known === undefined || record.revokedAt < known)
-      ) {
-        this.revoked.set(record.jti, record.revokedAt);
+  private adopt(state: StateFile): void {
+    for (const entry of state.revoked) this.noteRevoked(entry.jti, entry.revokedAt);
+    for (const record of state.missions) {
+      if (record.revokedAt !== undefined) {
+        this.noteRevoked(record.jti, record.revokedAt);
       }
       const revokedAt = this.revoked.get(record.jti);
       if (revokedAt !== undefined) record.revokedAt = revokedAt;
     }
-    this.records = records;
+    this.records = state.missions;
+  }
+
+  /** The file as it stands, or nothing at all when it cannot be read. */
+  private onDisk(): StateFile {
+    try {
+      return parseState(readFileSync(this.stateFile, "utf8"));
+    } catch {
+      return { missions: [], revoked: [] };
+    }
   }
 
   /** Hot path: a single `stat` when nothing changed, a re-read when it did. */
   private refresh(): void {
     const stamp = fileStamp(this.stateFile);
     if (stamp === undefined || stamp === this.stamp) return;
-    let records: MissionRecord[];
+    let state: StateFile;
     try {
-      records = parseState(readFileSync(this.stateFile, "utf8"));
+      state = parseState(readFileSync(this.stateFile, "utf8"));
     } catch {
       // Mid-write or corrupt: keep the last known-good view and retry on the
       // next call — the stamp stays uncached on purpose.
       return;
     }
     this.stamp = stamp;
-    this.adopt(records);
+    this.adopt(state);
   }
 
   create(input: CreateMission): { record: MissionRecord; token: string } {
@@ -202,6 +163,7 @@ export class MissionStore {
     return { record, token };
   }
 
+  /** Revokes a mission this store knows; an unknown id or jti throws. */
   revoke(idOrJti: string): MissionRecord {
     this.refresh();
     const record = this.records.find(
@@ -211,10 +173,29 @@ export class MissionStore {
     // Idempotent (RFC 7009 semantics): a second revoke must not move the clock.
     if (record.revokedAt === undefined) {
       record.revokedAt = Math.floor(Date.now() / 1000);
-      this.revoked.set(record.jti, record.revokedAt);
+      this.noteRevoked(record.jti, record.revokedAt);
       this.persist();
     }
     return record;
+  }
+
+  /**
+   * Revokes a jti, whether or not a record for it exists here.
+   *
+   * The token, not the record, is what the proxy honours: a signature-valid
+   * jti keeps working until expiry no matter what this store remembers about
+   * it. So the revocation is written as a tombstone even with nothing to
+   * attach it to — a revoke that reports success and does not deny is the one
+   * failure an operator cannot see.
+   */
+  revokeJti(jti: string): void {
+    this.refresh();
+    if (this.revoked.has(jti)) return;
+    const revokedAt = Math.floor(Date.now() / 1000);
+    this.revoked.set(jti, revokedAt);
+    const record = this.records.find((m) => m.jti === jti);
+    if (record !== undefined) record.revokedAt = revokedAt;
+    this.persist();
   }
 
   /**
@@ -238,11 +219,37 @@ export class MissionStore {
     );
   }
 
+  /**
+   * Writes the whole file, so it first merges what the file holds.
+   *
+   * `refresh` is a read optimisation guarded by a stat, not a lock: the file
+   * can have moved since — inside the same millisecond, at the same size, or
+   * between this store's last read and this write. Overwriting blind is how
+   * two processes minting at once drop one of the two missions, whose token
+   * then keeps verifying with nothing left to revoke.
+   *
+   * This narrows that window to the merge-and-rename itself; it does not close
+   * it. Two writers can still interleave inside it — a real fix is a lock file
+   * or a single writer, and neither is M2 (docs/SPEC.md §5).
+   */
   private persist(): void {
-    const state: StateFile = { missions: this.records };
-    mkdirSync(dirname(this.stateFile), { recursive: true, mode: 0o700 });
-    writeFileSync(this.stateFile, JSON.stringify(state), {
-      mode: SECRET_FILE_MODE,
+    const disk = this.onDisk();
+    for (const entry of disk.revoked) this.noteRevoked(entry.jti, entry.revokedAt);
+    for (const record of disk.missions) {
+      if (record.revokedAt !== undefined) {
+        this.noteRevoked(record.jti, record.revokedAt);
+      }
+    }
+    // File order first, ours appended; a record held in both is ours, since
+    // every revocation either side knows about is re-applied by `adopt`.
+    const byId = new Map<string, MissionRecord>();
+    for (const record of disk.missions) byId.set(record.id, record);
+    for (const record of this.records) byId.set(record.id, record);
+    this.adopt({ missions: [...byId.values()], revoked: [] });
+
+    writeState(this.stateFile, {
+      missions: this.records,
+      revoked: [...this.revoked].map(([jti, revokedAt]) => ({ jti, revokedAt })),
     });
     // Our own write is not a change to react to; anyone else's still is.
     this.stamp = fileStamp(this.stateFile);
