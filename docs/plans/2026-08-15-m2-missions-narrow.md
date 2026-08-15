@@ -23,9 +23,31 @@
 | `issues` (list) | NARROW: inject `filter: { customer: { id: { eq: <mapped id> } } }` merged with agent filter (agent's own narrower filters kept; conflicting broader `customer` filter overwritten) |
 | `issue(id)` | Forward, then **post-check**: response's `issue.customer.id` must equal the mapped id, else **404-shaped GraphQL error** (`issue not found`) — a deliberate M2 slice of response verification for single objects; requires the query to include the customer relation: rewrite the selection set to ADD `customer { id }` if absent, and STRIP it from the response if it was added by us |
 | `customers` / `customer(id)` | Only the mission's mapped customer id; `customers` list → deny ("use customer(id)"), `customer(id)` with any other id → 404-shaped error pre-vendor |
-| `viewer` | Allow (self-identity, harmless) |
+| `viewer` | Allow **scalars only** — any sub-selection carrying a selection set → deny (`viewer` is a User: `viewer { teams { issues } }` / `viewer { assignedIssues }` are full-workspace reads). CORRECTION 2026-08-15 after security review: the original table said "harmless", which was wrong. |
 | `projects`/`project`/`comments`/`comment` | **Deny under customer scope** in M2 (no provable customer relation yet — reason: "no proven relation to mission customer") |
 | Missions WITHOUT customer scope (repos-only) | Linear connector denies everything except `viewer` (reason "linear not in mission scope") |
+
+**BINDING GLOBAL RULE (correction 2026-08-15, security review): the whole document is validated, not just its root fields.** Root-only narrowing leaks: `issues { nodes { team { issues { ... } } } }` re-expands to every customer, and the same nesting defeats the `issue(id)` post-check. Therefore: walk the entire selection set; **every field that carries a selection set must match an allowlisted traversal path, else the document is denied** (reason naming the field). Scalar leaves are always fine.
+
+Allowlisted traversal paths for M2 (deny-by-default; anything absent is denied):
+```
+issues > nodes
+issues > nodes > customer | assignee | creator | state
+issues > nodes > labels > nodes
+issues > nodes > comments > nodes
+issues > nodes > comments > nodes > user
+issues > pageInfo
+issue  > customer | assignee | creator | state
+issue  > labels > nodes
+issue  > comments > nodes
+issue  > comments > nodes > user
+issue  > pageInfo
+customer > (none — scalars only)
+viewer   > (none — scalars only)
+```
+Rationale: `comments`/`labels` under an already-proven-in-scope issue are owned by it; `team`, `organization`, `project`, `cycle`, `parent`, `children`, `relations`, `subscribers`, `attachments` are NOT provably customer-bound and are denied in M2. Fragments (named or inline) are inlined before the walk so they cannot smuggle a path.
+
+**Also binding:** strip `extensions` from the forwarded payload (deny if it carries a persisted-query hash) — a hash hit would execute a server-cached document NARROW never saw.
 
 | GitHub | Behavior |
 |---|---|
