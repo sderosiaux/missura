@@ -4,6 +4,9 @@ export default tseslint.config(
   {
     ignores: [
       "apps/**",
+      // Standalone demo script: no tsconfig project, not a workspace package,
+      // never imported by packages/**. The strict rails stay on packages/**.
+      "examples/**",
       "**/dist/**",
       "**/node_modules/**",
       // Build/test config files live outside the packages' tsconfig `include`,
