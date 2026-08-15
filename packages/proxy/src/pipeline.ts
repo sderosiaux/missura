@@ -4,6 +4,25 @@ import type {
   MissionClaims,
   Provider,
 } from "@missura/core";
+import {
+  applyPostCheck,
+  GITHUB_NOT_FOUND_BODY,
+  OUT_OF_SCOPE_REASON,
+  type NarrowFn,
+  type NarrowPostCheck,
+} from "./narrow";
+import { traceIdOf } from "./trace";
+import {
+  bearerToken,
+  errorBody,
+  FORWARDED_RESPONSE_HEADERS,
+  hasBody,
+  JSON_HEADERS,
+  readCapped,
+  upstreamHeaders,
+} from "./transport";
+
+export { MAX_RESPONSE_BYTES } from "./transport";
 
 /** One inbound request, already read off the wire (headers lowercased). */
 export interface IncomingShape {
@@ -24,6 +43,13 @@ export interface PipelineDeps {
   provider: Provider;
   verifyToken(token: string): MissionClaims;
   decide(req: { method: string; path: string; body: string }): CatalogDecision;
+  /**
+   * Consulted on every request, never cached: a revoked mission must stop
+   * working on the very next call, not at the next token expiry.
+   */
+  isRevoked(jti: string): boolean;
+  /** The connector's NARROW: rewrites, denies, or registers a post-check. */
+  narrow: NarrowFn;
   /** The vendor credential, read from the vault once at boot — never logged. */
   vendorAuthHeader(): string;
   upstreamBase: string;
@@ -32,53 +58,8 @@ export interface PipelineDeps {
   now?(): number;
 }
 
-const JSON_HEADERS: Record<string, string> = {
-  "content-type": "application/json",
-};
-
-/**
- * Headers the proxy never forwards. `authorization` is replaced by the vendor
- * credential and `host` must be recomputed by the client for the upstream
- * origin; the rest are hop-by-hop or connection-scoped and would describe the
- * agent's connection, not ours (a stale `content-length` in particular would
- * contradict the body we re-send). `accept-encoding` is dropped so the fetch
- * implementation owns the negotiation — we hand back a decoded body without a
- * `content-encoding` header.
- */
-const DROPPED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
-  "authorization",
-  "host",
-  "content-length",
-  "connection",
-  "keep-alive",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "accept-encoding",
-]);
-
-/** The only upstream response headers echoed back: no cookies, no vendor metadata. */
-const FORWARDED_RESPONSE_HEADERS: readonly string[] = ["content-type"];
-
-const BEARER = "bearer ";
-
-/**
- * Upstream responses are capped at 10 MB (SPEC: JSON ≤ 10 MB), the same cap
- * the inbound request gets. A vendor is not a trusted size: buffering whatever
- * it sends would let one response take the proxy's memory with it.
- */
-export const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
-
 /** Reason recorded when the vendor answered but the answer was refused. */
 const TOO_LARGE_REASON = "response too large (after upstream call)";
-
-function errorBody(code: string, reason?: string): string {
-  return JSON.stringify({
-    error: reason === undefined ? { code } : { code, reason },
-  });
-}
 
 function jsonError(
   status: number,
@@ -92,30 +73,17 @@ function jsonError(
   };
 }
 
-function bearerToken(headers: Record<string, string>): string | undefined {
-  const raw = headers.authorization;
-  if (raw === undefined) return undefined;
-  if (!raw.toLowerCase().startsWith(BEARER)) return undefined;
-  const token = raw.slice(BEARER.length).trim();
-  return token.length === 0 ? undefined : token;
-}
-
-function upstreamHeaders(
-  deps: PipelineDeps,
-  req: IncomingShape,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(req.headers)) {
-    if (!DROPPED_REQUEST_HEADERS.has(name.toLowerCase()))
-      out[name.toLowerCase()] = value;
-  }
-  out.authorization = deps.vendorAuthHeader();
-  return out;
-}
-
-function hasBody(method: string): boolean {
-  const m = method.toUpperCase();
-  return m !== "GET" && m !== "HEAD";
+/**
+ * Everything the audit record knows about the request that is not the verdict:
+ * who (`actor`), what for (`purpose`) and the caller's trace, filled in as
+ * soon as the claims are verified.
+ */
+interface RequestContext {
+  missionId: string;
+  startedAt: number;
+  actor?: string;
+  purpose?: string;
+  traceId?: string;
 }
 
 /**
@@ -125,29 +93,30 @@ function hasBody(method: string): boolean {
  */
 function emitEvent(
   deps: PipelineDeps,
-  input: {
-    decision: CatalogDecision;
-    missionId: string;
-    startedAt: number;
-    reason?: string;
-  },
+  ctx: RequestContext,
+  decision: CatalogDecision,
+  reason?: string,
 ): void {
   const now = deps.now?.() ?? Date.now();
   deps.emit({
     ts: new Date(now).toISOString(),
     provider: deps.provider,
-    operation: input.decision.operation,
-    action: input.decision.action,
-    decision: input.decision.decision,
-    reason: input.reason ?? input.decision.reason,
-    missionId: input.missionId,
-    latencyMs: Math.max(0, now - input.startedAt),
+    operation: decision.operation,
+    action: decision.action,
+    decision: decision.decision,
+    reason: reason ?? decision.reason,
+    missionId: ctx.missionId,
+    latencyMs: Math.max(0, now - ctx.startedAt),
+    ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
+    ...(ctx.purpose === undefined ? {} : { purpose: ctx.purpose }),
+    ...(ctx.traceId === undefined ? {} : { traceId: ctx.traceId }),
   });
 }
 
 /** Reason for every request target that would leave the connector's origin. */
 const ESCAPE_REASON = "path escapes upstream origin";
 const CONNECTION_REASON = "connection not in mission";
+const REVOKED_REASON = "revoked";
 const ACTION_REASON = "action not allowed by mission";
 
 /** A claims denial keeps the catalog's operation/action so the log stays readable. */
@@ -183,49 +152,13 @@ function upstreamTarget(deps: PipelineDeps, path: string): URL | undefined {
   return url;
 }
 
-/**
- * Reads at most `MAX_RESPONSE_BYTES`; `undefined` means the cap was crossed.
- * A declared `content-length` above the cap is refused before a single byte is
- * read, and a chunked body is abandoned the moment it crosses — an oversized
- * response is never fully buffered, which is the point of the cap.
- */
-async function readCapped(response: Response): Promise<Uint8Array | undefined> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) {
-    await response.body?.cancel();
-    return undefined;
-  }
-  const body = response.body;
-  if (body === null) return new Uint8Array(0);
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      return undefined;
-    }
-    chunks.push(value);
-  }
-  const out = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
-}
-
 async function forward(
   deps: PipelineDeps,
   target: URL,
   req: IncomingShape,
   verdict: CatalogDecision,
-  missionId: string,
-  startedAt: number,
+  ctx: RequestContext,
+  postCheck?: NarrowPostCheck,
 ): Promise<ResponseShape> {
   let response: Response;
   try {
@@ -234,18 +167,13 @@ async function forward(
     const url = `${target.origin}${target.pathname}${target.search}`;
     response = await deps.fetchImpl(url, {
       method: req.method,
-      headers: upstreamHeaders(deps, req),
+      headers: upstreamHeaders(req.headers, deps.vendorAuthHeader()),
       ...(hasBody(req.method) && req.body.length > 0 ? { body: req.body } : {}),
     });
   } catch {
     // The upstream error is deliberately swallowed: its message can carry the
     // vendor host, and an injected credential could surface in a wrapped error.
-    emitEvent(deps, {
-      decision: verdict,
-      missionId,
-      startedAt,
-      reason: "upstream_error",
-    });
+    emitEvent(deps, ctx, verdict, "upstream_error");
     return jsonError(502, "missura_upstream_error");
   }
 
@@ -253,12 +181,12 @@ async function forward(
   if (payload === undefined) {
     // The vendor was reached, so the record says so — the request is denied
     // on the way back, not on the way out.
-    emitEvent(deps, {
-      decision: { ...verdict, decision: "deny", reason: TOO_LARGE_REASON },
-      missionId,
-      startedAt,
-      reason: TOO_LARGE_REASON,
-    });
+    emitEvent(
+      deps,
+      ctx,
+      { ...verdict, decision: "deny", reason: TOO_LARGE_REASON },
+      TOO_LARGE_REASON,
+    );
     return jsonError(502, "missura_response_too_large");
   }
   const headers: Record<string, string> = {};
@@ -266,7 +194,30 @@ async function forward(
     const value = response.headers.get(name);
     if (value !== null) headers[name] = value;
   }
-  emitEvent(deps, { decision: verdict, missionId, startedAt });
+
+  if (postCheck !== undefined) {
+    const checked = applyPostCheck(
+      postCheck,
+      new TextDecoder().decode(payload),
+    );
+    if (!checked.ok) {
+      emitEvent(
+        deps,
+        ctx,
+        { ...verdict, decision: "deny", reason: OUT_OF_SCOPE_REASON },
+        OUT_OF_SCOPE_REASON,
+      );
+      return {
+        status: response.status,
+        headers: { ...JSON_HEADERS },
+        body: checked.body,
+      };
+    }
+    emitEvent(deps, ctx, verdict);
+    return { status: response.status, headers, body: checked.body };
+  }
+
+  emitEvent(deps, ctx, verdict);
   return { status: response.status, headers, body: payload };
 }
 
@@ -282,6 +233,7 @@ export async function handle(
   req: IncomingShape,
 ): Promise<ResponseShape> {
   const startedAt = deps.now?.() ?? Date.now();
+  const traceId = traceIdOf(req.headers.traceparent);
   try {
     const token = bearerToken(req.headers);
     let claims: MissionClaims | undefined;
@@ -292,29 +244,47 @@ export async function handle(
         claims = undefined;
       }
     }
+    const anonymous: RequestContext = {
+      missionId: "unknown",
+      startedAt,
+      ...(traceId === undefined ? {} : { traceId }),
+    };
     if (claims === undefined) {
-      emitEvent(deps, {
-        decision: {
-          decision: "deny",
-          operation: "unknown",
-          action: "unknown",
-          reason: "authn: missing or invalid mission token",
-        },
-        missionId: "unknown",
-        startedAt,
+      emitEvent(deps, anonymous, {
+        decision: "deny",
+        operation: "unknown",
+        action: "unknown",
+        reason: "authn: missing or invalid mission token",
       });
       return jsonError(401, "missura_unauthorized");
+    }
+
+    const ctx: RequestContext = {
+      missionId: claims.id,
+      startedAt,
+      actor: claims.actor,
+      purpose: claims.purpose,
+      ...(traceId === undefined ? {} : { traceId }),
+    };
+
+    // A signature that still verifies says nothing about a mission an operator
+    // has since called back. The list is read here, per request, so a revoke
+    // lands on the next call rather than at expiry.
+    if (deps.isRevoked(claims.jti)) {
+      emitEvent(
+        deps,
+        ctx,
+        claimsDenial(UNKNOWN_VERDICT, REVOKED_REASON),
+        REVOKED_REASON,
+      );
+      return jsonError(401, "missura_unauthorized", REVOKED_REASON);
     }
 
     // The mission decides which connections it may touch. Separate ports are a
     // convenience, not a boundary: a token minted for one connection must not
     // work against another listener just because the agent aimed at its port.
     if (!claims.connections.includes(deps.provider)) {
-      emitEvent(deps, {
-        decision: claimsDenial(UNKNOWN_VERDICT, CONNECTION_REASON),
-        missionId: claims.id,
-        startedAt,
-      });
+      emitEvent(deps, ctx, claimsDenial(UNKNOWN_VERDICT, CONNECTION_REASON));
       return jsonError(403, "missura_denied", CONNECTION_REASON);
     }
 
@@ -324,32 +294,61 @@ export async function handle(
       body: req.body,
     });
     if (verdict.decision === "deny") {
-      emitEvent(deps, { decision: verdict, missionId: claims.id, startedAt });
+      emitEvent(deps, ctx, verdict);
       return jsonError(403, "missura_denied", verdict.reason);
     }
 
     // The catalog says what the connector can serve; the mission says what
     // this agent may do with it. An ALLOW the mission does not cover is a deny.
     if (!claims.allow.includes(verdict.action)) {
-      emitEvent(deps, {
-        decision: claimsDenial(verdict, ACTION_REASON),
-        missionId: claims.id,
-        startedAt,
-      });
+      emitEvent(deps, ctx, claimsDenial(verdict, ACTION_REASON));
       return jsonError(403, "missura_denied", ACTION_REASON);
     }
 
-    const target = upstreamTarget(deps, req.path);
+    // NARROW runs last, on an already-cataloged request: it shrinks what the
+    // agent asked for to what the mission proves it may see.
+    const narrowed = deps.narrow(
+      { method: req.method, path: req.path, body: req.body },
+      claims,
+    );
+    if (narrowed.decision === "deny") {
+      const reason = narrowed.reason ?? "narrowed out of mission scope";
+      emitEvent(deps, ctx, claimsDenial(verdict, reason), reason);
+      return narrowed.denyShape === "github404"
+        ? {
+            status: 404,
+            headers: { ...JSON_HEADERS },
+            body: GITHUB_NOT_FOUND_BODY,
+          }
+        : jsonError(403, "missura_denied", reason);
+    }
+    const outbound: IncomingShape = {
+      ...req,
+      path: narrowed.path ?? req.path,
+      body: narrowed.body ?? req.body,
+    };
+
+    // Re-resolved from the rewritten target: NARROW is trusted to shrink a
+    // request, never to move it to another origin.
+    const target = upstreamTarget(deps, outbound.path);
     if (target === undefined) {
-      emitEvent(deps, {
-        decision: { ...verdict, decision: "deny", reason: ESCAPE_REASON },
-        missionId: claims.id,
-        startedAt,
-      });
+      emitEvent(
+        deps,
+        ctx,
+        { ...verdict, decision: "deny", reason: ESCAPE_REASON },
+        ESCAPE_REASON,
+      );
       return jsonError(403, "missura_denied", ESCAPE_REASON);
     }
 
-    return await forward(deps, target, req, verdict, claims.id, startedAt);
+    return await forward(
+      deps,
+      target,
+      outbound,
+      verdict,
+      ctx,
+      narrowed.postCheck,
+    );
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.
     return jsonError(500, "missura_internal");

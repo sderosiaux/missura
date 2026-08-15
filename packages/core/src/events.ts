@@ -13,6 +13,11 @@ export interface DecisionEvent {
   reason: string;
   missionId: string;
   latencyMs: number;
+  /** Provenance, from the mission claims — who asked and what for. */
+  actor?: string;
+  purpose?: string;
+  /** `trace-id` of an inbound W3C `traceparent`, when the agent sent a valid one. */
+  traceId?: string;
 }
 
 /**
@@ -29,11 +34,20 @@ const SERIALIZED_FIELDS = [
   "reason",
   "missionId",
   "latencyMs",
+  "actor",
+  "purpose",
+  "traceId",
 ] as const satisfies readonly (keyof DecisionEvent)[];
 
+/**
+ * Copies the whitelist only, and only the fields that are actually set: an
+ * absent provenance field leaves no empty key behind in the log.
+ */
 function redact(ev: DecisionEvent): DecisionEvent {
   const out: Partial<Record<keyof DecisionEvent, unknown>> = {};
-  for (const field of SERIALIZED_FIELDS) out[field] = ev[field];
+  for (const field of SERIALIZED_FIELDS) {
+    if (ev[field] !== undefined) out[field] = ev[field];
+  }
   return out as DecisionEvent;
 }
 

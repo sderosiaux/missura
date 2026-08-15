@@ -3,6 +3,7 @@ import type {
   DecisionEvent,
   MissionClaims,
 } from "@missura/core";
+import { passThroughNarrow } from "./narrow";
 import type { IncomingShape, PipelineDeps } from "./pipeline";
 
 /**
@@ -72,6 +73,8 @@ export function harness(
     provider: "github",
     verifyToken: (): MissionClaims => CLAIMS,
     decide: (): CatalogDecision => ALLOW,
+    isRevoked: (): boolean => false,
+    narrow: passThroughNarrow,
     vendorAuthHeader: (): string => VENDOR_HEADER,
     upstreamBase: "https://api.github.com",
     fetchImpl,

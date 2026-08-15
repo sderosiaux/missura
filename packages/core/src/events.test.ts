@@ -98,6 +98,33 @@ describe("decision events", () => {
     ]);
   });
 
+  it("serializes provenance: actor, purpose and traceId", () => {
+    const dir = tmpDir();
+    appendEvent(dir, {
+      ...EVENT,
+      actor: "ops@local",
+      purpose: "support case 42",
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+    });
+    const parsed = JSON.parse(
+      readFileSync(join(dir, "2026-08-14.jsonl"), "utf8").trimEnd(),
+    ) as DecisionEvent;
+
+    expect(parsed.actor).toBe("ops@local");
+    expect(parsed.purpose).toBe("support case 42");
+    expect(parsed.traceId).toBe("4bf92f3577b34da6a3ce929d0e0e4736");
+  });
+
+  it("omits provenance keys entirely when the claims carry none", () => {
+    const dir = tmpDir();
+    appendEvent(dir, EVENT);
+    const raw = readFileSync(join(dir, "2026-08-14.jsonl"), "utf8");
+
+    expect(raw).not.toContain("actor");
+    expect(raw).not.toContain("purpose");
+    expect(raw).not.toContain("traceId");
+  });
+
   it("creates the log directory when missing", () => {
     const dir = join(tmpDir(), "nested", "events");
     appendEvent(dir, EVENT);

@@ -284,7 +284,9 @@ describe("pipeline — upstream response cap (10 MB)", () => {
 
     expect(h.events).toHaveLength(1);
     expect(h.events[0]?.decision).toBe("deny");
-    expect(h.events[0]?.reason).toBe("response too large (after upstream call)");
+    expect(h.events[0]?.reason).toBe(
+      "response too large (after upstream call)",
+    );
     expect(h.events[0]?.operation).toBe("repos.get");
   });
 

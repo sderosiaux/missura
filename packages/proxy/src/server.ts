@@ -12,6 +12,7 @@ import {
   type DecisionEvent,
   type Provider,
 } from "@missura/core";
+import { passThroughNarrow, type NarrowFn } from "./narrow";
 import { handle, type IncomingShape, type PipelineDeps } from "./pipeline";
 
 export const DEFAULT_LINEAR_PORT = 8481;
@@ -26,11 +27,18 @@ export interface ConnectionConfig {
   vendorAuthHeader: string;
   port?: number;
   upstreamBase?: string;
+  /** The connector's NARROW; absent means pass-through (catalog only). */
+  narrow?: NarrowFn;
 }
 
 export interface ProxyConfig {
   signingKey: Buffer;
   emit(ev: DecisionEvent): void;
+  /**
+   * The mission store's revocation list. Absent means nothing is revoked —
+   * true only for a proxy booted without an operator plane.
+   */
+  isRevoked?: (jti: string) => boolean;
   linear: ConnectionConfig;
   github: ConnectionConfig;
   /** Overridable so tests can drive an in-process vendor double. */
@@ -162,6 +170,8 @@ function deps(
     verifyToken: (token) =>
       verifyMissionToken(token, { key: config.signingKey }),
     decide,
+    isRevoked: (jti: string): boolean => config.isRevoked?.(jti) ?? false,
+    narrow: connection.narrow ?? passThroughNarrow,
     vendorAuthHeader: (): string => connection.vendorAuthHeader,
     upstreamBase: connection.upstreamBase ?? defaultUpstream,
     fetchImpl: config.fetchImpl ?? fetch,
@@ -205,8 +215,7 @@ export async function createServers(
         "linear",
         config,
         config.linear,
-        (req): CatalogDecision =>
-          decideLinear(req.method, req.path, req.body),
+        (req): CatalogDecision => decideLinear(req.method, req.path, req.body),
         DEFAULT_LINEAR_UPSTREAM,
       ),
     ),

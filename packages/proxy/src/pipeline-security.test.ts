@@ -71,7 +71,10 @@ describe("pipeline — the mission claims are enforced", () => {
   it("denies a provider absent from claims.connections without calling upstream", async () => {
     const h = harness({
       provider: "github",
-      verifyToken: (): MissionClaims => ({ ...CLAIMS, connections: ["linear"] }),
+      verifyToken: (): MissionClaims => ({
+        ...CLAIMS,
+        connections: ["linear"],
+      }),
     });
     const res = await handle(h.deps, request());
 
@@ -130,10 +133,7 @@ describe("pipeline — the mission claims are enforced", () => {
 });
 
 describe("pipeline — the request target cannot move the origin", () => {
-  const escapes = [
-    "https://evil.com/repos/o/r",
-    "//evil.com/repos/o/r",
-  ];
+  const escapes = ["https://evil.com/repos/o/r", "//evil.com/repos/o/r"];
 
   for (const path of escapes) {
     it(`denies the request target ${path} without calling upstream`, async () => {

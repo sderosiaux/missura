@@ -126,7 +126,8 @@ function requireText(field: string, value: unknown): string {
 }
 
 function readScope(value: unknown): MissionScope {
-  if (!isRecord(value)) throw new FieldError("scope", "scope must be an object");
+  if (!isRecord(value))
+    throw new FieldError("scope", "scope must be an object");
   const scope: MissionScope = {};
   if (value.customer !== undefined) {
     scope.customer = requireText("scope", value.customer);
