@@ -7,6 +7,7 @@
     "lint": "eslint . && pnpm -r lint",
     "demo:m1": "MISSURA_LIVE=1 tsx examples/m1-proof/check.ts",
     "demo:m2": "MISSURA_LIVE=1 tsx examples/m2-proof/check.ts",
+    "demo:m3": "MISSURA_LIVE=1 tsx examples/m3-proof/check.ts",
     "schema:refresh": "tsx packages/connectors-linear/src/schema/extract.ts"
   },
   "packageManager": "pnpm@10.33.2",

@@ -1,0 +1,20 @@
+{
+  "name": "@missura/example-m3-proof",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint via root eslint' && exit 0"
+  },
+  "//dependencies": "The official vendor SDKs, unmodified, ARE the proof: M3's acceptance criterion is that @linear/sdk's TYPED methods — its own generated documents and fat fragments — work under a customer-scoped mission. A hand-rolled query would prove something weaker than what the milestone claims. Example-only — no package under packages/ depends on either.",
+  "dependencies": {
+    "@linear/sdk": "^90.0.0",
+    "octokit": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
