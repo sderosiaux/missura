@@ -1,0 +1,20 @@
+{
+  "name": "@missura/connectors-zendesk",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint via root eslint later' && exit 0"
+  },
+  "dependencies": {
+    "@missura/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}
