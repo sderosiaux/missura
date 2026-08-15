@@ -39,7 +39,9 @@ describe("operator API — POST /v1/token", () => {
     expect(claims.actor).toBe("ops@local");
     expect(claims.purpose).toBe("support case 42");
     expect(claims.scope).toEqual({ customer: "acme" });
-    expect(claims.connections).toEqual(["linear"]);
+    // Both, from the RESOLVED scope: the entity `customer:acme` maps a linear
+    // customer AND a repo, and the token grants what the scope resolves to.
+    expect(claims.connections).toEqual(["linear", "github"]);
   });
 
   it("derives both connections from a customer plus explicit repos", async () => {

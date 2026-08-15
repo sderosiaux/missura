@@ -98,9 +98,11 @@ function send(res: ServerResponse, status: number, payload: unknown): void {
 function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
   const input = readMissionRequest(body);
   // Resolution runs before minting: a mission whose entity is unknown must not
-  // exist at all, not exist and resolve to nothing at request time.
+  // exist at all, not exist and resolve to nothing at request time. What it
+  // resolves to is also what decides the mission's connections.
+  let resolved: ResolvedScope;
   try {
-    deps.resolve(input.scope);
+    resolved = deps.resolve(input.scope);
   } catch (err) {
     throw new FieldError(
       "scope",
@@ -108,7 +110,7 @@ function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
     );
   }
   const created: { record: MissionRecord; token: string } =
-    deps.store.create(input);
+    deps.store.create(input, resolved);
   return {
     mission_id: created.record.id,
     access_token: created.token,

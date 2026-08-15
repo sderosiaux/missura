@@ -10,12 +10,15 @@ function seed(h: Harness): { id: string; token: string } {
     paths.missionsPath,
     loadOrCreateKey(paths.signingKeyPath),
   );
-  const created = store.create({
-    purpose: "support case 42",
-    actor: "ops@local",
-    scope: { customer: "acme" },
-    ttlSeconds: 600,
-  });
+  const created = store.create(
+    {
+      purpose: "support case 42",
+      actor: "ops@local",
+      scope: { customer: "acme" },
+      ttlSeconds: 600,
+    },
+    { linearCustomerId: "c_18", githubRepos: [] },
+  );
   return { id: created.record.id, token: created.token };
 }
 

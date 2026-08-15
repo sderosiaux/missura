@@ -9,7 +9,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MissionStore, type CreateMission, type MissionRecord } from "./missions";
+import type { ResolvedScope } from "./entities";
+import {
+  MissionStore,
+  type CreateMission,
+  type MissionRecord,
+} from "./missions";
 
 const KEY = Buffer.alloc(32, 3);
 
@@ -22,6 +27,11 @@ const INPUT: CreateMission = {
   actor: "sam@acme.io",
   scope: { customer: "acme", repos: ["acme-corp/product"] },
   ttlSeconds: 900,
+};
+
+const RESOLVED: ResolvedScope = {
+  linearCustomerId: "c_18",
+  githubRepos: ["acme-corp/product"],
 };
 
 /** A record of exactly the same serialized length, as another process would write. */
@@ -47,7 +57,7 @@ function twin(record: MissionRecord, purpose: string): MissionRecord {
 describe("mission store — a write must not erase another writer's record", () => {
   it("keeps a record that appeared on disk since the last read", () => {
     const path = statePath();
-    const mine = new MissionStore(path, KEY).create(INPUT).record;
+    const mine = new MissionStore(path, KEY).create(INPUT, RESOLVED).record;
     // Whole milliseconds, so the test can put the file's clock back exactly
     // where the store under test last saw it.
     const pinned = new Date(Math.floor(statSync(path).mtimeMs));
@@ -66,7 +76,7 @@ describe("mission store — a write must not erase another writer's record", () 
     expect(statSync(path).size).toBe(before.size);
     expect(statSync(path).mtimeMs).toBe(before.mtimeMs);
 
-    store.create({ ...INPUT, purpose: "bbbbb" });
+    store.create({ ...INPUT, purpose: "bbbbb" }, RESOLVED);
 
     const purposes = new MissionStore(path, KEY)
       .active()
@@ -98,7 +108,7 @@ describe("mission store — revoking a jti with no record", () => {
   it("revokes the matching record too when there is one", () => {
     const path = statePath();
     const store = new MissionStore(path, KEY);
-    const { record } = store.create(INPUT);
+    const { record } = store.create(INPUT, RESOLVED);
 
     store.revokeJti(record.jti);
 
@@ -122,12 +132,12 @@ describe("mission store — state file permissions", () => {
   it("tightens a state file that already exists with looser permissions", () => {
     const path = statePath();
     const store = new MissionStore(path, KEY);
-    store.create(INPUT);
+    store.create(INPUT, RESOLVED);
     // `mode` on writeFileSync is honoured on creation only, so a file that got
     // loose permissions any other way would stay loose forever.
     chmodSync(path, 0o644);
 
-    store.create({ ...INPUT, purpose: "second" });
+    store.create({ ...INPUT, purpose: "second" }, RESOLVED);
 
     expect(statSync(path).mode & 0o777).toBe(0o600);
   });

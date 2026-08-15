@@ -112,15 +112,18 @@ export async function execCommand(
   const paths = resolveHome(io.env);
   const scope = scopeOf(options);
   const map = loadEntityMap(options.entitiesPath ?? paths.entitiesPath);
-  resolveScope(map, scope);
+  const resolved = resolveScope(map, scope);
 
   const store = openStore(paths);
-  const { record, token } = store.create({
-    purpose: options.purpose,
-    actor: options.actor,
-    scope,
-    ttlSeconds: options.ttlSeconds,
-  });
+  const { record, token } = store.create(
+    {
+      purpose: options.purpose,
+      actor: options.actor,
+      scope,
+      ttlSeconds: options.ttlSeconds,
+    },
+    resolved,
+  );
   const revoke = (): void => {
     try {
       store.revoke(record.id);

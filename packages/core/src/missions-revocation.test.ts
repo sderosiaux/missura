@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import type { ResolvedScope } from "./entities";
 import { MissionStore, type CreateMission } from "./missions";
 
 const KEY = Buffer.alloc(32, 3);
@@ -23,6 +24,11 @@ const INPUT: CreateMission = {
   actor: "sam@acme.io",
   scope: { customer: "acme", repos: ["acme-corp/product"] },
   ttlSeconds: 900,
+};
+
+const RESOLVED: ResolvedScope = {
+  linearCustomerId: "c_18",
+  githubRepos: ["acme-corp/product"],
 };
 
 /**
@@ -53,7 +59,7 @@ describe("mission store — revocation across instances", () => {
   it("sees a revoke written by another instance, without being reconstructed", () => {
     const path = statePath();
     const writer = new MissionStore(path, KEY);
-    const { record } = writer.create(INPUT);
+    const { record } = writer.create(INPUT, RESOLVED);
 
     // Constructed BEFORE the revoke: this is the proxy, booted and holding the
     // store it captured at startup.
@@ -69,7 +75,7 @@ describe("mission store — revocation across instances", () => {
   it("sees a revoke written by a separate process", () => {
     const path = statePath();
     const proxy = new MissionStore(path, KEY);
-    const { record } = proxy.create(INPUT);
+    const { record } = proxy.create(INPUT, RESOLVED);
     expect(proxy.isRevoked(record.jti)).toBe(false);
 
     revokeInChildProcess(path, record.id);
@@ -80,11 +86,11 @@ describe("mission store — revocation across instances", () => {
   it("keeps a mission it has never seen written by another process", () => {
     const path = statePath();
     const first = new MissionStore(path, KEY);
-    first.create(INPUT);
+    first.create(INPUT, RESOLVED);
     const proxy = new MissionStore(path, KEY);
 
     const second = new MissionStore(path, KEY);
-    const { record } = second.create({ ...INPUT, purpose: "second" });
+    const { record } = second.create({ ...INPUT, purpose: "second" }, RESOLVED);
 
     expect(proxy.isRevoked(record.jti)).toBe(false);
     expect(proxy.active().map((m) => m.purpose)).toEqual([
@@ -96,7 +102,7 @@ describe("mission store — revocation across instances", () => {
   it("never downgrades a revocation it already knows about", () => {
     const path = statePath();
     const proxy = new MissionStore(path, KEY);
-    const { record } = proxy.create(INPUT);
+    const { record } = proxy.create(INPUT, RESOLVED);
     new MissionStore(path, KEY).revoke(record.id);
     expect(proxy.isRevoked(record.jti)).toBe(true);
 
@@ -116,8 +122,11 @@ describe("mission store — revocation across instances", () => {
   it("keeps the last known-good view when the state file goes unreadable", () => {
     const path = statePath();
     const proxy = new MissionStore(path, KEY);
-    const revoked = proxy.create(INPUT).record;
-    const live = proxy.create({ ...INPUT, purpose: "still live" }).record;
+    const revoked = proxy.create(INPUT, RESOLVED).record;
+    const live = proxy.create(
+      { ...INPUT, purpose: "still live" },
+      RESOLVED,
+    ).record;
     new MissionStore(path, KEY).revoke(revoked.id);
     expect(proxy.isRevoked(revoked.jti)).toBe(true);
 

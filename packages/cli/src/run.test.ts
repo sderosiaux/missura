@@ -72,7 +72,14 @@ interface Minted {
   missionId: string;
 }
 
-async function mint(h: Harness, servers: RunningProxy): Promise<Minted> {
+async function mint(
+  h: Harness,
+  servers: RunningProxy,
+  scope: Record<string, unknown> = {
+    customer: "acme",
+    repos: ["acme-corp/product"],
+  },
+): Promise<Minted> {
   const res = await fetch(`${origin(servers.operator)}/v1/token`, {
     method: "POST",
     headers: {
@@ -86,7 +93,7 @@ async function mint(h: Harness, servers: RunningProxy): Promise<Minted> {
           type: "mission",
           purpose: "support case 42",
           actor: "ops@local",
-          scope: { customer: "acme", repos: ["acme-corp/product"] },
+          scope,
           ttl: 300,
         },
       ],
@@ -195,6 +202,38 @@ describe("missura run — operator plane and NARROW wired", () => {
       const after = await fetch(target, { headers: auth });
       expect(after.status).toBe(401);
       expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(calls).toHaveLength(1);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("gives a customer-only mission the repos its entity carries", async () => {
+    const h = await initedHarness();
+    const calls: Upstream[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      // The scope names no repo; the entity map maps one to this customer. A
+      // connection derived from the business scope rather than the resolved
+      // one would leave `github` off the token, 403 every GitHub call on the
+      // connection check, and make `github.repos` look load-bearing while
+      // doing nothing.
+      const minted = await mint(h, servers, { customer: "acme" });
+      const auth = { authorization: `Bearer ${minted.token}` };
+
+      const allowed = await fetch(
+        `${minted.origins.github}/repos/acme-corp/product`,
+        { headers: auth },
+      );
+      expect(allowed.status).toBe(200);
+      expect(calls).toHaveLength(1);
+
+      const foreign = await fetch(
+        `${minted.origins.github}/repos/octokit/octokit.js`,
+        { headers: auth },
+      );
+      expect(foreign.status).toBe(404);
       expect(calls).toHaveLength(1);
     } finally {
       await servers.close();
