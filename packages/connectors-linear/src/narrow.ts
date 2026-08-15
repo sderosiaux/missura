@@ -10,7 +10,12 @@ import {
 } from "graphql";
 import { narrowIssuesField } from "./narrow-filter";
 import { inlineFragments } from "./narrow-fragments";
-import { narrowIssueField, resolveIdArgument, responseKey } from "./narrow-issue";
+import {
+  narrowIssueField,
+  resolveIdArgument,
+  responseKey,
+  type InjectedSelection,
+} from "./narrow-issue";
 import { forwardRecord, readPayload } from "./narrow-payload";
 import { traversalDenial } from "./narrow-walk";
 
@@ -22,7 +27,7 @@ import { traversalDenial } from "./narrow-walk";
 export interface LinearNarrowPostCheck {
   path: string[];
   expectedCustomerId: string;
-  injectedSelection: boolean;
+  injectedSelection: InjectedSelection;
 }
 
 export interface LinearNarrowResult {
@@ -118,7 +123,7 @@ function narrowRoots(
       state.postCheck = {
         path: ["data", responseKey(field), "customer", "id"],
         expectedCustomerId: customerId,
-        injectedSelection: outcome.injectedSelection === true,
+        injectedSelection: outcome.injectedSelection ?? "none",
       };
       continue;
     }

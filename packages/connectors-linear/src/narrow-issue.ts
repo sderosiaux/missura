@@ -28,19 +28,30 @@ function fieldsOf(selections: readonly SelectionNode[]): FieldNode[] | undefined
   return fields;
 }
 
+/**
+ * What NARROW added, and therefore what the post-check must take back out of
+ * the response. Structurally identical to the proxy's `InjectedSelection` —
+ * declared here because a connector never imports the proxy.
+ *   - `none`     the agent asked for all of it.
+ *   - `relation` the whole `customer` key is ours.
+ *   - `id`       the agent asked for `customer`, we widened it with `id`.
+ */
+export type InjectedSelection = "none" | "relation" | "id";
+
 export interface IssueOutcome {
   reason?: string;
   field?: FieldNode;
-  /** True only when the whole `customer` key is ours to strip back out. */
-  injectedSelection?: boolean;
+  /** What is ours to strip back out of the response. */
+  injectedSelection?: InjectedSelection;
 }
 
 /**
  * Makes the ownership post-check possible: the response must carry
- * `customer.id`. The relation is added when absent — and only then is it ours
- * to remove from the response afterwards. A selection whose `customer` key is
- * an alias for another field is refused: the check would read a value the
- * agent chose.
+ * `customer.id`. Whatever had to be added — the whole relation, or just the
+ * `id` inside a relation the agent asked for — is reported, because that is
+ * exactly what comes back out of the response afterwards. A selection whose
+ * `customer` key is an alias for another field is refused: the check would
+ * read a value the agent chose.
  */
 export function narrowIssueField(field: FieldNode): IssueOutcome {
   const selections = field.selectionSet?.selections;
@@ -63,7 +74,7 @@ export function narrowIssueField(field: FieldNode): IssueOutcome {
           selections: [...fields, customerIdSelection()],
         },
       },
-      injectedSelection: true,
+      injectedSelection: "relation",
     };
   }
   if (existing.name.value !== CUSTOMER) {
@@ -95,7 +106,7 @@ function withCustomerId(
     if (idField.name.value !== ID) {
       return { reason: "response key `id` is aliased to another field — refused" };
     }
-    return { field, injectedSelection: false };
+    return { field, injectedSelection: "none" };
   }
   const widened: FieldNode = {
     ...customer,
@@ -112,7 +123,9 @@ function withCustomerId(
         selections: fields.map((sel) => (sel === customer ? widened : sel)),
       },
     },
-    injectedSelection: false,
+    // The relation is the agent's, the `id` inside it is ours: reporting
+    // "nothing injected" here handed the agent a field it never asked for.
+    injectedSelection: "id",
   };
 }
 

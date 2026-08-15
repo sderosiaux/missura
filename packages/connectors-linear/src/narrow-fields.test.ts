@@ -21,7 +21,7 @@ function normalized(query: string): string {
 }
 
 describe("narrowLinear — issue(id) ownership post-check", () => {
-  it("adds `customer { id }` and reports the injection", () => {
+  it("adds `customer { id }` and reports the whole relation as ours", () => {
     const result = narrowLinear(
       request(`query { issue(id: "i1") { id title } }`),
       SCOPE,
@@ -31,7 +31,7 @@ describe("narrowLinear — issue(id) ownership post-check", () => {
     expect(result.postCheck).toEqual({
       path: ["data", "issue", "customer", "id"],
       expectedCustomerId: "c_18",
-      injectedSelection: true,
+      injectedSelection: "relation",
     });
   });
 
@@ -45,17 +45,19 @@ describe("narrowLinear — issue(id) ownership post-check", () => {
     expect(result.postCheck).toEqual({
       path: ["data", "issue", "customer", "id"],
       expectedCustomerId: "c_18",
-      injectedSelection: false,
+      injectedSelection: "none",
     });
   });
 
-  it("adds only `id` inside an existing customer selection — nothing to strip", () => {
+  it("reports the `id` it added inside an existing customer selection — we strip what we add", () => {
     const result = narrowLinear(
       request(`query { issue(id: "i1") { customer { name } } }`),
       SCOPE,
     );
     expect(normalized(queryOf(result))).toContain("customer { name id }");
-    expect(result.postCheck?.injectedSelection).toBe(false);
+    // The agent asked for `customer { name }`; the `id` is ours, so the answer
+    // it gets back must not carry a field it never asked for.
+    expect(result.postCheck?.injectedSelection).toBe("id");
   });
 
   it("anchors the post-check path on the alias of the issue field", () => {
@@ -95,7 +97,7 @@ describe("narrowLinear — issue(id) ownership post-check", () => {
     expect(result.postCheck).toEqual({
       path: ["data", "issue", "customer", "id"],
       expectedCustomerId: "c_18",
-      injectedSelection: false,
+      injectedSelection: "none",
     });
   });
 
@@ -106,7 +108,7 @@ describe("narrowLinear — issue(id) ownership post-check", () => {
     );
     expect(result.decision).toBe("allow");
     expect(normalized(queryOf(result))).toContain("customer { id }");
-    expect(result.postCheck?.injectedSelection).toBe(true);
+    expect(result.postCheck?.injectedSelection).toBe("relation");
   });
 
   it("denies two issue root fields — one post-check cannot cover both", () => {

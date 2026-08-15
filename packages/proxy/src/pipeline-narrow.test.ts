@@ -119,8 +119,8 @@ describe("pipeline — narrow post-check", () => {
   const postCheck = {
     path: CUSTOMER_PATH,
     expectedCustomerId: "c_18",
-    injectedSelection: true,
-  };
+    injectedSelection: "relation",
+  } as const;
   const narrow = (): NarrowResult => ({ decision: "allow", postCheck });
 
   it("replaces an out-of-scope object with a 404-shaped GraphQL error", async () => {
@@ -139,7 +139,7 @@ describe("pipeline — narrow post-check", () => {
     expect(h.events[0]?.reason).toBe("out-of-scope object");
   });
 
-  it("strips the selection it injected when the object is in scope", async () => {
+  it("strips the whole relation it injected when the object is in scope", async () => {
     const h = harness(
       { narrow },
       graphql({
@@ -159,7 +159,7 @@ describe("pipeline — narrow post-check", () => {
       {
         narrow: (): NarrowResult => ({
           decision: "allow",
-          postCheck: { ...postCheck, injectedSelection: false },
+          postCheck: { ...postCheck, injectedSelection: "none" },
         }),
       },
       graphql({ data: { issue: { id: "i1", customer: { id: "c_18" } } } }),
@@ -169,6 +169,30 @@ describe("pipeline — narrow post-check", () => {
     expect(JSON.parse(bodyText(res.body))).toEqual({
       data: { issue: { id: "i1", customer: { id: "c_18" } } },
     });
+  });
+
+  it("strips only the `id` when the agent asked for the relation itself", async () => {
+    // NARROW widened `customer { name }` to `customer { name id }`: the `id` is
+    // ours, the `customer` key is the agent's. Removing the whole relation
+    // would take away what it asked for; leaving the `id` hands it a field it
+    // never asked for.
+    const h = harness(
+      {
+        narrow: (): NarrowResult => ({
+          decision: "allow",
+          postCheck: { ...postCheck, injectedSelection: "id" },
+        }),
+      },
+      graphql({
+        data: { issue: { id: "i1", customer: { name: "Acme", id: "c_18" } } },
+      }),
+    );
+    const res = await handle(h.deps, request());
+
+    expect(JSON.parse(bodyText(res.body))).toEqual({
+      data: { issue: { id: "i1", customer: { name: "Acme" } } },
+    });
+    expect(h.events[0]?.decision).toBe("allow");
   });
 
   it("passes a null object through — the vendor returned nothing to leak", async () => {
