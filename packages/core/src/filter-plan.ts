@@ -17,8 +17,8 @@
  * One ownership check, at one place in the response.
  *
  * The proxy resolves `path` against the parsed body, and for every object it
- * finds there it reads `ownerPath` and compares it to `expectedOwnerId`. An
- * object whose owner does not resolve to exactly that id is FOREIGN — missing,
+ * finds there it reads `ownerPath` and compares it to `expectedOwnerIds`. An
+ * object whose owner does not resolve to one of them is FOREIGN — missing,
  * `null`, or of the wrong type all count as foreign, never as a pass.
  */
 export interface FilterRule {
@@ -45,8 +45,38 @@ export interface FilterRule {
    * string.
    */
   ownerPath: readonly string[];
-  /** The mission's resolved owner id. Only an exact match keeps the object. */
-  expectedOwnerId: string;
+  /**
+   * The mission's resolved owner ids. An object is ours when its resolved
+   * owner matches ANY of them.
+   *
+   * A set, not a single id, because a mission holds a set of entities: one
+   * GitHub mission covers several repos, so a search result is ours if its
+   * repository is any of them. Emitting one rule per owner on the same path
+   * cannot express that — each rule would drop what the others keep. A
+   * connector with a single resolved owner emits a one-element array, which
+   * stays the ordinary case.
+   *
+   * An EMPTY set owns nothing: every object at `path` is foreign. That is the
+   * fail-closed reading of "the mission resolves to no entity here", and it is
+   * deliberately not an error the proxy has to notice.
+   */
+  expectedOwnerIds: readonly string[];
+  /**
+   * How a resolved owner is compared to `expectedOwnerIds`.
+   *
+   *   - `exact`: byte-for-byte. Opaque vendor ids (a Linear UUID) are exact,
+   *     and exactness is the default a connector should have to argue against.
+   *   - `ascii-case-insensitive`: A–Z folded to a–z, nothing else. GitHub
+   *     names an `owner/repo` case-insensitively but answers with the casing
+   *     it stored, so a mission typed `Acme-Corp/Product` must still match a
+   *     `.../acme-corp/product` in the body.
+   *
+   * The folding is ASCII-only on purpose: `String.toLowerCase()` maps `K`
+   * (U+212A KELVIN SIGN) to `k`, so a foreign `acme/Kafka` would pass as the
+   * mission's `acme/kafka`. A case rule that widens the set of matching
+   * identifiers beyond the vendor's own rule is a hole, not a convenience.
+   */
+  ownerMatch: "exact" | "ascii-case-insensitive";
   /**
    * Field names, directly on the object at `path`, that WE added to the
    * request so the ownership check would be possible — and that must therefore

@@ -1,5 +1,6 @@
 import type { FilterPlan, FilterRule } from "@missura/core";
-import { isRecord, ownerId, recount, stripAt } from "./filter-json";
+import { isRecord, recount, stripAt } from "./filter-json";
+import { isOwned } from "./filter-owner";
 import {
   GITHUB_NOT_FOUND_BODY,
   NOT_FOUND_GRAPHQL_BODY,
@@ -56,10 +57,6 @@ const FAILED: RuleOutcome = {
   touched: false,
   ok: false,
 };
-
-function isOwned(object: unknown, rule: FilterRule): boolean {
-  return ownerId(object, rule.ownerPath) === rule.expectedOwnerId;
-}
 
 /**
  * A foreign single object: `null` when the vendor schema allows it, otherwise
@@ -238,7 +235,10 @@ export function planFromPostCheck(check: NarrowPostCheck): FilterPlan {
     // without ever naming the type it was proving it for.
     type: "unknown",
     ownerPath: check.path.slice(-2),
-    expectedOwnerId: check.expectedCustomerId,
+    // One owner, and an opaque vendor id: the M2 post-check resolved a single
+    // customer and Linear's ids are exact strings, never spelled two ways.
+    expectedOwnerIds: [check.expectedCustomerId],
+    ownerMatch: "exact",
     injected: check.injectedSelection === "relation" ? [relation] : [],
     nullable: false,
   };
