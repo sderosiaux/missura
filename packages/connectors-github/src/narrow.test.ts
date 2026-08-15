@@ -150,17 +150,20 @@ describe("narrowGithub — encoded path separators", () => {
     expect(result.denyShape).toBe("github404");
   });
 
-  it("allows a legitimate encoded path and forwards it verbatim", () => {
-    // Pinned deliberately: GitHub serves this exact spelling, so refusing every
-    // `%2F` would break a request the vendor considers ordinary. Decoding is
-    // for the decision only — rewriting the path would change what the vendor
-    // is asked for.
+  it("keeps a legitimate encoded contents path working, forwarded as the path it was decided on", () => {
+    // GitHub serves this exact spelling — a live
+    // `GET /repos/{o}/{r}/contents/src%2Findex.ts` answers 200 with
+    // `"path": "src/index.ts"` — so refusing every `%2F` would break a request
+    // the vendor considers ordinary. It is forwarded canonicalized rather than
+    // verbatim: `%2F` is a separator to GitHub, so the two spellings resolve to
+    // the same file, and forwarding the spelling we did NOT decide on is what
+    // let a decision about one repo travel as a request for another.
     const result = narrowGithub(
       "/repos/acme-corp/product/contents/src%2Findex.ts",
       SCOPE,
     );
     expect(result.decision).toBe("allow");
-    expect(result.path).toBe("/repos/acme-corp/product/contents/src%2Findex.ts");
+    expect(result.path).toBe("/repos/acme-corp/product/contents/src/index.ts");
   });
 
   it("keeps the unencoded spelling of the same path working", () => {
@@ -178,9 +181,9 @@ describe("narrowGithub — encoded path separators", () => {
     expect(result.denyShape).toBe("github404");
   });
 
-  it("resolves an encoded owner/repo against the mission scope", () => {
+  it("resolves an encoded owner/repo against the mission scope and forwards it decoded", () => {
     const result = narrowGithub("/repos/acme%2Dcorp/product/issues", SCOPE);
     expect(result.decision).toBe("allow");
-    expect(result.path).toBe("/repos/acme%2Dcorp/product/issues");
+    expect(result.path).toBe("/repos/acme-corp/product/issues");
   });
 });

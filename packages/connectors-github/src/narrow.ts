@@ -1,85 +1,56 @@
-/**
- * Structurally identical to the proxy's `NarrowResult`/`denyShape` — declared
- * here because a connector never imports the proxy (see packages/proxy/src/narrow.ts
- * for the seam this mirrors).
- */
-export interface GithubNarrowResult {
-  decision: "allow" | "deny";
-  /** Rewritten request target (forced `repo:` qualifiers, for instance). */
-  path?: string;
-  /** `github404` answers with GitHub's own not-found shape: no enumeration. */
-  denyShape?: "github404";
-  reason?: string;
-}
+import { decideGithub } from "./catalog";
+import {
+  canonicalize,
+  DUMMY_BASE,
+  isVendorName,
+  type CanonicalRequest,
+} from "./narrow-path";
+import {
+  deny,
+  NOT_IN_CATALOG_SCOPE,
+  REPO_NOT_IN_MISSION,
+  UNDECODABLE_PATH,
+  type GithubNarrowResult,
+} from "./narrow-result";
 
-const REPO_NOT_IN_MISSION = "repo not in mission";
-const NOT_IN_CATALOG_SCOPE = "path not narrowable under a mission scope";
-const UNDECODABLE_PATH = "path is not decodable";
+export type { GithubNarrowResult } from "./narrow-result";
 
-/** Dummy base so `URL` can parse pathname + query safely. */
-const DUMMY_BASE = "https://vendor.invalid";
-
-/** Enough to see through `%252f`; a bound, so a crafted path cannot spin here. */
-const MAX_DECODE_PASSES = 3;
-
-function deny(reason: string): GithubNarrowResult {
-  return { decision: "deny", denyShape: "github404", reason };
-}
-
-/** Decodes until stable, so a double-encoded separator cannot hide one pass deep. */
-function decodeFully(value: string): string | undefined {
-  let current = value;
-  for (let pass = 0; pass < MAX_DECODE_PASSES; pass += 1) {
-    let next: string;
-    try {
-      next = decodeURIComponent(current);
-    } catch {
-      // Malformed percent-encoding: we cannot say what the vendor would read,
-      // so we do not guess.
-      return undefined;
-    }
-    if (next === current) return current;
-    current = next;
-  }
-  return current;
-}
-
-/**
- * The segments the VENDOR will act on, not the ones the client typed.
- *
- * `URL` normalizes `..` and `%2e%2e` but leaves `..%2f` alone, while
- * api.github.com decodes `%2F` as a path separator — a live
- * `/repos/octokit/octokit.js/contents/src%2Findex.ts` answers 200. Deciding on
- * the raw segments would therefore let `/repos/acme/product/..%2f..%2fglobex/x`
- * read as a path inside acme/product. GitHub does not collapse the `..` today,
- * so the mismatch is not currently exploitable — which is exactly the kind of
- * agreement an allowlist must not depend on.
- *
- * So: decode, treat `\` as a separator too (some normalizers do), then remove
- * dot segments by hand. Undecodable input is refused rather than guessed at.
- * The path forwarded upstream stays the client's original — decoding is for
- * the decision only, never for the request.
- */
-function pathSegments(path: string): string[] | undefined {
-  const { pathname } = new URL(path, DUMMY_BASE);
-  const decoded = decodeFully(pathname);
-  if (decoded === undefined) return undefined;
-  const segments: string[] = [];
-  for (const segment of decoded.split(/[/\\]/)) {
-    if (segment.length === 0 || segment === ".") continue;
-    if (segment === "..") {
-      segments.pop();
-      continue;
-    }
-    segments.push(segment);
-  }
-  return segments;
-}
+const NOT_A_REPO_NAME = "owner/repo outside GitHub's own naming charset";
 
 /** `owner/repo` in scope, case-insensitive. */
 function inScope(owner: string, repo: string, githubRepos: readonly string[]): boolean {
   const target = `${owner}/${repo}`.toLowerCase();
   return githubRepos.some((candidate) => candidate.toLowerCase() === target);
+}
+
+/**
+ * Allows the canonical target — after showing it to the catalog again.
+ *
+ * Collapsing `..` is ours, not GitHub's: the vendor would have read
+ * `/repos/o/r/contents/..%2f..%2fcollaborators` as a filename, we read it as a
+ * different route. Since we forward what we decided on, that route has never
+ * faced the catalog, and an uncataloged endpoint must fail closed.
+ */
+function allowCanonical(canonical: CanonicalRequest): GithubNarrowResult {
+  const target = `${canonical.path}${canonical.search}`;
+  // The method is GET by construction: NARROW runs behind a catalog ALLOW.
+  if (decideGithub("GET", target).decision === "deny") {
+    return deny(NOT_IN_CATALOG_SCOPE);
+  }
+  return { decision: "allow", path: target };
+}
+
+function narrowRepoPath(
+  canonical: CanonicalRequest,
+  githubRepos: readonly string[],
+): GithubNarrowResult {
+  const owner = canonical.segments[1];
+  const repo = canonical.segments[2];
+  if (owner === undefined || repo === undefined) return deny(REPO_NOT_IN_MISSION);
+  if (githubRepos.length === 0) return deny(REPO_NOT_IN_MISSION);
+  if (!isVendorName(owner) || !isVendorName(repo)) return deny(NOT_A_REPO_NAME);
+  if (!inScope(owner, repo, githubRepos)) return deny(REPO_NOT_IN_MISSION);
+  return allowCanonical(canonical);
 }
 
 const QUALIFIER_PREFIXES = ["repo:", "org:", "user:"];
@@ -91,34 +62,20 @@ function isStrippedQualifier(term: string): boolean {
 }
 
 function narrowSearchIssues(
-  path: string,
+  canonical: CanonicalRequest,
   githubRepos: readonly string[],
 ): GithubNarrowResult {
   if (githubRepos.length === 0) return deny(REPO_NOT_IN_MISSION);
 
-  const url = new URL(path, DUMMY_BASE);
+  const url = new URL(`${canonical.path}${canonical.search}`, DUMMY_BASE);
   const rawQ = url.searchParams.get("q") ?? "";
   const kept = rawQ
     .split(/\s+/)
     .filter((term) => term.length > 0 && !isStrippedQualifier(term));
   const forced = githubRepos.map((repo) => `repo:${repo}`);
-  const nextQ = [...kept, ...forced].join(" ");
-  url.searchParams.set("q", nextQ);
+  url.searchParams.set("q", [...kept, ...forced].join(" "));
 
   return { decision: "allow", path: url.pathname + url.search };
-}
-
-function narrowRepoPath(
-  segments: readonly string[],
-  githubRepos: readonly string[],
-  path: string,
-): GithubNarrowResult {
-  const owner = segments[1];
-  const repo = segments[2];
-  if (owner === undefined || repo === undefined) return deny(REPO_NOT_IN_MISSION);
-  if (githubRepos.length === 0) return deny(REPO_NOT_IN_MISSION);
-  if (!inScope(owner, repo, githubRepos)) return deny(REPO_NOT_IN_MISSION);
-  return { decision: "allow", path };
 }
 
 /**
@@ -126,20 +83,25 @@ function narrowRepoPath(
  * or refuses it github404-shaped. Deny by default: any catalog-allowed path
  * that isn't `/repos/{owner}/{repo}/...` or `/search/issues`, and any path at
  * all under an empty scope, is a refusal.
+ *
+ * The decision is taken on the canonical request — decoded, dot-collapsed — and
+ * that same canonical request is what travels. Deciding on one spelling and
+ * forwarding another is how a mission for one repo becomes a credentialed call
+ * to a different one.
  */
 export function narrowGithub(
   path: string,
   scope: { githubRepos: string[] },
 ): GithubNarrowResult {
-  const segments = pathSegments(path);
-  if (segments === undefined) return deny(UNDECODABLE_PATH);
-  const [first, second] = segments;
+  const canonical = canonicalize(path);
+  if (canonical === undefined) return deny(UNDECODABLE_PATH);
+  const [first, second] = canonical.segments;
 
   if (first === "repos" && second !== undefined) {
-    return narrowRepoPath(segments, scope.githubRepos, path);
+    return narrowRepoPath(canonical, scope.githubRepos);
   }
   if (first === "search" && second === "issues") {
-    return narrowSearchIssues(path, scope.githubRepos);
+    return narrowSearchIssues(canonical, scope.githubRepos);
   }
   return deny(NOT_IN_CATALOG_SCOPE);
 }
