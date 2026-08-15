@@ -7,6 +7,8 @@ import {
   type StateFile,
 } from "./mission-state";
 import type { ResolvedScope } from "./entities";
+import type { ScopeResolution } from "./entity-resolve";
+import { scopeProvenance, type ScopeProvenance } from "./scope-provenance";
 import {
   signMissionToken,
   verifyMissionToken,
@@ -27,6 +29,15 @@ export interface MissionRecord extends CreateMission {
   createdAt: number;
   expiresAt: number;
   revokedAt?: number;
+  /**
+   * What the entity graph was asked, and what it answered — the confirmed links
+   * this scope was built from, and the ones it declined to use. Absent when the
+   * mint did not go through the graph at all.
+   *
+   * Description of a grant, like every other field here: it names ids the
+   * operator already wrote down, never a token and never a credential.
+   */
+  resolution?: ScopeProvenance;
 }
 
 /** Capabilities a mission grants in M2 — read-only, deliberately. */
@@ -143,6 +154,13 @@ export class MissionStore {
   create(
     input: CreateMission,
     resolved: ResolvedScope,
+    /**
+     * The graph's account of that scope, when the graph produced it. Optional,
+     * and separate from `resolved`, because a mission may legitimately be
+     * minted with no graph in the picture at all — a native-only scope resolves
+     * without one, and that path must never depend on this argument.
+     */
+    resolution?: ScopeResolution,
   ): { record: MissionRecord; token: string } {
     // Before the write, so a mission another process minted since is not
     // dropped by this one's rewrite of the whole file.
@@ -168,6 +186,11 @@ export class MissionStore {
       jti: claims.jti,
       createdAt: claims.iat,
       expiresAt: claims.exp,
+      // Projected through the whitelist rather than stored as handed over: the
+      // caller's resolution object is not the shape that goes on disk.
+      ...(resolution === undefined
+        ? {}
+        : { resolution: scopeProvenance(resolution) }),
     };
     this.records.push(record);
     this.persist();

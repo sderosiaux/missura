@@ -1,7 +1,16 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import type { LinkSystem } from "./entity-graph";
+import type { LinkUse, ScopeDegradation } from "./entity-resolve";
+import { redactDegradation, redactLinkUse } from "./scope-provenance";
 
-export type Provider = "linear" | "github" | "zendesk";
+/**
+ * The systems the data plane speaks. Aliased to the entity graph's `LinkSystem`
+ * rather than re-declared: a link to a system the proxy cannot enforce, or a
+ * provider the graph cannot describe, would be a divergence nobody notices
+ * until a mission is minted against it.
+ */
+export type Provider = LinkSystem;
 export type Decision = "allow" | "deny";
 
 export interface DecisionEvent {
@@ -24,6 +33,21 @@ export interface DecisionEvent {
    * whole answer authorized — the difference is what makes the log auditable.
    */
   objectsRemoved?: number;
+  /**
+   * How the mission's scope was built (`entity-resolve.ts`). `native` means no
+   * entity was involved, so the graph widened nothing.
+   */
+  scopeVia?: "entity" | "native";
+  /** The entity the scope was widened through, when there was one. */
+  scopeEntity?: string;
+  /** The confirmed links the scope was built from — a wrong mapping's trail. */
+  scopeLinks?: readonly LinkUse[];
+  /**
+   * What the graph knew about and did NOT put in scope, and why. This is what
+   * makes "the mission ran narrow because the Linear link is only proposed" a
+   * query rather than an investigation.
+   */
+  scopeDegraded?: readonly ScopeDegradation[];
 }
 
 /**
@@ -44,16 +68,26 @@ const SERIALIZED_FIELDS = [
   "purpose",
   "traceId",
   "objectsRemoved",
+  "scopeVia",
+  "scopeEntity",
 ] as const satisfies readonly (keyof DecisionEvent)[];
 
 /**
  * Copies the whitelist only, and only the fields that are actually set: an
  * absent provenance field leaves no empty key behind in the log.
+ *
+ * The two array fields are rebuilt element by element rather than copied by
+ * reference: a whitelist that stops at the top level is not one, and a link
+ * object carries operator-written evidence text that has no business in a log.
  */
 function redact(ev: DecisionEvent): DecisionEvent {
   const out: Partial<Record<keyof DecisionEvent, unknown>> = {};
   for (const field of SERIALIZED_FIELDS) {
     if (ev[field] !== undefined) out[field] = ev[field];
+  }
+  if (ev.scopeLinks !== undefined) out.scopeLinks = ev.scopeLinks.map(redactLinkUse);
+  if (ev.scopeDegraded !== undefined) {
+    out.scopeDegraded = ev.scopeDegraded.map(redactDegradation);
   }
   return out as DecisionEvent;
 }

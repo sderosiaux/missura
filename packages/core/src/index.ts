@@ -13,5 +13,6 @@ export * from "./parent-proof";
 export * from "./remediation";
 export * from "./remediation-envelope";
 export * from "./remediation-types";
+export * from "./scope-provenance";
 export * from "./token";
 export * from "./vault";
