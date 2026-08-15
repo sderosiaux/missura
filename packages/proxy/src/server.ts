@@ -183,7 +183,8 @@ export async function createServers(
         "linear",
         config,
         config.linear,
-        (req): CatalogDecision => decideLinear(req.body),
+        (req): CatalogDecision =>
+          decideLinear(req.method, req.path, req.body),
         DEFAULT_LINEAR_UPSTREAM,
       ),
     ),

@@ -23,6 +23,13 @@ const ALLOWED_ROOT_FIELDS: ReadonlySet<string> = new Set([
   "viewer",
 ]);
 
+/** The one transport shape the Linear connector serves. */
+const GRAPHQL_METHOD = "POST";
+const GRAPHQL_PATHNAME = "/graphql";
+
+/** Dummy base so `URL` normalizes dot segments and strips the query string. */
+const DUMMY_BASE = "https://vendor.invalid";
+
 const ACTION_BY_OPERATION_TYPE: Record<OperationTypeNode, string> = {
   query: "read",
   mutation: "write",
@@ -71,20 +78,55 @@ function isDecision(value: object): value is CatalogDecision {
 }
 
 /**
- * Decide whether a raw Linear `/graphql` POST body may reach the vendor.
- * Read-only, single-operation, allowlisted root fields — every other shape is
- * denied with a reason naming the exact field or operation type at fault.
+ * The transport gate, evaluated before the body is even looked at: the Linear
+ * connector serves exactly `POST /graphql`. Without it an allowlisted query
+ * body would carry any other route (`/oauth/token`, a REST path) to the vendor
+ * with the injected credential attached.
  */
-export function decideLinear(body: string): CatalogDecision {
+function transportDenial(method: string, path: string): CatalogDecision | undefined {
+  if (method.toUpperCase() !== GRAPHQL_METHOD) {
+    return deny(
+      `method ${method} is not allowed — the Linear catalog serves POST /graphql only`,
+    );
+  }
+  let pathname: string;
+  try {
+    ({ pathname } = new URL(path, DUMMY_BASE));
+  } catch {
+    return deny("request path is unparseable — the Linear catalog serves POST /graphql only");
+  }
+  if (pathname !== GRAPHQL_PATHNAME) {
+    return deny(
+      `path ${pathname} is not the Linear GraphQL endpoint — the catalog serves POST /graphql only`,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Decide whether a raw Linear request may reach the vendor. `POST /graphql`
+ * only, then read-only, single-operation, allowlisted root fields — every
+ * other shape is denied with a reason naming the exact path, field or
+ * operation type at fault.
+ */
+export function decideLinear(
+  method: string,
+  path: string,
+  body: string,
+): CatalogDecision {
+  const transport = transportDenial(method, path);
+  if (transport !== undefined) return transport;
+
   const parsedBody = parseBody(body);
   if (isDecision(parsedBody)) return parsedBody;
 
   let doc: DocumentNode;
   try {
     doc = parse(parsedBody.query, { noLocation: true });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "syntax error";
-    return deny(`unparseable GraphQL document: ${detail}`);
+  } catch {
+    // Fixed string: the parser echoes the offending source back in its message,
+    // and that message travels to the agent in the 403 body.
+    return deny("unparseable graphql");
   }
 
   const operation = singleOperation(doc);

@@ -170,6 +170,36 @@ describe("proxy server — linear listener", () => {
     expect(payload.error.code).toBe("missura_denied");
     expect(upstream?.received).toHaveLength(0);
   });
+
+  it("denies a non-/graphql path even with an allowlisted query body", async () => {
+    const { linearUrl } = await boot();
+    const res = await fetch(`${linearUrl}/oauth/token`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token()}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ query: "query Q { viewer { id } }" }),
+    });
+    const payload = (await res.json()) as {
+      error: { code: string; reason: string };
+    };
+
+    expect(res.status).toBe(403);
+    expect(payload.error.code).toBe("missura_denied");
+    expect(payload.error.reason).toContain("/oauth/token");
+    expect(upstream?.received).toHaveLength(0);
+  });
+
+  it("denies GET /graphql", async () => {
+    const { linearUrl } = await boot();
+    const res = await fetch(`${linearUrl}/graphql`, {
+      headers: { authorization: `Bearer ${token()}` },
+    });
+
+    expect(res.status).toBe(403);
+    expect(upstream?.received).toHaveLength(0);
+  });
 });
 
 describe("proxy server — github listener", () => {
