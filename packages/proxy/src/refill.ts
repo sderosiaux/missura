@@ -28,7 +28,7 @@ import type { IncomingShape, ResponseShape } from "./transport";
  * shows the real number of vendor calls a mission spent.
  *
  * DEFERRED (SPEC §22): missura-owned opaque logical cursors. M3 hands back the
- * last upstream cursor it actually used. Two consequences, both real:
+ * last upstream cursor it actually used. Three consequences, all real:
  *   - a cursor is only meaningful against the same mission and the same vendor
  *     page boundaries, so an agent that STORES a cursor and replays it under a
  *     later mission resumes from a vendor position that mission never walked —
@@ -37,8 +37,19 @@ import type { IncomingShape, ResponseShape } from "./transport";
  *     the surplus is dropped rather than returned, and the cursor we hand back
  *     points PAST it. Those objects are missing from the agent's next page.
  *     Returning them instead would make the answer longer than the page that
- *     was requested, which is itself a count of how many pages we walked.
- * Both disappear once the cursor is ours to mint.
+ *     was requested, which is itself a count of how many pages we walked;
+ *   - CONFIDENTIALITY, and it is the one that is not merely an availability
+ *     cost: that cursor is a vendor POSITION, so it says how far the walk went.
+ *     The common `arrayconnection:N` spelling is plain base64, so an agent that
+ *     decodes it reads `position_walked − page_size` = objects hidden between
+ *     its own page and ours. Everything else about a walked answer is already
+ *     indistinguishable (same shape, same key order, the first page's headers);
+ *     the cursor is the one field that is not. It is NOT masked because both
+ *     ways of masking it break pagination rather than protect it: the first
+ *     page's cursor resumes at a vendor position we have already consumed, so
+ *     the agent is served the same objects twice, and omitting the cursor stops
+ *     the SDK's iteration outright. Pinned by refill-closed.test.ts.
+ * All three disappear once the cursor is ours to mint.
  */
 
 /** Extra upstream calls one agent request may cause. */
