@@ -1,4 +1,9 @@
-import type { DenialCode, FilterPlan, MissionClaims } from "@missura/core";
+import type {
+  DenialCode,
+  FilterPlan,
+  MissionClaims,
+  ParentProof,
+} from "@missura/core";
 
 /**
  * What NARROW had to add to the query to make the ownership check possible,
@@ -72,6 +77,28 @@ export interface NarrowResult {
    * paths, and counts.
    */
   filterPlan?: FilterPlan;
+  /**
+   * A PARENT to prove before this request may run — for a child whose own
+   * response names no owner (a Zendesk ticket comment, a Linear comment, an
+   * attachment). The proxy fetches it through the same forward path, reads the
+   * owner at `ownerPath` and compares it against `missionOwnerIds`.
+   *
+   * On an ALLOW only. A refusal is decided before the vendor is asked, and a
+   * refusal that made a call would be a refusal with a latency of its own.
+   */
+  parentProof?: ParentProof;
+  /**
+   * The mission's resolved owner ids in this connector's terms — the same set a
+   * `FilterRule` compares against, lifted onto the result so a stage with no
+   * rule to read still knows what the mission covers.
+   *
+   * It sits here rather than inside `parentProof` on purpose: the acceptable
+   * owners are the MISSION's, and a requirement that could restate them could
+   * also widen them. Absent means the empty set, which owns nothing.
+   *
+   * Never serialized. It names the mission's own targets, which no denial may.
+   */
+  missionOwnerIds?: readonly string[];
 }
 
 export type NarrowFn = (
@@ -131,6 +158,37 @@ const NOT_FOUND: Record<DenyShape, { message: string; body: string }> = {
  */
 export function notFoundMessage(shape: DenyShape | undefined): string | undefined {
   return shape === undefined ? undefined : NOT_FOUND[shape].message;
+}
+
+/**
+ * The bytes every request-side scope refusal is made of, in ONE place.
+ *
+ * Two stages produce one: NARROW, which refused before the vendor was asked,
+ * and the PARENT PROOF, which refused after asking about a DIFFERENT object.
+ * They must be indistinguishable — and they are, by construction rather than by
+ * two lists of fields that happen to agree today: everything here comes from
+ * the mission and from the connector's own shape, never from the target.
+ */
+export function scopeDenial(
+  narrowed: NarrowResult,
+  reason: string,
+): {
+  status: number;
+  code: DenialCode;
+  reason: string;
+  vendorMessage?: string;
+  scopeSize: number | undefined;
+} {
+  const absence = notFoundMessage(narrowed.denyShape);
+  return {
+    status: absence === undefined ? 403 : 404,
+    code: narrowed.denialCode ?? "missura_out_of_mission_scope",
+    reason,
+    // The vendor's own absence message, unchanged: a target outside the mission
+    // and one that never existed answer the same bytes.
+    ...(absence === undefined ? {} : { vendorMessage: absence }),
+    scopeSize: narrowed.missionScopeSize,
+  };
 }
 
 /** The body a fail-closed FILTER answers with, in the vendor's own envelope. */

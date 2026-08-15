@@ -1,4 +1,4 @@
-import { createCursorStore } from "@missura/core";
+import { createCursorStore, createParentProofStore } from "@missura/core";
 import type {
   CatalogDecision,
   DecisionEvent,
@@ -98,6 +98,7 @@ export function harness(
     isRevoked: (): boolean => false,
     narrow: passThroughNarrow,
     cursors: createCursorStore(),
+    proofs: createParentProofStore(),
     vendorAuthHeader: (): string => VENDOR_HEADER,
     upstreamBase: "https://api.github.com",
     fetchImpl,

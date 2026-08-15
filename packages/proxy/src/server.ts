@@ -8,6 +8,7 @@ import { decideGithub } from "@missura/connectors-github";
 import { decideLinear } from "@missura/connectors-linear";
 import {
   createCursorStore,
+  createParentProofStore,
   verifyMissionToken,
   type CatalogDecision,
   type DecisionEvent,
@@ -199,6 +200,9 @@ function deps(
     // collection, and a handle that crossed connections would name a position
     // in a collection the other vendor never has.
     cursors: createCursorStore(),
+    // One store per connection too: a proof key is an object in ONE vendor's
+    // namespace, and `ticket:1` under two vendors is two different objects.
+    proofs: createParentProofStore(),
     verifyToken: (token) =>
       verifyMissionToken(token, { key: config.signingKey }),
     decide,

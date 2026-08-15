@@ -1,6 +1,5 @@
 import {
   MissionExpiredError,
-  type CatalogDecision,
   type CursorStore,
   type MissionClaims,
 } from "@missura/core";
@@ -21,7 +20,8 @@ import { withMissuraCursor, withVendorCursor } from "./cursor-swap";
 import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
-import { notFoundMessage, type NarrowFn } from "./narrow";
+import { scopeDenial, type NarrowFn } from "./narrow";
+import { parentProofStage, type ParentProofDeps } from "./parent-proof";
 import { refill } from "./refill";
 import { traceIdOf } from "./trace";
 import {
@@ -33,9 +33,8 @@ import {
 export { MAX_RESPONSE_BYTES } from "./transport";
 export type { IncomingShape, ResponseShape } from "./transport";
 
-export interface PipelineDeps extends ForwardDeps {
+export interface PipelineDeps extends ForwardDeps, ParentProofDeps {
   verifyToken(token: string): MissionClaims;
-  decide(req: { method: string; path: string; body: string }): CatalogDecision;
   /**
    * Consulted on every request, never cached: a revoked mission must stop
    * working on the very next call, not at the next token expiry.
@@ -75,7 +74,7 @@ function verified(
 
 /**
  * authn → revocation → connections → catalog → action → narrow → origin
- * re-validation → forward → filter → audit.
+ * re-validation → parent proof → forward → filter → audit.
  *
  * Deny by default at every step: the upstream is reached only after a mission
  * token verified and a catalog ALLOW, and any thrown error (catalog, audit
@@ -198,17 +197,7 @@ export async function handle(
     if (narrowed.decision === "deny") {
       const reason = narrowed.reason ?? "narrowed out of mission scope";
       emitEvent(deps, ctx, claimsDenial(verdict, reason), reason);
-      const absence = notFoundMessage(narrowed.denyShape);
-      return deny({
-        status: absence === undefined ? 403 : 404,
-        code: narrowed.denialCode ?? "missura_out_of_mission_scope",
-        reason,
-        // The vendor's own absence message, unchanged: a target outside the
-        // mission and one that never existed answer the same bytes.
-        ...(absence === undefined ? {} : { vendorMessage: absence }),
-        scopeSize: narrowed.missionScopeSize,
-        ...mission,
-      });
+      return deny({ ...scopeDenial(narrowed, reason), ...mission });
     }
     // The agent paginates with handles of ours, never with vendor positions.
     // One we did not issue to THIS mission is refused here rather than
@@ -250,6 +239,21 @@ export async function handle(
         ...mission,
       });
     }
+
+    // PARENT PROOF: a child whose own response names no owner is served only
+    // once its parent is proven to belong to the mission (`parent-proof.ts`).
+    // Placed after the cursor and origin checks so a request already refused
+    // never spends a vendor call, and every way of failing — foreign owner,
+    // missing owner, absent parent, broken probe — lands on the SAME refusal
+    // the NARROW stage builds above.
+    const unproven = await parentProofStage(deps, {
+      narrowed,
+      req: outbound,
+      verdict,
+      ctx,
+      claims,
+    });
+    if (unproven !== undefined) return deny({ ...unproven, ...mission });
 
     // FILTER runs last, on the vendor's answer: the request was allowed to run,
     // and what comes back is cut down to what the mission proves it may see.
