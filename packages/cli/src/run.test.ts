@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupHomes, initedHarness, type Harness } from "./harness.fixtures";
+import { revokeCommand } from "./missions";
 import { resolveHome } from "./paths";
 import { runCommand, type RunningProxy } from "./run";
 
@@ -165,6 +166,36 @@ describe("missura run — operator plane and NARROW wired", () => {
       );
       expect(after.status).toBe(401);
       expect(calls).toHaveLength(2);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("honours a revoke written by a separate store, on the next request", async () => {
+    const h = await initedHarness();
+    const calls: Upstream[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const minted = await mint(h, servers);
+      const auth = { authorization: `Bearer ${minted.token}` };
+      const target = `${minted.origins.github}/repos/acme-corp/product`;
+
+      const allowed = await fetch(target, { headers: auth });
+      expect(allowed.status).toBe(200);
+      expect(calls).toHaveLength(1);
+
+      // `missura revoke` from another terminal: its own MissionStore over the
+      // same file, never the instance `missura run` captured at boot.
+      expect(revokeCommand(h.io, minted.missionId)).toBe(0);
+
+      // The very next request, with no sleep and no restart: the spec's < 5 s
+      // revocation budget is met by construction, not by polling.
+      const startedAt = Date.now();
+      const after = await fetch(target, { headers: auth });
+      expect(after.status).toBe(401);
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(calls).toHaveLength(1);
     } finally {
       await servers.close();
     }
