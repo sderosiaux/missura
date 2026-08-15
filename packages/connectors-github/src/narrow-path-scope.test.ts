@@ -70,6 +70,64 @@ describe("a prefixed entry buys nothing a path prefix cannot bound", () => {
   });
 });
 
+/**
+ * THE DIRECTORY-LISTING RULE, pinned by the property it protects.
+ *
+ * `GET /contents/granola-transcripts` answers with every entry of that
+ * directory — which is one directory per customer, so the answer IS the
+ * customer list. There is no way to serve that listing and still say the
+ * mission covers one customer, and there is no field on a listing entry that
+ * could prove otherwise; filtering it down to the single in-prefix entry would
+ * be a different answer from the vendor's, not a narrower one.
+ *
+ * So: a listing whose own path is a STRICT ANCESTOR of the mission's prefix
+ * denies. At or below the prefix, it is served — a listing there enumerates
+ * only paths the mission already covers.
+ */
+describe("a listing above the mission's path enumerates its siblings, so it denies", () => {
+  it.each([
+    ["the repository root", ""],
+    ["the export directory holding all customers", "/granola-transcripts"],
+  ])("denies the strict-ancestor listing at %s", (_label, target) => {
+    const result = narrowGithub(`/repos/${SHARED}/contents${target}`, PREFIXED);
+    expect(result.decision).toBe("deny");
+    expect(result.denyShape).toBe("github404");
+    expect(result.denialCode).toBe("missura_out_of_path_scope");
+  });
+
+  it.each([
+    ["the prefix itself", "/granola-transcripts/abcam"],
+    ["a directory below it", "/granola-transcripts/abcam/attachments"],
+  ])("serves the listing at or below the prefix: %s", (_label, target) => {
+    expect(
+      narrowGithub(`/repos/${SHARED}/contents${target}`, PREFIXED).decision,
+    ).toBe("allow");
+  });
+
+  /**
+   * An ancestor is decided from the mission's prefix alone, so the answer is
+   * the same for a directory that exists and one that never did — it is not an
+   * existence oracle, and the distinct reason is what lets an agent correct
+   * itself instead of probing.
+   */
+  it("says WHICH refusal it is, without naming anything it refused", () => {
+    const ancestor = narrowGithub(
+      `/repos/${SHARED}/contents/granola-transcripts`,
+      PREFIXED,
+    );
+    const outside = narrowGithub(
+      `/repos/${SHARED}/contents/google-drive-customers-se`,
+      PREFIXED,
+    );
+    expect(ancestor.reason).not.toBe(outside.reason);
+    expect(ancestor.reason).toContain("above");
+    for (const result of [ancestor, outside]) {
+      expect(JSON.stringify(result)).not.toContain("granola");
+      expect(JSON.stringify(result)).not.toContain("google-drive");
+    }
+  });
+});
+
 describe("a bare entry is untouched — no regression for existing missions", () => {
   const BARE = scope({ repo: SHARED });
 
