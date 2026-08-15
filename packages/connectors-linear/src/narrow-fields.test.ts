@@ -80,15 +80,33 @@ describe("narrowLinear — issue(id) ownership post-check", () => {
     expect(result.reason).toContain("customer");
   });
 
-  it("denies a fragment inside the issue selection — the check cannot be proven", () => {
+  it("resolves a fragment inside the issue selection before proving ownership", () => {
     const result = narrowLinear(
       request(
         `query { issue(id: "i1") { ...F } } fragment F on Issue { id customer { id } }`,
       ),
       SCOPE,
     );
-    expect(result.decision).toBe("deny");
-    expect(result.reason).toContain("fragment");
+    expect(result.decision).toBe("allow");
+    // The fragment is inlined, so what NARROW validated is what the vendor runs.
+    expect(normalized(queryOf(result))).toBe(
+      `{ issue(id: "i1") { id customer { id } } }`,
+    );
+    expect(result.postCheck).toEqual({
+      path: ["data", "issue", "customer", "id"],
+      expectedCustomerId: "c_18",
+      injectedSelection: false,
+    });
+  });
+
+  it("injects the ownership relation into a fragment that lacks it", () => {
+    const result = narrowLinear(
+      request(`query { issue(id: "i1") { ...F } } fragment F on Issue { id title }`),
+      SCOPE,
+    );
+    expect(result.decision).toBe("allow");
+    expect(normalized(queryOf(result))).toContain("customer { id }");
+    expect(result.postCheck?.injectedSelection).toBe(true);
   });
 
   it("denies two issue root fields — one post-check cannot cover both", () => {
@@ -144,10 +162,22 @@ describe("narrowLinear — per-root-field scope policy", () => {
     expect(result.reason).toContain("customer(id)");
   });
 
-  it("allows viewer untouched", () => {
+  it("allows viewer when it selects scalars only", () => {
     const result = narrowLinear(request(`query { viewer { id name } }`), SCOPE);
     expect(result).toEqual({ decision: "allow" });
   });
+
+  it.each(["assignedIssues(first: 250) { nodes { id } }", "teams { nodes { id } }"])(
+    "denies viewer carrying the sub-selection %s — it is a User, not an identity",
+    (selection) => {
+      const result = narrowLinear(
+        request(`query { viewer { id ${selection} } }`),
+        SCOPE,
+      );
+      expect(result.decision).toBe("deny");
+      expect(result.reason).toContain(selection.split(/[ (]/)[0] ?? "");
+    },
+  );
 
   it.each(["projects", "project", "comments", "comment"])(
     "denies %s — no proven relation to the mission customer",
@@ -160,10 +190,19 @@ describe("narrowLinear — per-root-field scope policy", () => {
 });
 
 describe("narrowLinear — mission without a linear customer", () => {
-  it("allows viewer", () => {
+  it("allows viewer scalars", () => {
     expect(narrowLinear(request(`query { viewer { id } }`), {})).toEqual({
       decision: "allow",
     });
+  });
+
+  it("denies viewer carrying a connection", () => {
+    const result = narrowLinear(
+      request(`query { viewer { assignedIssues { nodes { id } } } }`),
+      {},
+    );
+    expect(result.decision).toBe("deny");
+    expect(result.reason).toContain("assignedIssues");
   });
 
   it.each(["issues { nodes { id } }", `issue(id: "i1") { id }`, "customers { nodes { id } }"])(

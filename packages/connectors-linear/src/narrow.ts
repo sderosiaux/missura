@@ -3,14 +3,16 @@ import {
   OperationTypeNode,
   parse,
   print,
-  visit,
   type DocumentNode,
   type FieldNode,
   type OperationDefinitionNode,
   type SelectionNode,
 } from "graphql";
-import { isRecord, narrowIssuesField } from "./narrow-filter";
+import { narrowIssuesField } from "./narrow-filter";
+import { inlineFragments } from "./narrow-fragments";
 import { narrowIssueField, resolveIdArgument, responseKey } from "./narrow-issue";
+import { forwardRecord, readPayload } from "./narrow-payload";
+import { traversalDenial } from "./narrow-walk";
 
 /**
  * Response-side ownership check handed to the proxy. Structurally identical to
@@ -43,33 +45,6 @@ const UNRELATED_ROOT_FIELDS: ReadonlySet<string> = new Set([
 
 function deny(reason: string): LinearNarrowResult {
   return { decision: "deny", reason };
-}
-
-interface Payload {
-  record: Record<string, unknown>;
-  query: string;
-  variables?: Record<string, unknown>;
-}
-
-/** Returns the payload, or the reason it cannot be read (which denies). */
-function readPayload(body: string): Payload | string {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    return "request body is not JSON — expected a GraphQL POST payload";
-  }
-  if (!isRecord(parsed)) {
-    return "request body is not JSON — expected a GraphQL POST payload";
-  }
-  const query: unknown = parsed.query;
-  if (typeof query !== "string") return "request body has no string `query` field";
-  const variables: unknown = parsed.variables;
-  if (variables === undefined || variables === null) {
-    return { record: parsed, query };
-  }
-  if (!isRecord(variables)) return "request `variables` is not an object";
-  return { record: parsed, query, variables };
 }
 
 function rootFields(
@@ -169,20 +144,23 @@ function isOperation(
   return definition.kind === Kind.OPERATION_DEFINITION;
 }
 
+/**
+ * Prints the single operation and nothing else: fragments have been inlined,
+ * so their definitions would now be dead weight the vendor still parses.
+ */
 function rebuild(
-  doc: DocumentNode,
   operation: OperationDefinitionNode,
   fields: readonly FieldNode[],
 ): string {
-  const rewritten = visit(doc, {
-    OperationDefinition(node) {
-      if (node !== operation) return undefined;
-      return {
-        ...node,
-        selectionSet: { ...node.selectionSet, selections: fields },
-      };
-    },
-  });
+  const rewritten: DocumentNode = {
+    kind: Kind.DOCUMENT,
+    definitions: [
+      {
+        ...operation,
+        selectionSet: { ...operation.selectionSet, selections: fields },
+      },
+    ],
+  };
   return print(rewritten);
 }
 
@@ -215,25 +193,38 @@ export function narrowLinear(
   if (operation.operation !== OperationTypeNode.QUERY) {
     return deny(`operation type \`${operation.operation}\` cannot be narrowed`);
   }
-  const roots = rootFields(operation.selectionSet.selections);
-  if (roots === undefined) {
+  const declared = rootFields(operation.selectionSet.selections);
+  if (declared === undefined) {
     return deny("fragment at the document root — the scope policy needs named root fields");
   }
+  const resolved = inlineFragments(doc, declared);
+  if (resolved.reason !== undefined || resolved.fields === undefined) {
+    return deny(resolved.reason ?? "document could not be resolved");
+  }
 
-  const state = narrowRoots(roots, scope.linearCustomerId, payload.variables);
+  const state = narrowRoots(resolved.fields, scope.linearCustomerId, payload.variables);
   if (typeof state === "string") return deny(state);
+  // Walked on the fields that will actually be forwarded: what NARROW proved
+  // is what the vendor runs.
+  const offScope = traversalDenial(state.fields);
+  if (offScope !== undefined) return deny(offScope);
 
   const postCheck = state.postCheck;
-  if (!state.fieldsChanged && !state.variablesChanged) {
+  const rewrites =
+    state.fieldsChanged ||
+    state.variablesChanged ||
+    resolved.inlined === true ||
+    payload.carriesExtensions;
+  if (!rewrites) {
     return postCheck === undefined
       ? { decision: "allow" }
       : { decision: "allow", postCheck };
   }
-  const next: Record<string, unknown> = {
-    ...payload.record,
-    query: rebuild(doc, operation, state.fields),
-  };
-  if (state.variablesChanged) next.variables = state.variables;
+  const next = forwardRecord(
+    payload,
+    rebuild(operation, state.fields),
+    state.variablesChanged ? state.variables : undefined,
+  );
   const rewritten = JSON.stringify(next);
   return postCheck === undefined
     ? { decision: "allow", body: rewritten }
