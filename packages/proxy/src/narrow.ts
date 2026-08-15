@@ -100,13 +100,22 @@ export const GITHUB_NOT_FOUND_BODY = `{"message":"${GITHUB_NOT_FOUND_MESSAGE}"}`
  * Linear sends for an id that does not exist, so an out-of-scope object is
  * distinguishable from one that never existed. It is not synthesized to match
  * because the vendor's real absence body could not be established with
- * evidence: `@linear/sdk@90` declares every field of a GraphQL error optional
- * and pins no `extensions` content (`LinearErrorType` has no not-found member
- * at all), the reported `extensions.type` contradicts that enum, and the real
- * body carries an `errors[].path` that follows the agent's own field ALIAS plus
- * a `data` object mirroring its selection — neither of which a per-plan
- * constant can know. Guessing bytes here would trade a visible limitation for
- * an invisible one.
+ * evidence. Four independent gaps, none of them a matter of effort:
+ *   - `@linear/sdk@90` declares every field of a GraphQL error optional and
+ *     pins no `extensions` content; its `LinearErrorType` enum has no not-found
+ *     member at all, and the `extensions.type` reported outside the SDK
+ *     contradicts that enum. Two sources, no primary artefact;
+ *   - the pinned schema cannot arbitrate. It is extracted from the SDK's MODEL
+ *     types (`@linear/sdk/dist/index.d.mts`, 41 types) and carries no `Query`
+ *     root, so it does not even say whether `issue` is nullable — i.e. whether
+ *     absence reads `{"data":{"issue":null}}` or `{"data":null}`;
+ *   - no schema could supply the rest anyway: GraphQL schemas describe data,
+ *     never error payloads. Only a RECORDED live response can, which is the
+ *     compatibility suite's job (PRD §33, milestone M4);
+ *   - and the real body's `errors[].path` follows the agent's own field ALIAS
+ *     while its `data` mirrors the agent's selection — neither is knowable from
+ *     a per-plan constant.
+ * Guessing bytes here would trade a visible limitation for an invisible one.
  */
 export const NOT_FOUND_GRAPHQL_BODY =
   '{"errors":[{"message":"issue not found"}]}';
