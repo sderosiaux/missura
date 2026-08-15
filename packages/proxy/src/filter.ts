@@ -1,5 +1,5 @@
 import type { FilterPlan, FilterRule } from "@missura/core";
-import { isRecord, recount, stripAt } from "./filter-json";
+import { honestList, isRecord, stripAt } from "./filter-json";
 import { isOwned } from "./filter-owner";
 import {
   GITHUB_NOT_FOUND_BODY,
@@ -82,7 +82,13 @@ function dropForeign(
 
 /**
  * A list rule reached through its container, which is what makes the count
- * rule possible: the number that describes the list sits next to it.
+ * rule possible: the number that describes the list, and the flag that claims
+ * it is complete, both sit next to it.
+ *
+ * `honestList` runs on the container whatever the elements turned out to be —
+ * it is the plan reaching this list that removes the count, not the plan
+ * finding something to drop. Anything conditional there is readable as "this
+ * page held objects you may not see".
  */
 function filterList(
   container: Record<string, unknown>,
@@ -93,7 +99,7 @@ function filterList(
   if (list === null || list === undefined) return kept(container);
   if (!Array.isArray(list)) return FAILED;
   const { kept: survivors, removed } = dropForeign(list, rule);
-  const counted = recount(container, list.length, survivors.length);
+  const counted = honestList(container);
   if (removed === 0 && !counted.touched) return kept(container);
   const rebuilt = isRecord(counted.value) ? counted.value : container;
   return {

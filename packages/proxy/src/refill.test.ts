@@ -139,29 +139,37 @@ describe("pagination refill", () => {
       { narrow: withPlan(plan(3)) },
       serveEach((i) =>
         i === 0
-          ? page(["i1", "x2", "x3"], true, "c1", { totalCount: 3 })
-          : page(["i4", "i5", "x6"], true, "c2", { totalCount: 3 }),
-      ),
-    );
-    const res = await handle(h.deps, graphqlRequest(3));
-
-    expect(connection(res.body).totalCount).toBe(3);
-    expect(connection(res.body).nodes).toHaveLength(3);
-  });
-
-  it("drops a total that counted more than the page we return", async () => {
-    const h = harness(
-      { narrow: withPlan(plan(3)) },
-      serveEach((i) =>
-        i === 0
           ? page(["i1", "x2", "x3"], true, "c1", { totalCount: 412 })
-          : page(["i4", "i5"], false, "c2", { totalCount: 412 }),
+          : page(["i4", "i5", "x6"], true, "c2", { totalCount: 412 }),
       ),
     );
     const res = await handle(h.deps, graphqlRequest(3));
 
     expect(connection(res.body).totalCount).toBeUndefined();
     expect(bodyText(res.body)).not.toContain("412");
+    expect(connection(res.body).nodes).toHaveLength(3);
+  });
+
+  /**
+   * The merge cannot bring a count back either: the filter removed it on every
+   * page before the walk saw one, so a walked answer and an unwalked one show
+   * the same fields whatever the vendor was counting.
+   */
+  it("shows the same fields across a refill whatever the total was", async () => {
+    const build = (total: number): ReturnType<typeof harness> =>
+      harness(
+        { narrow: withPlan(plan(3)) },
+        serveEach((i) =>
+          i === 0
+            ? page(["i1", "x2", "x3"], true, "c1", { totalCount: total })
+            : page(["i4", "i5", "x6"], true, "c2", { totalCount: total }),
+        ),
+      );
+
+    const one = await handle(build(3).deps, graphqlRequest(3));
+    const two = await handle(build(9_412).deps, graphqlRequest(3));
+
+    expect(bodyText(one.body)).toBe(bodyText(two.body));
   });
 
   it("makes every extra call its own decision event", async () => {

@@ -1,5 +1,5 @@
 import type { PaginationRule } from "@missura/core";
-import { isRecord, recountTo } from "./filter-json";
+import { isRecord } from "./filter-json";
 import type { IncomingShape } from "./transport";
 
 /**
@@ -141,6 +141,9 @@ export function withCursor(
  * the collection we did not touch, come from the page the agent would have got
  * anyway. A body assembled from the last page walked would differ from an
  * unwalked one in ways that have nothing to do with the objects it carries.
+ *
+ * There is no count to fix up here: the filter already removed every count
+ * field next to this list, page by page, before the merge could see one.
  */
 export function mergedBody(
   first: VendorPage,
@@ -148,10 +151,7 @@ export function mergedBody(
   nodes: readonly unknown[],
   pageInfo: Record<string, unknown>,
 ): string | undefined {
-  const connection = recountTo(
-    { ...first.connection, [rule.nodes]: nodes },
-    nodes.length,
-  );
+  const connection = { ...first.connection, [rule.nodes]: nodes };
   const merged = replaceAt(connection, rule.pageInfo, pageInfo);
   if (merged === undefined) return undefined;
   const root = replaceAt(first.root, rule.path, merged);

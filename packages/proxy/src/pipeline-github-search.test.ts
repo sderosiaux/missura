@@ -12,7 +12,8 @@ import { bodyText, harness, request } from "./pipeline.fixtures";
  */
 const SCOPE = ["acme-corp/product", "acme-corp/infra"];
 
-const narrow: NarrowFn = (req) => narrowGithub(req.path, { githubRepos: SCOPE });
+const narrow: NarrowFn = (req) =>
+  narrowGithub(req.path, { githubRepos: SCOPE });
 
 const REPOS = "https://api.github.com/repos";
 
@@ -76,6 +77,7 @@ const EXPLOIT = "is:issue OR repo:globex/secret";
 
 interface SearchBody {
   total_count?: number;
+  incomplete_results?: boolean;
   items: { id: number; repository_url: string }[];
 }
 
@@ -96,19 +98,39 @@ describe("pipeline — GitHub search runs and is filtered", () => {
     expect(h.events[0]?.objectsRemoved).toBe(1);
   });
 
-  it("corrects the total to what it actually returns", async () => {
+  it("removes the vendor's total rather than correcting it", async () => {
     const h = harness({ narrow }, vendor(MIXED));
     const res = await handle(h.deps, searchRequest(EXPLOIT));
 
-    expect(parsed(res.body).total_count).toBe(2);
+    expect(parsed(res.body).total_count).toBeUndefined();
+    expect(bodyText(res.body)).not.toContain("total_count");
   });
 
-  it("removes a total that counted more than this page", async () => {
-    const h = harness({ narrow }, vendor({ ...MIXED, total_count: 137 }));
+  /**
+   * The global-count oracle, end to end. A `total_count` that survived when it
+   * equalled the page made its own presence a function of the vendor's hidden
+   * number: `present ⟺ globalTotal ≤ per_page`. Binary-searching `per_page`
+   * against `q=<broad> OR repo:globex/secret` then yields the exact count of
+   * matches across every repo the vendor credential can reach — with the same
+   * zero authorized results returned either way. Two vendor totals, the same
+   * authorized items, and the answer must be the same bytes.
+   */
+  it("answers identically whatever the vendor's total was", async () => {
+    const small = harness({ narrow }, vendor({ ...MIXED, total_count: 3 }));
+    const huge = harness({ narrow }, vendor({ ...MIXED, total_count: 24_601 }));
+
+    const one = await handle(small.deps, searchRequest(EXPLOIT));
+    const two = await handle(huge.deps, searchRequest(EXPLOIT));
+
+    expect(bodyText(one.body)).toBe(bodyText(two.body));
+    expect(bodyText(one.body)).not.toContain("24601");
+  });
+
+  it("stops claiming the results are complete once it filtered them", async () => {
+    const h = harness({ narrow }, vendor(MIXED));
     const res = await handle(h.deps, searchRequest(EXPLOIT));
 
-    expect(bodyText(res.body)).not.toContain("137");
-    expect(parsed(res.body).total_count).toBeUndefined();
+    expect(parsed(res.body).incomplete_results).toBe(true);
   });
 
   it("keeps results from EVERY repo of a multi-repo mission", async () => {

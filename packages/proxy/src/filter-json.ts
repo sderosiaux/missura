@@ -81,8 +81,8 @@ export function stripAt(root: unknown, path: readonly string[]): Rewritten {
 
 /**
  * Every spelling of "how many objects are there" we know how to meet next to a
- * list. Recomputing the wrong field would be worse than leaving it, so the set
- * is explicit rather than heuristic.
+ * list. Acting on the wrong field would be worse than leaving it, so the set is
+ * explicit rather than heuristic.
  */
 const COUNT_FIELDS: readonly string[] = [
   "totalCount",
@@ -92,55 +92,49 @@ const COUNT_FIELDS: readonly string[] = [
 ];
 
 /**
- * The count rule (SPEC/PRD §20.4): a number next to a list we filtered is
- * never passed through as the vendor sent it.
+ * Every spelling of "this result set is complete" we know how to meet next to
+ * a list. Same explicitness as the counts, and a much shorter list: only
+ * GitHub's search endpoints publish one.
+ */
+const COMPLETENESS_FIELDS: readonly string[] = ["incomplete_results"];
+
+/**
+ * The count rule (SPEC/PRD §20.4): a number next to a list a plan applies to
+ * is REMOVED, always.
  *
- *   - it counted THIS page (value === objects before filtering) ⇒ recompute it
- *     from what remains;
- *   - it counts anything wider ⇒ REMOVE it. A global total is exactly the leak
- *     filtering exists to prevent: it reports the objects we just hid.
+ * The earlier rule recomputed a count that happened to equal the page and
+ * removed anything wider. That made the field's PRESENCE a function of the
+ * vendor's hidden total — `present ⟺ globalTotal ≤ pageSize` — so an agent
+ * could binary-search the page size, watch the field appear, and read off the
+ * exact number of matches across everything the vendor credential can reach,
+ * without ever receiving one authorized object. Presence must depend on the
+ * PLAN and nothing else, and "gone whenever we filtered" is the only version of
+ * that which needs no per-field knowledge of what the vendor was counting.
  *
- * Removing a field the vendor schema declares non-nullable would break the
- * SDK, which is why an unrecomputable aggregate is one of the four cases the
+ * Removing a field the vendor schema declares non-nullable would break the SDK,
+ * which is why an unrecomputable aggregate is one of the four cases the
  * request-side walk must refuse BEFORE the call. This is the backstop for when
  * it did not.
+ *
+ * The completeness flag moves the other way: a page we removed from is not
+ * complete, and neither is one a plan merely applied to — flipping it only when
+ * something WAS removed would answer "did this page hold objects I may not
+ * see?" one page at a time, which is the same oracle wearing a boolean. It is
+ * set to `true` whenever the plan reaches the list, and never invented on a
+ * vendor that does not send it.
  */
-/**
- * The count rule again, after a REFILL merged several pages into one: a number
- * that survived `recount` on each page described that page, so next to the
- * merged list it must describe the merged list. Anything wider was already
- * removed page by page and cannot reappear here.
- */
-export function recountTo(
-  container: Record<string, unknown>,
-  total: number,
-): Record<string, unknown> {
-  let out = container;
-  for (const field of COUNT_FIELDS) {
-    if (!Object.hasOwn(out, field)) continue;
-    if (typeof out[field] !== "number") continue;
-    out = { ...out, [field]: total };
-  }
-  return out;
-}
-
-export function recount(
-  container: Record<string, unknown>,
-  before: number,
-  after: number,
-): Rewritten {
+export function honestList(container: Record<string, unknown>): Rewritten {
   let out = container;
   let touched = false;
   for (const field of COUNT_FIELDS) {
     if (!Object.hasOwn(out, field)) continue;
-    const value = out[field];
-    if (typeof value !== "number") continue;
-    if (value === before) {
-      if (before === after) continue;
-      out = { ...out, [field]: after };
-    } else {
-      out = omitKey(out, field);
-    }
+    out = omitKey(out, field);
+    touched = true;
+  }
+  for (const field of COMPLETENESS_FIELDS) {
+    if (!Object.hasOwn(out, field)) continue;
+    if (out[field] === true) continue;
+    out = { ...out, [field]: true };
     touched = true;
   }
   return { value: out, touched };

@@ -52,8 +52,10 @@ describe("pipeline — response filter", () => {
 
     expect(h.fetchCount()).toBe(1);
     expect(res.status).toBe(200);
+    // The vendor's `totalCount` is gone rather than recomputed: whether a count
+    // survives must be a fact about the plan, never about the number it held.
     expect(JSON.parse(bodyText(res.body))).toEqual({
-      data: { issues: { nodes: [{ id: "i1" }], totalCount: 1 } },
+      data: { issues: { nodes: [{ id: "i1" }] } },
     });
     expect(bodyText(res.body)).not.toContain("c_globex");
     expect(h.events[0]?.decision).toBe("allow");
