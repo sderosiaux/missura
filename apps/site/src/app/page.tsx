@@ -17,9 +17,10 @@ export default function Home() {
       <main id="main" className="mx-auto max-w-[1120px] px-5 sm:px-8">
         <Hero />
         <Problem />
-        <WrongQuestion />
+        <NotAUser />
         <Mechanism />
         <TrustModel />
+        <DayOne />
         <Standards />
         <Guarantees />
         <FinalCta />
@@ -29,7 +30,7 @@ export default function Home() {
   );
 }
 
-/* ── 1. Hero — the pass in your hand ────────────────────────── */
+/* ── 1. Hero — the agent you didn't dare launch ─────────────── */
 
 function Hero() {
   return (
@@ -42,9 +43,10 @@ function Hero() {
           Same API. Smaller permissions. For every agent.
         </h1>
         <p className="mt-6 max-w-[54ch] text-lg text-ink-soft">
-          One command wraps your agent in a zero-trust mission: one customer,
-          read-only, 30 minutes, no vendor credentials in its hands. Keep
-          your SDK. Rewrite nothing.
+          Ship the customer-facing agent you shelved. One command binds each
+          run to a single customer — read-only, 30 minutes, no vendor
+          credentials in the agent&apos;s hands. Keep your SDK. Rewrite
+          nothing.
         </p>
         <div className="mt-8" id="early-access">
           <WaitlistForm id="hero-form" />
@@ -53,7 +55,7 @@ function Hero() {
       <div className="lg:col-span-6 lg:pt-10">
         <LiveTerminal className="shadow-[0_24px_48px_-32px_rgb(0_0_0/.25)]" />
         <p className="label-mono mt-3 text-ink-soft">
-          Your agent, your workspace — only the data you allowed.
+          Your agent, your workspace — one customer at a time.
         </p>
       </div>
     </section>
@@ -64,16 +66,16 @@ function Hero() {
 
 const WAVE_FACTS = [
   {
-    label: "One token per app, not per task",
-    body: "Vendors scope credentials to applications. Agents work in tasks.",
+    label: "One token per app, not per customer",
+    body: "Vendors scope credentials to applications. A support agent works one customer at a time.",
   },
   {
     label: "Valid for months, used for minutes",
-    body: "The credential outlives every task it was created for.",
+    body: "The credential outlives every ticket it was opened for.",
   },
   {
-    label: "Wide across every system",
-    body: "The same over-broad pattern, repeated in Zendesk, Linear, Notion, GitHub.",
+    label: "Wide in every system at once",
+    body: "The same over-broad token in Zendesk, in Linear, in GitHub — and one agent holds them all.",
   },
 ];
 
@@ -84,16 +86,14 @@ function Problem() {
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-start">
           <div className="lg:col-span-6">
             <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
-              Access control hasn&apos;t caught up with agents.
+              The agent you didn&apos;t dare launch.
             </h2>
             <p className="mt-5 max-w-[54ch] text-ink-soft">
-              Every team is putting agents into production this year. Almost
-              all of them authenticate the old way: a long-lived token, scoped
-              to the whole workspace, shared across missions and customers.
-              One prompt injection, one bad filter — and the agent reads
-              everything the app could ever reach. Security teams have a name
-              for where this ends: agent sprawl — credentials nobody tracks,
-              powering agents nobody owns.
+              A support agent across Zendesk, Linear and GitHub is the easiest
+              one to justify and the hardest to ship. It reads every
+              customer&apos;s data on every run, holding one token that opens
+              the whole workspace. One cross-customer answer ends the launch —
+              so the agent stays in staging.
             </p>
             <ul className="mt-8">
               {WAVE_FACTS.map((f) => (
@@ -109,8 +109,8 @@ function Problem() {
             <p className="mx-auto mt-4 max-w-[46ch] text-center font-mono text-[0.75rem] leading-relaxed tracking-[0.04em] text-ink-soft">
               fig. 01 — the keyring. one long-lived token opens{" "}
               <span className="text-deny">
-                every team, every customer, every issue and attachment, every
-                comment — and admin mutations
+                every customer, every ticket, every issue and attachment,
+                every comment — and admin mutations
               </span>
               .
             </p>
@@ -121,12 +121,12 @@ function Problem() {
   );
 }
 
-/* ── 3. Wrong question ──────────────────────────────────────── */
+/* ── 3. An agent is not a user ──────────────────────────────── */
 
 const APPROACHES = [
   {
     name: "Vendor OAuth scopes",
-    body: "read, write, admin. Nothing about which customer, which project, which page.",
+    body: "read, write, admin. Nothing about which customer, which ticket, which repo.",
     verdict: "app-wide",
     ok: false,
   },
@@ -137,14 +137,20 @@ const APPROACHES = [
     ok: false,
   },
   {
+    name: "Copy-and-index search",
+    body: "Duplicates your data into a second store, then replays one employee's permissions over the copy.",
+    verdict: "mirrors a human",
+    ok: false,
+  },
+  {
     name: "Missura",
-    body: "Understands the vendor API and limits every request and response to the objects the task needs.",
-    verdict: "object-level",
+    body: "Reads the vendor API live and holds every call to one customer entity. Nothing copied, nothing indexed.",
+    verdict: "mirrors nobody",
     ok: true,
   },
 ];
 
-function WrongQuestion() {
+function NotAUser() {
   return (
     <section className="rule py-16 sm:py-24">
       <Reveal>
@@ -152,13 +158,18 @@ function WrongQuestion() {
           <BadgeQuestionMark />
           <div>
             <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
-              Identity gateways answer the wrong question.
+              An agent is not a user.
             </h2>
             <p className="mt-5 max-w-[62ch] text-ink-soft">
-              Workload IAM and MCP gateways tell you <em>who</em> the agent
-              is. The incident happens one layer down: <em>what</em> that
-              identity can read. Knowing that run-8f31 exfiltrated every
-              customer&apos;s tickets is an audit trail, not a control.
+              Every other answer models it as a person: mirror an
+              employee&apos;s permissions, or copy the data into an index and
+              replay them there. Missura copies nothing, and mints permissions
+              narrower than any employee ever held. A mission mirrors nobody.
+            </p>
+            <p className="mt-4 max-w-[62ch] text-ink-soft">
+              Identity is the easy half. Learning afterwards that run-8f31
+              read every customer&apos;s tickets is an audit trail, not a
+              control.
             </p>
           </div>
         </div>
@@ -222,7 +233,6 @@ function BadgeQuestionMark() {
 const MAPPINGS = [
   { system: "zendesk", object: "organization:9842" },
   { system: "linear", object: "customer:c_18" },
-  { system: "notion", object: "page:49bd" },
   { system: "github", object: "repo /acme/**" },
 ];
 
@@ -349,6 +359,14 @@ function Mechanism() {
             </span>
           </div>
         </div>
+        <p className="mt-6 max-w-[62ch] text-ink-soft">
+          <strong className="font-semibold text-ink">
+            You don&apos;t need to know where your customer&apos;s data lives —
+            the mission does.
+          </strong>{" "}
+          The agent names its entity and nothing else. It can&apos;t map the
+          topology by probing, and it never has to.
+        </p>
       </Reveal>
     </section>
   );
@@ -475,7 +493,87 @@ function TrustModel() {
   );
 }
 
-/* ── 6. Standards — the known pattern ───────────────────────── */
+/* ── 6. Day one — the graph is never a prerequisite ─────────── */
+
+const LEDGER = [
+  {
+    system: "zendesk",
+    status: "confirmed",
+    ok: true,
+    gain: "in the mission — the agent reads this org",
+  },
+  {
+    system: "linear",
+    status: "proposed",
+    ok: false,
+    gain: "confirm the link and the agent gains Linear",
+  },
+  {
+    system: "github",
+    status: "proposed",
+    ok: false,
+    gain: "confirm the link and the agent gains those repos",
+  },
+];
+
+function DayOne() {
+  return (
+    <section className="rule py-16 sm:py-24">
+      <Reveal>
+        <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+          Day one needs no map.
+        </h2>
+        <p className="mt-5 max-w-[62ch] text-ink-soft">
+          That entity graph is never a prerequisite. With nothing mapped, your
+          agent already runs on credentials it never sees, one mission per
+          run, a capped reach, and a line in the log for every call it makes.
+        </p>
+        <p className="mt-4 max-w-[62ch] text-ink-soft">
+          Where a link isn&apos;t confirmed yet, the mission is simply
+          smaller: that system isn&apos;t in it, and the agent is told which
+          ones are missing. Every gap is a line on a to-do list.
+        </p>
+      </Reveal>
+      <Reveal>
+        <p className="label-mono mt-10 text-ink-soft">
+          The register — <span className="text-ink">customer:acme</span>, and
+          what each confirmation buys:
+        </p>
+      </Reveal>
+      <ul className="mt-4">
+        {LEDGER.map((l, i) => (
+          <li key={l.system} className="rule first:border-t-0">
+            <Reveal delay={i * 60}>
+              <div className="grid grid-cols-1 gap-1 py-4 font-mono text-[0.85rem] sm:grid-cols-12 sm:items-baseline sm:gap-4">
+                <span className="font-medium sm:col-span-3">{l.system}</span>
+                <span
+                  className={`sm:col-span-3 ${l.ok ? "text-bound" : "text-ink"}`}
+                >
+                  {l.status}
+                </span>
+                <span className="text-ink-soft sm:col-span-6">{l.gain}</span>
+              </div>
+            </Reveal>
+          </li>
+        ))}
+      </ul>
+      <Reveal>
+        <p className="rule mt-8 max-w-[62ch] pt-5 text-ink-soft">
+          The product configures itself through use. Nothing to model up
+          front, no index to build, no migration. Enforcement is a dial:
+          observe first, narrow next, filter when you&apos;re ready.
+        </p>
+      </Reveal>
+      <Reveal>
+        <p className="label-mono mt-5 text-ink-soft">
+          A reduced view is flagged to the agent — never how much was removed.
+        </p>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ── 7. Standards — the known pattern ───────────────────────── */
 
 const OAUTH_MAP = [
   { oauth: "Authorization server", missura: "The mission service — issues short-lived mission tokens" },
@@ -542,12 +640,16 @@ function Standards() {
   );
 }
 
-/* ── 7. Guarantees ──────────────────────────────────────────── */
+/* ── 8. Guarantees ──────────────────────────────────────────── */
 
 const GUARANTEES = [
   {
     label: "No credentials in the agent",
     body: "The agent holds a short-lived, ephemeral credential. Vendor secrets stay vaulted, injected server-side after the decision.",
+  },
+  {
+    label: "Nothing copied, nothing indexed",
+    body: "Bodies pass through in memory. Missura never stores or embeds your vendor data — the audit trail keeps metadata only.",
   },
   {
     label: "Deny by default, zero-trust",
@@ -562,8 +664,8 @@ const GUARANTEES = [
     body: "Requests checked before the call, responses filtered after.",
   },
   {
-    label: "Nothing copied, nothing indexed",
-    body: "Bodies pass through in memory. Missura never stores or embeds your vendor data — the audit trail keeps metadata only.",
+    label: "A refusal reads like absence",
+    body: "Out of scope answers exactly like not there. When a view was reduced by policy, the agent is told so — never by how much.",
   },
   {
     label: "Provenance built in",
@@ -612,27 +714,28 @@ function Guarantees() {
           <span className="label-mono block pb-1 text-ink">
             Honest fine print
           </span>
-          Most SDKs only need a base URL change (Notion, Octokit). Some need a
-          small transport adapter — we provide it. What never changes: your
-          business logic.
+          Read-only today — writes ship with approvals, not before. Connectors
+          today: Zendesk, Linear, GitHub; Slack and Salesforce next. Most SDKs
+          need only a base URL change, some need a small transport adapter
+          that we provide. What never changes: your business logic.
         </p>
       </Reveal>
     </section>
   );
 }
 
-/* ── 8. Final CTA ───────────────────────────────────────────── */
+/* ── 9. Final CTA ───────────────────────────────────────────── */
 
 function FinalCta() {
   return (
     <section className="rule py-16 sm:py-24">
       <Reveal>
         <h2 className="text-[clamp(1.7rem,3.5vw,2.8rem)] font-bold leading-[1.15]">
-          Bring one agent and one SaaS.
+          Bring the agent you shelved.
         </h2>
         <p className="mt-4 max-w-[50ch] text-lg text-ink-soft">
-          We&apos;ll show you exactly what it can reach — and how small that
-          can get.
+          One agent, one workspace. We&apos;ll show you what it reaches today
+          — and how small that gets.
         </p>
         <p className="label-mono mt-6 text-ink-soft">
           The early-access flow — we onboard you hands-on:

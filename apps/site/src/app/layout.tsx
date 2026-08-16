@@ -20,11 +20,11 @@ export const metadata: Metadata = {
   ),
   title: "Missura — Same API. Smaller permissions. For every agent.",
   description:
-    "AI agent security at the API level, not the identity level. Unlike MCP gateways and non-human identity platforms, Missura enforces what each agent can read — object by object, across Zendesk, Linear, Notion, and GitHub. Same SDK, short-lived mission tokens.",
+    "Ship the customer-facing agent you shelved. Missura binds each agent run to one customer entity — read-only, minutes, no vendor credentials in the agent. An agent is not a user: nothing is copied, nothing indexed, and a mission mirrors nobody. Zendesk, Linear, GitHub, same SDK.",
   openGraph: {
     title: "Missura — Same API. Smaller permissions. For every agent.",
     description:
-      "Keep the vendor SDK; scope every agent run to one customer, for 30 minutes, with zero vendor credentials in its hands.",
+      "Keep the vendor SDK; bind every agent run to one customer, for 30 minutes, with zero vendor credentials in its hands.",
     type: "website",
   },
 };
