@@ -160,7 +160,12 @@ describe("pagination refill — the surplus a walk overshoots", () => {
     );
     expect(positionOf(h, boundary.body)?.served).toBe(0);
     expect(cursorOf(one.body)).toHaveLength(cursorOf(boundary.body).length);
-    expect(cursorOf(one.body)).not.toContain("c1");
+    // A random UUID, not an encoding: `not.toContain("c1")` would fail on the
+    // roll where the UUID happens to spell it — the same trap refill.test.ts
+    // documents. The format IS the property: nothing position-shaped fits.
+    expect(cursorOf(one.body)).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
   });
 
   it("refuses a surplus handle replayed under another mission", async () => {
