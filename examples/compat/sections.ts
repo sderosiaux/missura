@@ -25,6 +25,7 @@ import { discoverLinearTargets, linearOperations } from "./ops-linear";
 import { zendeskOperations } from "./ops-zendesk";
 import type { RunningProxy } from "./proxy";
 import type { Vendor } from "./vendor-shapes";
+import { errorDescriptor } from "./writable";
 
 /**
  * One connector's whole turn: discover what to aim at, check the assumptions it
@@ -45,7 +46,16 @@ export interface Section {
 
 const EMPTY: Section = { assumptions: [], observations: [] };
 
+/**
+ * The evidence is a DESCRIPTOR, never the error's own message: a failed fetch
+ * quotes the URL it was aiming at, and that URL carries the tenant's subdomain
+ * into a committed report. The message still reaches the human — on stderr,
+ * which is not an artifact.
+ */
 function failedSection(vendor: Vendor, err: unknown): Section {
+  process.stderr.write(
+    `${vendor} section stopped: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
   return {
     assumptions: [
       assumption(
@@ -56,7 +66,7 @@ function failedSection(vendor: Vendor, err: unknown): Section {
           encodedIn: "examples/compat/sections.ts",
         },
         "UNVERIFIABLE",
-        `the section stopped: ${err instanceof Error ? err.message : String(err)}`,
+        `the section stopped on ${errorDescriptor(err)} — the message is on stderr, where it is not committed`,
       ),
     ],
     observations: [],

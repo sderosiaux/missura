@@ -142,8 +142,30 @@ export function hasGraphqlErrors(body: string): boolean {
   return isRecord(parsed) && Array.isArray(parsed.errors) && parsed.errors.length > 0;
 }
 
-/** The first error message a GraphQL answer carried, trimmed for a report. */
-export function firstGraphqlError(body: string): string | undefined {
+/**
+ * A code an error's `extensions` may carry, when it is one: an enum-shaped
+ * token and nothing else. That is the allow-list — a vendor error CODE is
+ * vocabulary, a vendor error MESSAGE is prose that can quote a workspace, an
+ * identifier or a query the tenant wrote.
+ */
+const ENUM_TOKEN = /^[A-Za-z0-9_.-]{1,40}$/;
+
+function enumToken(value: unknown): string | undefined {
+  return typeof value === "string" && ENUM_TOKEN.test(value) ? value : undefined;
+}
+
+/**
+ * A GraphQL refusal as a DESCRIPTOR: how many errors, which `extensions` keys
+ * they carry, and the enum-shaped codes among them.
+ *
+ * It used to be `errors[0].message.slice(0, 160)`, and that message travelled
+ * into a committed report. Linear's own not-found reads `Entity not found:
+ * Issue - Could not find referenced Issue.` and its validation errors quote the
+ * document the caller sent — so the slice was a window onto a workspace, cut to
+ * a fixed width. What a reader needs from it is which KIND of refusal it was,
+ * and that is what the codes say.
+ */
+export function graphqlErrorShape(body: string): string | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -152,6 +174,12 @@ export function firstGraphqlError(body: string): string | undefined {
   }
   if (!isRecord(parsed) || !Array.isArray(parsed.errors)) return undefined;
   const first: unknown = parsed.errors[0];
-  if (!isRecord(first) || typeof first.message !== "string") return undefined;
-  return first.message.slice(0, 160);
+  if (!isRecord(first)) return undefined;
+  const extensions = isRecord(first.extensions) ? first.extensions : {};
+  const keys = Object.keys(extensions).sort();
+  const codes = [enumToken(extensions.code), enumToken(extensions.type)].filter(
+    (code): code is string => code !== undefined,
+  );
+  const shape = `${String(parsed.errors.length)} GraphQL error(s), extensions {${keys.join(", ")}}`;
+  return codes.length === 0 ? shape : `${shape} — ${codes.join(", ")}`;
 }

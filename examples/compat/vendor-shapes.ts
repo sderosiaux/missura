@@ -1,3 +1,5 @@
+import { bodyDescriptor } from "./writable";
+
 /**
  * What each vendor's own error looks like, and which statuses its clients are
  * built to handle.
@@ -51,7 +53,15 @@ export interface EnvelopeVerdict {
   reason?: string;
 }
 
-/** Whether a body an SDK will meet as an error is one it can parse. */
+/**
+ * Whether a body an SDK will meet as an error is one it can parse.
+ *
+ * The reason DESCRIBES the body instead of quoting it. `body.slice(0, 120)`
+ * used to travel into the report and the manifest, and the first 120 bytes of a
+ * vendor error are exactly where its `description` lives — a Zendesk one names
+ * the record it could not find. The key set and the size say why the envelope
+ * check failed, which is all a reader has to act on.
+ */
 export function checkErrorEnvelope(
   vendor: Vendor,
   body: string,
@@ -62,13 +72,13 @@ export function checkErrorEnvelope(
   } catch {
     return {
       ok: false,
-      reason: `the refusal body is not JSON, so no SDK can parse it: ${body.slice(0, 80)}`,
+      reason: `the refusal body is not JSON, so no SDK can parse it — it is ${bodyDescriptor(body)}`,
     };
   }
   if (ENVELOPES[vendor](parsed)) return { ok: true };
   return {
     ok: false,
-    reason: `the refusal body is JSON but not ${vendor}'s own error envelope: ${body.slice(0, 120)}`,
+    reason: `the refusal body is JSON but not ${vendor}'s own error envelope — it is ${bodyDescriptor(body)}`,
   };
 }
 

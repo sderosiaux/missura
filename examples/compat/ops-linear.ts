@@ -2,6 +2,7 @@ import { linearCall } from "./assume-linear";
 import type { OperationSpec } from "./classify";
 import type { Operation } from "./exchange";
 import type { LinearCredential } from "./harness";
+import { rememberAll } from "./writable";
 
 /**
  * HALF B, Linear — the narrowable root fields, and two refusals.
@@ -92,10 +93,14 @@ export async function discoverLinearTargets(
   const nodes = isRecord(issues) ? issues.nodes : undefined;
   const first: unknown = Array.isArray(nodes) ? nodes[0] : undefined;
   const id = isRecord(first) && typeof first.id === "string" ? first.id : undefined;
-  return {
+  const targets: LinearTargets = {
     customerId: credential.customerId,
     ...(id === undefined ? {} : { issueId: id }),
   };
+  // Discovered from the workspace: registered with the artifact boundary before
+  // anything carrying it can be written (`writable.ts`).
+  rememberAll({ ...targets });
+  return targets;
 }
 
 export function linearOperations(targets: LinearTargets): Operation[] {

@@ -57,38 +57,45 @@ describe("the coverage manifest", () => {
     expect(entry?.filtered).toStrictEqual(["foreign tickets are dropped"]);
   });
 
-  it("records the observed narrowing, redacted", () => {
-    const manifest = buildManifest(
-      "zendesk",
-      [spec()],
-      [
-        observation({
-          classification: "compatible_with_rewrite",
-          upstream: "GET /api/v2/organizations/22989442/tickets?per_page=2",
-        }),
-      ],
-      [],
+  /**
+   * The narrowing is recorded, and the bytes are what carry it — the boundary
+   * is `serializeManifest`, not this call (`writable.ts`). Asserting on the
+   * in-memory object would test a convention; asserting on the file tests the
+   * file.
+   */
+  it("records the observed narrowing, through the boundary", () => {
+    const text = serializeManifest(
+      buildManifest(
+        "zendesk",
+        [spec()],
+        [
+          observation({
+            classification: "compatible_with_rewrite",
+            upstream: "GET /api/v2/organizations/22989442/tickets?per_page=2",
+          }),
+        ],
+        [],
+      ),
     );
-    expect(manifest.operations[0]?.observedNarrowing).toBe(
-      "GET /api/v2/organizations/{id}/tickets?per_page=2",
-    );
+    expect(text).toContain("GET /api/v2/organizations/{id}/tickets?per_page=2");
+    expect(text).not.toContain("22989442");
   });
 
-  it("records unsafe findings, redacted, and nothing when there are none", () => {
-    const unsafe = buildManifest(
-      "zendesk",
-      [spec()],
-      [
-        observation({
-          classification: "unsafe",
-          unsafe: ["field `tickets.*.subject` is gone (id 22989442)"],
-        }),
-      ],
-      [],
+  it("records unsafe findings, through the boundary, and nothing when there are none", () => {
+    const unsafe = serializeManifest(
+      buildManifest(
+        "zendesk",
+        [spec()],
+        [
+          observation({
+            classification: "unsafe",
+            unsafe: ["field `tickets.*.subject` is gone (id 22989442)"],
+          }),
+        ],
+        [],
+      ),
     );
-    expect(unsafe.operations[0]?.findings).toStrictEqual([
-      "field `tickets.*.subject` is gone (id {id})",
-    ]);
+    expect(unsafe).toContain("field `tickets.*.subject` is gone (id {id})");
     const clean = buildManifest("zendesk", [spec()], [observation()], []);
     expect(clean.operations[0]?.findings).toBeUndefined();
   });

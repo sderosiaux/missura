@@ -8,6 +8,7 @@ import {
   type ZendeskTargets,
 } from "./assume-zendesk-shape";
 import { assumption, type Assumption, type ZendeskCredential } from "./harness";
+import { rememberAll } from "./writable";
 import { firstId, TINY_PAGE, zendeskCall } from "./zendesk-api";
 
 /**
@@ -50,11 +51,15 @@ export async function discoverZendeskTargets(
   );
   const ticketId = firstId(tickets.body, "tickets");
   const userId = firstId(users.body, "users");
-  return {
+  const targets: ZendeskTargets = {
     organizationId,
     ...(ticketId === undefined ? {} : { ticketId }),
     ...(userId === undefined ? {} : { userId }),
   };
+  // Discovered from the tenant, so the artifact boundary has to know them
+  // before anything they appear in is written (`writable.ts`).
+  rememberAll({ ...targets });
+  return targets;
 }
 
 export async function zendeskAssumptions(

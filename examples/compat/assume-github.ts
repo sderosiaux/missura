@@ -1,6 +1,7 @@
 import type { Exchange } from "./classify";
 import { assumption, type Assumption, type GithubCredential } from "./harness";
 import { call, pace } from "./http";
+import { rememberAll } from "./writable";
 import { announced } from "./upstream";
 
 /**
@@ -117,12 +118,16 @@ export async function discoverGithubTargets(
   }
   const issueNumber = firstNumber(issues.body);
   const pullNumber = firstNumber(pulls.body);
-  return {
+  const targets: GithubTargets = {
     repo,
     ...(issueNumber === undefined ? {} : { issueNumber }),
     ...(pullNumber === undefined ? {} : { pullNumber }),
     ...(nested === undefined ? {} : { nestedPath: nested }),
   };
+  // A path inside the repository is the tenant's, and it is the one discovered
+  // value no structural rule could recognize (`writable.ts`).
+  rememberAll({ ...targets });
+  return targets;
 }
 
 /** The catalogued routes, as `operation → path`, with the discovered ids bound. */

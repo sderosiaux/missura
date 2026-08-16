@@ -11,9 +11,12 @@ a mission token. Two halves:
   `unsupported` are the product working. `unsafe` is the only failing one:
   it means a difference a typed SDK consumer would not survive.
 
-No vendor response body is in this file. Request targets are here because they
-are the evidence for what was narrowed, and every identifier in them is
-redacted (`{id}`, `{uuid}`).
+No vendor response body is in this file, and no error message from one: a body
+is written as its key set and its size, an error as its class. Request targets
+ARE here, because they are the evidence for what was narrowed — every value
+this run learned from a tenant reads as a placeholder (`{id}`, `{uuid}`,
+`{email}`, `{subdomain}`, `{key}`). The whole document goes through that
+boundary once, on the way out (`examples/compat/writable.ts`).
 
 One known way to read an `unsafe` row wrong: when the filter removed objects,
 the proxy walks forward and refills the page, so the two answers can hold

@@ -101,41 +101,49 @@ function styleAssumption(
   );
 }
 
-/** The two organization-scoped collections, plus their pagination style. */
+/**
+ * The two organization-scoped collections, plus their pagination style.
+ *
+ * The route a claim NAMES is the template, not the target that was called:
+ * `/api/v2/organizations/{id}/tickets`, never the tenant's own organization.
+ * A claim is written into the manifest, and the manifest is committed — this is
+ * the field that shipped a live organization id, twice per run, under a header
+ * saying it did not.
+ */
 async function collections(
   credential: ZendeskCredential,
   targets: ZendeskTargets,
 ): Promise<Assumption[]> {
   const out: Assumption[] = [];
-  const scoped: readonly (readonly [string, string, string])[] = [
+  const scoped: readonly (readonly [string, string, string, string])[] = [
     [
       "organizations.tickets.list",
       `/api/v2/organizations/${targets.organizationId}/tickets.json?per_page=${String(TINY_PAGE)}`,
+      "/api/v2/organizations/{id}/tickets",
       "tickets",
     ],
     [
       "organizations.users.list",
       `/api/v2/organizations/${targets.organizationId}/users.json?per_page=${String(TINY_PAGE)}`,
+      "/api/v2/organizations/{id}/users",
       "users",
     ],
   ];
-  for (const [operation, path, key] of scoped) {
+  for (const [operation, path, route, key] of scoped) {
     const exchange = await zendeskCall(credential, `zendesk · ${operation}`, path);
     const keys = bodyKeys(exchange.body);
     out.push(
       endpointAssumption(
         `zendesk.endpoint.${operation}`,
         operation,
-        path.split("?")[0] ?? path,
+        route,
         key,
         exchange.status,
         listLength(exchange.body, key),
         keys,
       ),
     );
-    out.push(
-      styleAssumption(operation, path.split("?")[0] ?? path, paginationStyle(exchange.body), keys),
-    );
+    out.push(styleAssumption(operation, route, paginationStyle(exchange.body), keys));
   }
 
   const ticketId = targets.ticketId;

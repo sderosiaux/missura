@@ -1,8 +1,8 @@
 import type { Classification, OperationSpec } from "./classify";
 import type { Observation } from "./exchange";
 import type { Assumption } from "./harness";
-import { redact, redactAll } from "./redact";
 import type { Vendor } from "./vendor-shapes";
+import { assertWritable, scrub } from "./writable";
 
 /**
  * THE COVERAGE MANIFEST (PRD F-014) — one per connector, machine-readable, and
@@ -80,11 +80,9 @@ function manifestOperation(
   return {
     ...base,
     ...(rewritten && observation.upstream !== undefined
-      ? { observedNarrowing: redact(observation.upstream) }
+      ? { observedNarrowing: observation.upstream }
       : {}),
-    ...(observation.unsafe.length === 0
-      ? {}
-      : { findings: redactAll(observation.unsafe) }),
+    ...(observation.unsafe.length === 0 ? {} : { findings: [...observation.unsafe] }),
     ...(observation.objectsRemoved === 0
       ? {}
       : { objectsRemoved: observation.objectsRemoved }),
@@ -123,6 +121,14 @@ export function buildManifest(
  * Stable bytes: sorted operations, two-space JSON, trailing newline. A manifest
  * whose diff moved because a run happened to visit its operations in a
  * different order would be a manifest nobody reads the diff of.
+ *
+ * This is also the manifest's BOUNDARY (`writable.ts`). Every string in the
+ * tree goes through `scrub` on the way out, as a `JSON.stringify` replacer
+ * rather than field by field: `claim` was the field a per-site convention
+ * missed, and a replacer cannot miss the next one. Nothing upstream of here has
+ * to remember anything — which is what makes `artifacts.ts` rebuilding the
+ * specs from placeholders a convenience rather than the thing keeping the file
+ * clean.
  */
 export function serializeManifest(manifest: CoverageManifest): string {
   const ordered: CoverageManifest = {
@@ -134,5 +140,11 @@ export function serializeManifest(manifest: CoverageManifest): string {
       a.id.localeCompare(b.id),
     ),
   };
-  return `${JSON.stringify(ordered, null, 2)}\n`;
+  const text = `${JSON.stringify(
+    ordered,
+    (_key, value: unknown) => (typeof value === "string" ? scrub(value) : value),
+    2,
+  )}\n`;
+  assertWritable(text, `the ${manifest.connector} manifest`);
+  return text;
 }

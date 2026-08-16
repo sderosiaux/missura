@@ -2,6 +2,7 @@ import { ZENDESK_NOT_FOUND_BODY } from "@missura/proxy";
 import type { Exchange } from "./classify";
 import { assumption, type Assumption, type ZendeskCredential } from "./harness";
 import { checkErrorEnvelope, mediaType } from "./vendor-shapes";
+import { bodyDescriptor } from "./writable";
 import {
   bodyKeys,
   TINY_PAGE,
@@ -103,10 +104,13 @@ function notFoundBytes(exchange: Exchange): Assumption {
   if (live === ZENDESK_NOT_FOUND_BODY) {
     return assumption(base, "HOLDS", "the live 404 body matches the pinned bytes exactly");
   }
+  // The live bytes are DESCRIBED, not quoted: a 404 body carries a
+  // `description`, and this evidence is committed. The pinned bytes beside the
+  // descriptor are ours, so a reader has both halves of the comparison.
   return assumption(
     base,
     "BROKEN",
-    `the live 404 body is \`${live.slice(0, 120)}\`, and missura answers \`${ZENDESK_NOT_FOUND_BODY}\` — an out-of-scope object is now distinguishable from one that never existed`,
+    `the live 404 body is ${bodyDescriptor(live)} while missura answers \`${ZENDESK_NOT_FOUND_BODY}\` — an out-of-scope object is now distinguishable from one that never existed`,
   );
 }
 

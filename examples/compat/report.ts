@@ -1,16 +1,17 @@
 import type { Observation } from "./exchange";
 import type { Assumption, Skips } from "./harness";
-import { redact } from "./redact";
 import type { Vendor } from "./vendor-shapes";
+import { assertWritable, scrub } from "./writable";
 
 /**
  * The report a human reads, and the exit code a CI reads.
  *
  * Two rules shape everything below. It is COMMITTED, so nothing in it is a
- * vendor payload and every request target goes through `redact`. And it has
- * exactly two kinds of failure — a BROKEN assumption and an `unsafe`
- * operation — so a reader who only reads the first section knows whether
- * anything is wrong and which file to open.
+ * vendor payload — and the whole document goes through the boundary once, in
+ * `renderReport`, rather than through a `redact` at each cell that remembered
+ * one (`writable.ts`). And it has exactly two kinds of failure — a BROKEN
+ * assumption and an `unsafe` operation — so a reader who only reads the first
+ * section knows whether anything is wrong and which file to open.
  */
 
 const VENDORS: readonly Vendor[] = ["linear", "github", "zendesk"];
@@ -71,12 +72,12 @@ function verdictSection(input: ReportInput): string[] {
   const lines = ["**This run FAILED.**", ""];
   for (const entry of broken) {
     lines.push(
-      `- BROKEN \`${entry.id}\` — the assumption is encoded in \`${entry.encodedIn}\`. ${cell(redact(entry.evidence))}`,
+      `- BROKEN \`${entry.id}\` — the assumption is encoded in \`${entry.encodedIn}\`. ${cell(entry.evidence)}`,
     );
   }
   for (const entry of unsafe) {
     lines.push(
-      `- UNSAFE \`${entry.vendor}\` / \`${entry.operation}\` — ${entry.unsafe.map((line) => cell(redact(line))).join("; ")}`,
+      `- UNSAFE \`${entry.vendor}\` / \`${entry.operation}\` — ${entry.unsafe.map((line) => cell(line)).join("; ")}`,
     );
   }
   return lines;
@@ -90,7 +91,7 @@ function assumptionTable(entries: readonly Assumption[]): string[] {
   ];
   for (const entry of entries) {
     lines.push(
-      `| ${entry.verdict} | \`${entry.id}\` | ${cell(redact(entry.evidence))} | \`${entry.encodedIn}\` |`,
+      `| ${entry.verdict} | \`${entry.id}\` | ${cell(entry.evidence)} | \`${entry.encodedIn}\` |`,
     );
   }
   return lines;
@@ -104,13 +105,29 @@ function assumptionTable(entries: readonly Assumption[]): string[] {
  * to keep the page as full as the mission allows. The page then holds objects
  * the vendor's own answer to THIS call never contained — so a field that is an
  * object on one side and `null` on the other may be two different records
- * disagreeing, not the proxy changing a type. A run whose unsafe findings all
- * carry this note is a run to re-read, not a release to block.
+ * disagreeing, not the proxy changing a type.
+ *
+ * The trigger is the WALK, not the shortfall. Keying it on `objectsRemoved`
+ * printed the caveat for a PARTIAL refill and withheld it for a TOTAL one —
+ * where the page came back exactly as long as the vendor's, so the diff sees no
+ * shrink, and every record in it may still be a different one. That is the case
+ * where the finding is most likely to be bogus, and it was the one case with no
+ * warning on it. So: more than one upstream call for this operation, or objects
+ * gone from the page, and the caveat travels.
+ *
+ * It over-attaches, on purpose: a PARENT PROOF also costs an extra call and
+ * substitutes nothing. A caveat too many asks a reader to check something that
+ * turns out fine; a caveat missing lets a substitution ship as a defect.
  */
 function substitutionCaveat(entry: Observation): string[] {
-  if (entry.objectsRemoved === 0) return [];
+  const walked = entry.upstreamCalls.length > 1;
+  if (entry.objectsRemoved === 0 && !walked) return [];
+  const removed =
+    entry.objectsRemoved === 0
+      ? "the page came back full after more than one upstream call, so it was refilled"
+      : `${String(entry.objectsRemoved)} object(s) were removed and the page refilled`;
   return [
-    `${String(entry.objectsRemoved)} object(s) were removed and the page refilled, so the two answers may describe DIFFERENT records — check whether the finding above is the proxy or the substitution`,
+    `${removed}, so the two answers may describe DIFFERENT records — check whether the finding above is the proxy or the substitution`,
   ];
 }
 
@@ -127,10 +144,10 @@ function observationTable(entries: readonly Observation[]): string[] {
     const differences =
       entry.classification === "unsafe"
         ? [...entry.unsafe, ...substitutionCaveat(entry)]
-            .map((line) => cell(redact(line)))
+            .map((line) => cell(line))
             .join("; ")
         : [...entry.reasons, ...entry.notes]
-            .map((line) => cell(redact(line)))
+            .map((line) => cell(line))
             .join("; ");
     lines.push(
       `| ${entry.classification} | \`${entry.operation}\` | ${statuses} | ${differences === "" ? "nothing" : differences} |`,
@@ -180,9 +197,12 @@ const PREAMBLE: readonly string[] = [
   "  `unsupported` are the product working. `unsafe` is the only failing one:",
   "  it means a difference a typed SDK consumer would not survive.",
   "",
-  "No vendor response body is in this file. Request targets are here because they",
-  "are the evidence for what was narrowed, and every identifier in them is",
-  "redacted (`{id}`, `{uuid}`).",
+  "No vendor response body is in this file, and no error message from one: a body",
+  "is written as its key set and its size, an error as its class. Request targets",
+  "ARE here, because they are the evidence for what was narrowed — every value",
+  "this run learned from a tenant reads as a placeholder (`{id}`, `{uuid}`,",
+  "`{email}`, `{subdomain}`, `{key}`). The whole document goes through that",
+  "boundary once, on the way out (`examples/compat/writable.ts`).",
   "",
   "One known way to read an `unsafe` row wrong: when the filter removed objects,",
   "the proxy walks forward and refills the page, so the two answers can hold",
@@ -192,6 +212,11 @@ const PREAMBLE: readonly string[] = [
   "",
 ];
 
+/**
+ * The report, and the boundary it leaves through: the document is scrubbed
+ * ONCE, whole, rather than cell by cell. A cell added later is covered by
+ * construction, which a `redact` per call site never was.
+ */
 export function renderReport(input: ReportInput): string {
   const lines = [
     ...PREAMBLE,
@@ -203,7 +228,9 @@ export function renderReport(input: ReportInput): string {
   for (const vendor of VENDORS) {
     lines.push(...connectorSection(vendor, input));
   }
-  return `${lines.join("\n")}\n`;
+  const text = scrub(`${lines.join("\n")}\n`);
+  assertWritable(text, "the compatibility report");
+  return text;
 }
 
 /** The one-screen summary the run prints to stdout, table and all. */

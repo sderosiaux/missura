@@ -1,8 +1,8 @@
 import type { Exchange } from "./classify";
-import { assumption, checked, type Assumption, type LinearCredential } from "./harness";
+import { assumption, type Assumption, type LinearCredential } from "./harness";
 import { call, pace } from "./http";
 import {
-  firstGraphqlError,
+  graphqlErrorShape,
   hasGraphqlErrors,
   introspectionQuery,
   readIntrospection,
@@ -66,9 +66,13 @@ function accepted(exchange: Exchange): boolean {
   return exchange.status === 200 && !hasGraphqlErrors(exchange.body);
 }
 
+/**
+ * How the vendor refused, as a shape. Never its own words: a GraphQL error
+ * message quotes the document that produced it, and this evidence is committed.
+ */
 function refusal(exchange: Exchange): string {
-  const message = firstGraphqlError(exchange.body);
-  return message ?? `status ${String(exchange.status)}, no readable GraphQL error`;
+  const shape = graphqlErrorShape(exchange.body);
+  return shape ?? `status ${String(exchange.status)}, no readable GraphQL error`;
 }
 
 /**
@@ -270,20 +274,11 @@ export async function linearAssumptions(
   results.push(...schemaAssumptions(pinned, live, "introspection"));
   return results;
 }
-
-/** Wraps the whole section so a network failure reads as UNVERIFIABLE, not BROKEN. */
-export function linearSection(
-  credential: LinearCredential,
-): Promise<Assumption[]> {
-  return linearAssumptions(credential).catch(async (err: unknown) => [
-    await checked(
-      {
-        id: "linear.section",
-        vendor: "linear",
-        claim: "the Linear assumption checks could run at all",
-        encodedIn: NARROW_FILTER_FILE,
-      },
-      () => Promise.reject(err instanceof Error ? err : new Error(String(err))),
-    ),
-  ]);
-}
+/**
+ * There is no section wrapper here. There was one, and it did two wrong things
+ * at once: it duplicated `sections.ts`'s `guarded` — which is the one the run
+ * actually calls — and it swallowed a `WriteAttemptError` into an UNVERIFIABLE
+ * verdict whose evidence was the thrown message, i.e. the URL the suite was
+ * aiming at, subdomain included. A write attempt must stop the run, and an
+ * error must reach an artifact as a descriptor, not as its own words.
+ */

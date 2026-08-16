@@ -139,6 +139,49 @@ describe("the report", () => {
     expect(text).toContain("may describe DIFFERENT records");
   });
 
+  /**
+   * The case the caveat was missing from, and the one it matters most in: a
+   * TOTAL refill hands back a page as long as the vendor's, so the diff sees no
+   * shrink and `objectsRemoved` is 0 — while every record in it may be a
+   * different one. Keying the caveat on the shortfall printed it whenever the
+   * finding was least likely to be an artefact and withheld it whenever it was
+   * most likely to be one.
+   */
+  it("warns after a total refill too, where nothing came back short", () => {
+    const text = renderReport(
+      input({
+        observations: [
+          observation({
+            classification: "unsafe",
+            unsafe: ["field `users.*.photo` came back `null` where the vendor sent object"],
+            objectsRemoved: 0,
+            upstreamCalls: [
+              "GET /api/v2/organizations/{id}/tickets.json?page=1",
+              "GET /api/v2/organizations/{id}/tickets.json?page=2",
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(text).toContain("may describe DIFFERENT records");
+  });
+
+  it("says nothing about substitution when one call answered in full", () => {
+    const text = renderReport(
+      input({
+        observations: [
+          observation({
+            classification: "unsafe",
+            unsafe: ["field `users.*.photo` is gone"],
+            objectsRemoved: 0,
+            upstreamCalls: ["GET /api/v2/users/{id}.json"],
+          }),
+        ],
+      }),
+    );
+    expect(text).not.toContain("may describe DIFFERENT records");
+  });
+
   it("keeps a pipe inside evidence from breaking the table", () => {
     const text = renderReport(
       input({

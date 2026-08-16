@@ -1,4 +1,5 @@
 import type { Vendor } from "./vendor-shapes";
+import { rememberAll } from "./writable";
 
 /**
  * Gates, credentials and the two result shapes both halves report in.
@@ -100,6 +101,13 @@ export function zendeskBase(credential: ZendeskCredential): string {
  * run without `missura init`, and it needs the raw credential for the direct
  * half anyway. A missing one SKIPS that vendor's section with a message that
  * says exactly what to set — it never fails the run.
+ *
+ * It is also where every live value this run holds is registered with the
+ * artifact boundary (`writable.ts`): a subdomain, an address, an organization
+ * id and a repository are the tenant's, and the two committed files must be
+ * unable to carry them. Registered from the credential OBJECT rather than field
+ * by field, so a field added to one of those types is covered by the line that
+ * carries it.
  */
 export function credentials(): { credentials: Credentials; skips: Skips } {
   const out: Credentials = {};
@@ -152,13 +160,15 @@ export function credentials(): { credentials: Credentials; skips: Skips } {
     };
   }
 
+  // Every live value this run holds, in one object, so a field added to any of
+  // the three credentials is registered by the line that spreads it.
+  const live: Record<string, string | readonly string[] | undefined> = {
+    ...out.linear,
+    ...out.github,
+    ...out.zendesk,
+  };
+  rememberAll(live);
   return { credentials: out, skips };
-}
-
-const WIDTH = 13;
-
-export function assumptionLine(assumption: Assumption): string {
-  return `${assumption.verdict.padEnd(WIDTH)} ${assumption.id}\n${" ".repeat(WIDTH)} ${assumption.evidence}`;
 }
 
 /** Builds one assumption result, so no call site can forget the `encodedIn`. */
@@ -171,21 +181,13 @@ export function assumption(
 }
 
 /**
- * Runs one assumption check, turning a thrown error into UNVERIFIABLE rather
- * than a crash: a network blip must not read as a broken vendor contract.
+ * There is no `checked` here any more, and it is not coming back.
+ *
+ * It turned any thrown error into an UNVERIFIABLE verdict whose evidence was
+ * the error's own message — a failed fetch quotes the URL it was aiming at, so
+ * a network blip wrote a support subdomain into a committed report — and it
+ * swallowed `WriteAttemptError` with everything else, which turned "this suite
+ * tried to write to your tenant" into a table row. `sections.ts` has the one
+ * wrapper: it re-throws a write attempt and records anything else through
+ * `errorDescriptor`.
  */
-export async function checked(
-  base: Omit<Assumption, "verdict" | "evidence">,
-  run: () => Promise<{ verdict: Verdict; evidence: string }>,
-): Promise<Assumption> {
-  try {
-    const { verdict, evidence } = await run();
-    return assumption(base, verdict, evidence);
-  } catch (err) {
-    return assumption(
-      base,
-      "UNVERIFIABLE",
-      `the check itself failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-}
