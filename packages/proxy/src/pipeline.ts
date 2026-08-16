@@ -224,7 +224,7 @@ export async function handle(
 
     // Re-resolved from the rewritten target: NARROW is trusted to shrink a
     // request, never to move it to another origin.
-    const target = upstreamTarget(deps, outbound.path);
+    const target = upstreamTarget(deps, outbound.req.path);
     if (target === undefined) {
       emitEvent(
         deps,
@@ -248,7 +248,7 @@ export async function handle(
     // the NARROW stage builds above.
     const unproven = await parentProofStage(deps, {
       narrowed,
-      req: outbound,
+      req: outbound.req,
       verdict,
       ctx,
       claims,
@@ -264,25 +264,35 @@ export async function handle(
     const answer = await forward(
       deps,
       target,
-      outbound,
+      outbound.req,
       verdict,
       ctx,
       filter,
       claims,
     );
-    const served = await refill(
+    const merged = await refill(
       deps,
-      { req: outbound, verdict, ctx, filter, claims },
+      {
+        req: outbound.req,
+        verdict,
+        ctx,
+        filter,
+        claims,
+        ...(outbound.resume === undefined ? {} : { resume: outbound.resume }),
+      },
       answer,
     );
     // Last, and on every response the rule describes: the vendor's position is
     // replaced by a handle. Doing it only on a walked answer would make the
-    // cursor's own format say that a walk happened.
+    // cursor's own format say that a walk happened. `merged.served` rides along
+    // INSIDE the handle — objects the walk collected but had no room for, owed
+    // to the next page rather than dropped.
     return withMissuraCursor(
-      served,
+      merged,
       narrowed.filterPlan,
       claims.id,
       deps.cursors,
+      merged.served,
     );
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.

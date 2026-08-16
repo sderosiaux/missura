@@ -30,6 +30,12 @@ import { randomUUID } from "node:crypto";
  * paginating across a proxy restart is refused rather than served from a
  * position we can no longer vouch for. Missions are capped at 60 minutes, which
  * is what makes both the bound and the TTL safe to state.
+ *
+ * A handle stands for a position AND an OFFSET into the page starting there,
+ * which is what lets a REFILL walk hand back objects it collected past the page
+ * the agent asked for instead of dropping them. The offset is only expressible
+ * because this is a store: it lives here, next to the position, and the bytes
+ * the agent holds stay a fixed-size random value that is a function of neither.
  */
 
 /** Handles one proxy keeps at once. Oldest go first — see `issue`. */
@@ -38,21 +44,32 @@ export const MAX_CURSORS = 10_000;
 /** A handle outlives the longest mission a proxy will mint, and no more. */
 export const CURSOR_TTL_MS = 60 * 60 * 1000;
 
-export interface CursorStore {
-  /** An opaque handle standing for `vendorCursor`, usable only by `missionId`. */
-  issue(missionId: string, vendorCursor: string): string;
+/** Where a walk resumes: a vendor position, and how far into it we already are. */
+export interface CursorPosition {
+  /** The vendor's own pagination position. It never leaves the proxy. */
+  vendorCursor: string;
   /**
-   * The vendor cursor behind `handle`, or `undefined` — never issued, expired,
+   * Authorized objects the agent has already been served, counted from
+   * `vendorCursor`. Zero for a plain page boundary; positive when a walk
+   * collected more than the agent asked for and the rest is still owed.
+   */
+  served: number;
+}
+
+export interface CursorStore {
+  /** An opaque handle standing for `position`, usable only by `missionId`. */
+  issue(missionId: string, position: CursorPosition): string;
+  /**
+   * The position behind `handle`, or `undefined` — never issued, expired,
    * evicted, or issued to a different mission. Callers must read `undefined` as
    * DENY: forwarding a cursor we cannot vouch for would resume the agent at a
    * vendor position nothing authorized.
    */
-  resolve(missionId: string, handle: string): string | undefined;
+  resolve(missionId: string, handle: string): CursorPosition | undefined;
 }
 
-interface Entry {
+interface Entry extends CursorPosition {
   missionId: string;
-  vendorCursor: string;
   issuedAt: number;
 }
 
@@ -73,9 +90,9 @@ export function createCursorStore(
   const entries = new Map<string, Entry>();
 
   return {
-    issue(missionId: string, vendorCursor: string): string {
+    issue(missionId: string, position: CursorPosition): string {
       const handle = randomUUID();
-      entries.set(handle, { missionId, vendorCursor, issuedAt: clock() });
+      entries.set(handle, { ...position, missionId, issuedAt: clock() });
       while (entries.size > max) {
         const oldest = entries.keys().next();
         if (oldest.done === true) break;
@@ -83,7 +100,7 @@ export function createCursorStore(
       }
       return handle;
     },
-    resolve(missionId: string, handle: string): string | undefined {
+    resolve(missionId: string, handle: string): CursorPosition | undefined {
       const found = entries.get(handle);
       if (found === undefined) return undefined;
       if (clock() - found.issuedAt > ttlMs) {
@@ -92,7 +109,8 @@ export function createCursorStore(
       }
       // A handle is the mission's, not the agent process's: replaying one under
       // a different mission would resume a walk that mission never made.
-      return found.missionId === missionId ? found.vendorCursor : undefined;
+      if (found.missionId !== missionId) return undefined;
+      return { vendorCursor: found.vendorCursor, served: found.served };
     },
   };
 }

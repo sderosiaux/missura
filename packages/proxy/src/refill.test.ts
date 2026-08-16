@@ -11,6 +11,7 @@ import {
   sentBody,
   serveEach,
   withoutCursor,
+  withoutHandle,
   withPlan,
 } from "./refill.fixtures";
 
@@ -147,7 +148,8 @@ describe("pagination refill", () => {
     const res = await handle(h.deps, graphqlRequest(3));
 
     expect(connection(res.body).totalCount).toBeUndefined();
-    expect(bodyText(res.body)).not.toContain("412");
+    // Past the handle: it is random, and one roll in a few hundred spells 412.
+    expect(withoutHandle(res.body)).not.toContain("412");
     expect(connection(res.body).nodes).toHaveLength(3);
   });
 

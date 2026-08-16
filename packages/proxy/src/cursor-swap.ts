@@ -1,6 +1,7 @@
 import type { CursorStore, FilterPlan, PaginationRule } from "@missura/core";
 import { isRecord } from "./filter-json";
 import { replaceAt, valueAt } from "./refill-page";
+import type { RefillResume } from "./refill";
 import type { IncomingShape, ResponseShape } from "./transport";
 
 /**
@@ -39,7 +40,7 @@ function vendorCursor(
   rule: PaginationRule,
   missionId: string,
   cursors: CursorStore,
-): { body: string } | undefined {
+): { body: string; resume?: RefillResume } | undefined {
   if (rule.cursor.source !== "body-path") return { body };
   let parsed: unknown;
   try {
@@ -53,9 +54,14 @@ function vendorCursor(
   if (typeof handle !== "string" || handle.length === 0) return { body };
   const resolved = cursors.resolve(missionId, handle);
   if (resolved === undefined) return undefined;
-  const next = replaceAt(parsed, rule.cursor.cursorPath, resolved);
+  const next = replaceAt(parsed, rule.cursor.cursorPath, resolved.vendorCursor);
+  // The request has no place for a cursor after all: it goes out unresumed,
+  // from the vendor's first page, which is what the agent asked for on the wire.
   if (next === undefined) return { body };
-  return { body: JSON.stringify(next) };
+  return {
+    body: JSON.stringify(next),
+    resume: { at: resolved.vendorCursor, served: resolved.served },
+  };
 }
 
 /** The answer with our handle where the vendor put its position. */
@@ -64,6 +70,7 @@ function missuraCursor(
   rule: PaginationRule,
   missionId: string,
   cursors: CursorStore,
+  served: number,
 ): string | Uint8Array {
   const path = endCursorPath(rule);
   if (path === undefined) return body;
@@ -76,7 +83,8 @@ function missuraCursor(
   if (!isRecord(parsed)) return body;
   const cursor = valueAt(parsed, path);
   if (typeof cursor !== "string" || cursor.length === 0) return body;
-  const sealed = replaceAt(parsed, path, cursors.issue(missionId, cursor));
+  const handle = cursors.issue(missionId, { vendorCursor: cursor, served });
+  const sealed = replaceAt(parsed, path, handle);
   return sealed === undefined ? body : JSON.stringify(sealed);
 }
 
@@ -85,26 +93,46 @@ function missuraCursor(
  * of a pagination rule. A plan without one leaves both a no-op.
  */
 
+/** The request as it will leave, and where in the collection it picks up. */
+export interface Outbound {
+  req: IncomingShape;
+  /** Absent when the request carried no handle: the walk starts at zero. */
+  resume?: RefillResume;
+}
+
 /** `undefined` ⇒ deny: the agent paginated with a handle that is not its own. */
 export function withVendorCursor(
   req: IncomingShape,
   plan: FilterPlan | undefined,
   missionId: string,
   cursors: CursorStore,
-): IncomingShape | undefined {
+): Outbound | undefined {
   const rule = plan?.pagination;
-  if (rule === undefined) return req;
+  if (rule === undefined) return { req };
   const swapped = vendorCursor(req.body, rule, missionId, cursors);
-  return swapped === undefined ? undefined : { ...req, body: swapped.body };
+  if (swapped === undefined) return undefined;
+  return {
+    req: { ...req, body: swapped.body },
+    ...(swapped.resume === undefined ? {} : { resume: swapped.resume }),
+  };
 }
 
+/**
+ * `served` is what the walk still owes from the page the handed-back position
+ * starts — zero for an ordinary page boundary. It is stored, never serialized:
+ * the agent gets the same fixed-size handle either way.
+ */
 export function withMissuraCursor(
   res: ResponseShape,
   plan: FilterPlan | undefined,
   missionId: string,
   cursors: CursorStore,
+  served = 0,
 ): ResponseShape {
   const rule = plan?.pagination;
   if (rule === undefined) return res;
-  return { ...res, body: missuraCursor(res.body, rule, missionId, cursors) };
+  return {
+    ...res,
+    body: missuraCursor(res.body, rule, missionId, cursors, served),
+  };
 }

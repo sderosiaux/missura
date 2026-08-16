@@ -74,21 +74,27 @@ export function graphqlDenial(body: string | Uint8Array): MissuraDenial {
 
 export function harness(
   over: Partial<PipelineDeps> = {},
-  response?: () => Promise<Response>,
+  /**
+   * The fake vendor. It is handed the call it is answering so a double can
+   * serve by POSITION — the page the request's own cursor names — and not only
+   * by call order, which a walk that resumes into a page cannot express.
+   */
+  response?: (url: string, init: RequestInit) => Promise<Response>,
 ): Harness {
   const events: DecisionEvent[] = [];
   const calls: { url: string; init: RequestInit }[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
-    calls.push({
+    const call = {
       url: input instanceof Request ? input.url : input.toString(),
       init: init ?? {},
-    });
+    };
+    calls.push(call);
     return response === undefined
       ? new Response("upstream ok", {
           status: 200,
           headers: { "content-type": "text/plain" },
         })
-      : await response();
+      : await response(call.url, call.init);
   };
 
   const deps: PipelineDeps = {

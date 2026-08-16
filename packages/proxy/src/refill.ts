@@ -1,14 +1,15 @@
-import type { CatalogDecision, MissionClaims } from "@missura/core";
-import type { RequestContext } from "./audit";
-import type { FilterTask } from "./filter";
-import {
-  forward,
-  upstreamTarget,
-  type ForwardDeps,
-  type ForwardOutcome,
-} from "./forward";
-import { mergedBody, readPage, withNext, type VendorPage } from "./refill-page";
-import type { IncomingShape, ResponseShape } from "./transport";
+import type { CursorPosition } from "@missura/core";
+import type { ForwardDeps, ForwardOutcome } from "./forward";
+import { mergedBody, readPage, type VendorPage } from "./refill-page";
+import { walkPages, type RefillCall, type Walk } from "./refill-walk";
+import type { ResponseShape } from "./transport";
+
+export {
+  MAX_REFILL_CALLS,
+  REFILL_BUDGET_MS,
+  type RefillCall,
+  type RefillResume,
+} from "./refill-walk";
 
 /**
  * Pagination REFILL: the other half of the response FILTER.
@@ -17,15 +18,8 @@ import type { IncomingShape, ResponseShape } from "./transport";
  * pagination helpers stop working — they asked for 50 and got 12 with a cursor
  * that no longer means what it says — and the short page itself announces that
  * 38 objects were hidden. So when the filter leaves a page short and the vendor
- * says there is more, we walk forward and merge until the agent's page is as
- * full as its authorized objects allow.
- *
- * The walk is BOUNDED, because it multiplies the vendor load one agent request
- * can cause: at most `MAX_REFILL_CALLS` extra calls, and never past
- * `REFILL_BUDGET_MS` of total request time. Each extra call goes back through
- * `forward`, so the credential injection, the header allowlist, the response
- * cap, the filter and the audit record all stay in one place — and the audit
- * shows the real number of vendor calls a mission spent.
+ * says there is more, we walk forward (`refill-walk.ts`, bounded) and merge
+ * until the agent's page is as full as its authorized objects allow.
  *
  * The cursor the agent gets back is OURS (SPEC §22, `core/cursor.ts`): an
  * opaque handle standing for the vendor position, which never leaves the proxy.
@@ -34,110 +28,59 @@ import type { IncomingShape, ResponseShape } from "./transport";
  * were hidden. It also makes a cursor replayed under a different mission fail
  * closed instead of resuming a walk that mission never made.
  *
- * REMAINING COST, and it is availability, not confidentiality: when a walk
- * collects more authorized objects than the agent asked for, the surplus is
- * dropped rather than returned, and the position we hand back points PAST it.
- * Those objects are missing from the agent's next page. Returning them instead
- * would make the answer longer than the page that was requested, which is
- * itself a count of how many pages we walked. Fixing it needs the handle to
- * carry an offset INTO a page, not merely a page boundary — the store already
- * makes that expressible; nothing reads it yet.
+ * A walk that collects MORE than the agent asked for keeps the surplus rather
+ * than dropping it. It cannot be appended to this answer — an answer longer
+ * than the page that was requested is itself a count of how many pages we
+ * walked — so it is carried into the NEXT one: the handle we hand back stands
+ * for where the page holding the surplus starts AND how many of its authorized
+ * objects the agent has now been served. The next request re-fetches that
+ * position, filters it exactly as before, drops that many off the front, and
+ * walks on from there.
+ *
+ * REMAINING COST, and it is availability, not confidentiality: page-NUMBERED
+ * pagination still drops its surplus. A `query-page` cursor is the agent's own
+ * page number — it never became a handle of ours, so there is nothing in the
+ * answer that could carry an offset back.
  */
 
-/** Extra upstream calls one agent request may cause. */
-export const MAX_REFILL_CALLS = 5;
-/**
- * Wall-clock budget for the whole request, measured from the moment the proxy
- * received it — the deadline the agent actually experiences, so a slow first
- * page spends the budget it really spent.
- */
-export const REFILL_BUDGET_MS = 10_000;
-
-/** Everything an extra call needs, exactly as the first one had it. */
-export interface RefillCall {
+/** The answer, plus what the position inside it still owes. */
+export interface RefillOutcome extends ResponseShape {
   /**
-   * The narrowed request, exactly as the first call carried it. The upstream
-   * TARGET is re-resolved from it on every extra call rather than carried
-   * alongside: a page-numbered walk rewrites the query string, so a target
-   * fixed at the first call would re-ask for the very page we already have.
+   * Authorized objects already served from the page the answer's own position
+   * starts. Zero for a plain page boundary; positive when this answer left a
+   * surplus behind inside that page.
    */
-  req: IncomingShape;
-  verdict: CatalogDecision;
-  ctx: RequestContext;
-  /** Absent when the connector registered no plan: there is nothing to refill. */
-  filter: FilterTask | undefined;
-  claims?: MissionClaims;
-}
-
-interface Walk {
-  nodes: unknown[];
-  last: VendorPage;
-  /** The vendor told us this collection is finished. */
-  exhausted: boolean;
-  /** We stopped without being told: a cap, an error, a shape we cannot read. */
-  stopped: boolean;
-}
-
-function elapsed(deps: ForwardDeps, ctx: RequestContext): number {
-  return (deps.now?.() ?? Date.now()) - ctx.startedAt;
+  served: number;
 }
 
 /**
- * Walks forward until the page is full, the vendor runs out, or a bound is
- * reached. Anything unexpected — an unreachable vendor, a status that is not
- * the first page's, a body we cannot read as this collection — ends the walk
- * as `stopped`, which the caller reports as "there is more". It never ends as
- * "here is everything": a refill that failed must cost objects, never truth.
+ * Where the objects this answer had no room for start, or `undefined` when it
+ * had room for everything.
+ *
+ * The walk stops the moment it has enough, so a surplus can only ever sit in
+ * the LAST page it read. The position to hand back is therefore where THAT page
+ * starts, paired with how many of its authorized objects the agent has now been
+ * served: re-fetching it and dropping that many off the front lands exactly on
+ * the first object that did not fit.
+ *
+ * The count is in AUTHORIZED objects — after the filter, not raw vendor ones.
+ * That is sound because the filter is a pure function of the mission's plan and
+ * the page: reading the same position again under the same mission removes the
+ * same objects, so the same prefix is the same prefix.
+ *
+ * `undefined` where the tail page has no position naming it: a `query-page`
+ * walk, whose cursors are the agent's own page numbers and never became handles
+ * of ours. There is nowhere to carry an offset, so the surplus is lost — the
+ * one case the header's REMAINING COST still names.
  */
-async function walkPages(
-  deps: ForwardDeps,
-  call: RefillCall,
-  filter: FilterTask,
-  first: VendorPage,
-  status: number,
+function surplusAt(
+  walk: Walk,
+  skip: number,
   requested: number,
-): Promise<Walk> {
-  const rule = filter.plan.pagination;
-  const walk: Walk = {
-    nodes: [...first.nodes],
-    last: first,
-    exhausted: false,
-    stopped: false,
-  };
-  if (rule === undefined) return walk;
-  for (let calls = 0; walk.nodes.length < requested; calls += 1) {
-    const after = walk.last.next;
-    if (
-      calls >= MAX_REFILL_CALLS ||
-      elapsed(deps, call.ctx) >= REFILL_BUDGET_MS
-    )
-      return { ...walk, stopped: true };
-    if (after === undefined) return { ...walk, stopped: true };
-    const next = withNext(call.req, rule, after);
-    if (next === undefined) return { ...walk, stopped: true };
-    // Re-resolved from the rewritten target, exactly as the pipeline does after
-    // NARROW: the walk shrinks or advances a request, never moves its origin.
-    const target = upstreamTarget(deps, next.path);
-    if (target === undefined) return { ...walk, stopped: true };
-    const res = await forward(
-      deps,
-      target,
-      next,
-      call.verdict,
-      call.ctx,
-      filter,
-      call.claims,
-    );
-    // A refused or failed extra call is not a page: the filter may have failed
-    // closed on it, and its body is then the vendor's own not-found.
-    if (res.status !== status) return { ...walk, stopped: true };
-    const page = readPage(res.body, rule, { removed: res.removed, at: after });
-    if (page === undefined) return { ...walk, stopped: true };
-    walk.nodes.push(...page.nodes);
-    walk.last = page;
-    if (!page.hasNextPage) return { ...walk, exhausted: true };
-  }
-  return walk;
+): CursorPosition | undefined {
+  const end = skip + requested;
+  if (walk.nodes.length <= end || walk.tail.at === undefined) return undefined;
+  return { vendorCursor: walk.tail.at, served: end - walk.tail.before };
 }
 
 /**
@@ -148,19 +91,28 @@ async function walkPages(
  * everything we collected. Every uncertain case resolves to true — a cap, an
  * error, an unreadable page — because "there may be more" costs the agent one
  * extra call, while a wrong `false` silently ends its iteration early.
+ *
+ * The cursor is the SURPLUS position when there is one, which points at a page
+ * we have already partly served rather than at the boundary past it. The agent
+ * cannot tell: it is swapped for a handle before the answer leaves, and a
+ * handle is the same bytes whichever of the two it stands for.
  */
 function mergedPageInfo(
   walk: Walk,
   first: VendorPage,
-  kept: number,
+  taken: number,
+  surplus: CursorPosition | undefined,
 ): Record<string, unknown> {
   const hasNextPage =
-    walk.stopped || !walk.exhausted || kept < walk.nodes.length;
+    walk.stopped || !walk.exhausted || taken < walk.nodes.length;
   const last = walk.last.next;
+  const endCursor =
+    surplus?.vendorCursor ??
+    (last?.source === "body-path" ? last.cursor : undefined);
   return {
     ...first.pageInfo,
     hasNextPage,
-    ...(last?.source === "body-path" ? { endCursor: last.cursor } : {}),
+    ...(endCursor === undefined ? {} : { endCursor }),
   };
 }
 
@@ -179,21 +131,40 @@ function mergedPageInfo(
  * exactly the number of pages we walked — which is a measure of how many
  * objects were hidden. The tradeoff is deliberate: the agent may see a budget
  * that is up to `MAX_REFILL_CALLS` ahead of the vendor's real one.
+ *
+ * The answer is exactly `requested` objects long whatever the walk cost, which
+ * is the same property stated about its LENGTH: a page that grew with the walk
+ * would count it just as plainly as a cursor that did.
  */
 export async function refill(
   deps: ForwardDeps,
   call: RefillCall,
   first: ForwardOutcome,
-): Promise<ResponseShape> {
+): Promise<RefillOutcome> {
+  // A body we cannot rebuild leaves the first page exactly as it was: short,
+  // and already saying there is more. On a RESUMED request that also means
+  // objects the agent already has come back a second time — a repeat, which
+  // costs it a duplicate rather than a gap, and never shows it anything new.
+  const untouched: RefillOutcome = {
+    status: first.status,
+    headers: first.headers,
+    body: first.body,
+    served: 0,
+  };
   const filter = call.filter;
   const rule = filter?.plan.pagination;
-  if (filter === undefined || rule === undefined) return first;
+  if (filter === undefined || rule === undefined) return untouched;
   const page = readPage(first.body, rule, {
     removed: first.removed,
     at: undefined,
   });
-  if (page === undefined) return first;
-  if (page.nodes.length >= rule.requested || !page.hasNextPage) return first;
+  if (page === undefined) return untouched;
+  const skip = call.resume?.served ?? 0;
+  // Untouched is only available when nothing is owed. A request resuming INTO a
+  // page always rebuilds: the objects it already holds have to come off the
+  // front, and a page that looks full still owes `skip` of them.
+  if (skip === 0 && (page.nodes.length >= rule.requested || !page.hasNextPage))
+    return untouched;
 
   const walk = await walkPages(
     deps,
@@ -202,16 +173,21 @@ export async function refill(
     page,
     first.status,
     rule.requested,
+    skip,
   );
-  const kept = walk.nodes.slice(0, rule.requested);
+  const kept = walk.nodes.slice(skip, skip + rule.requested);
+  const surplus = surplusAt(walk, skip, rule.requested);
   const body = mergedBody(
     page,
     rule,
     kept,
-    mergedPageInfo(walk, page, kept.length),
+    mergedPageInfo(walk, page, skip + kept.length, surplus),
   );
-  // A body we cannot rebuild leaves the first page exactly as it was: short,
-  // and already saying there is more.
-  if (body === undefined) return first;
-  return { status: first.status, headers: first.headers, body };
+  if (body === undefined) return untouched;
+  return {
+    status: first.status,
+    headers: first.headers,
+    body,
+    served: surplus?.served ?? 0,
+  };
 }
