@@ -264,7 +264,7 @@ export class MissionStore {
    *
    * This narrows that window to the merge-and-rename itself; it does not close
    * it. Two writers can still interleave inside it — a real fix is a lock file
-   * or a single writer, and neither is M2 (docs/SPEC.md §5).
+   * or a single writer, and neither is M2.
    */
   private persist(): void {
     const disk = this.onDisk();

@@ -42,3 +42,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .waitlist/
+
+# strategy doc lives outside this repo
+docs/SPEC.md

@@ -19,7 +19,7 @@ function connection(): ConnectionConfig {
  * input must not be spellable at all. A `narrow` that could be left out meant
  * "no narrowing", and an `isRevoked` that could be left out meant "nothing is
  * revoked" — both of them a missing policy input defaulting to PASS, which is
- * the one thing the proxy is not allowed to do (AGENTS.md, docs/SPEC.md §2).
+ * the one thing the proxy is not allowed to do (AGENTS.md).
  */
 describe("ProxyConfig — a missing policy input is not spellable", () => {
   it("refuses a connection without a NARROW", () => {
