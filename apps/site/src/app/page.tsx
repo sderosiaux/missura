@@ -41,7 +41,10 @@ export default function Home() {
 
 function Hero() {
   return (
-    <section className="flex min-h-[84svh] flex-col justify-end pt-20 pb-16 sm:pt-24">
+    // centred, not bottom-aligned: the source hero bottom-aligns over a
+    // full-bleed photo that fills the space above. Nothing fills it here, so
+    // anchoring to the bottom just banks dead paper on tall screens.
+    <section className="flex min-h-[76svh] flex-col justify-center py-16 sm:py-20">
       <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-end lg:gap-12">
         {/* The engraving carries its own deckled paper edge, so it needs no
             frame and no scrim — it is already the same paper as the page. */}
