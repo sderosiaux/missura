@@ -137,7 +137,7 @@ export function Architecture() {
 
         <ArrowRight label="every call to customer data" />
 
-        <div className="rounded-lg border-2 border-ink bg-white p-4 shadow-[0_18px_36px_-30px_rgb(0_0_0/.4)] sm:p-5">
+        <div className="rounded-lg border-2 border-ink bg-white p-4 sm:p-5">
           <p className="label-mono text-ink-soft">Missura</p>
           <p className="mt-1 text-[0.9rem] text-ink-soft">
             Deterministic. No model in the path.

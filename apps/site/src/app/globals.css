@@ -13,7 +13,161 @@
   --color-code-bg: #141514;
   --color-code-ink: #e8e6df;
   --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-display: var(--font-onest), var(--font-archivo), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Airy layer — the airy-cinematic system, on missura's paper.
+   Three deliberate departures from the source, all forced:
+   1. Palette is paper/ink, not white/near-black. The accent is
+      the bound green, still used only as a 7px square.
+   2. No dark bands. The rhythm comes from density instead —
+      paper against deep paper — because the page is light only.
+   3. Text sits BESIDE the media, never over it. The engravings
+      are cream and delicate; white text on them has no contrast
+      and a darkening scrim would destroy the hatching.
+   Everything else — one display face at weight 300, hierarchy
+   from size and negative tracking, one idea per section, the
+   scroll-revealed manifesto — is the system as written.
+   ───────────────────────────────────────────────────────────── */
+
+.ac-display,
+.ac-manifesto,
+.ac-h2,
+.ac-h3,
+.ac-eyebrow {
+  font-family: var(--font-display);
+  font-weight: 300;
+  text-wrap: balance;
+}
+
+.ac-display {
+  font-size: clamp(2.75rem, 5.7vw, 5.125rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+
+.ac-manifesto {
+  font-size: clamp(1.875rem, 4.3vw, 3.875rem);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.ac-h2 {
+  font-size: clamp(2rem, 3.33vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.ac-h3 {
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.ac-eyebrow {
+  font-size: 1.625rem;
+  line-height: 1.25;
+  letter-spacing: -0.05em;
+}
+
+.ac-lead {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+/* the only element allowed to carry the accent */
+.ac-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: var(--color-bound);
+  flex: none;
+}
+
+/* pill buttons: paper, ink text, one hairline. No shadow, ever. */
+.ac-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 50px;
+  padding: 0 1.375rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-ink);
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-size: 1rem;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    background 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.ac-btn:hover {
+  transform: translateY(-1px);
+}
+
+.ac-btn--ghost {
+  background: transparent;
+  color: var(--color-ink);
+  border-color: var(--color-line);
+}
+
+.ac-btn--ghost:hover {
+  background: var(--color-paper-deep);
+}
+
+/* square media card — the engraving, uncovered, with its line below */
+.ac-card {
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-line);
+}
+
+.ac-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* horizontal snap scroller, bleeding off the right edge */
+.ac-rail {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ac-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.ac-rail > * {
+  scroll-snap-align: start;
+  flex: none;
+}
+
+/* manifesto: words warm from line grey to ink as they cross the fold */
+.ac-word {
+  color: var(--color-line);
+  transition: color 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.ac-word.is-lit {
+  color: var(--color-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-word {
+    color: var(--color-ink);
+    transition: none;
+  }
 }
 
 html {

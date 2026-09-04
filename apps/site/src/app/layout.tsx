@@ -1,11 +1,22 @@
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono } from "next/font/google";
+import { Archivo, IBM_Plex_Mono, Onest } from "next/font/google";
 import "./globals.css";
 
 const archivo = Archivo({
   variable: "--font-archivo",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+});
+
+/**
+ * Display face. Everything large is set at weight 300 and takes its hierarchy
+ * from size and negative tracking alone — never from a heavier cut. Archivo
+ * stays for body and UI so the running text keeps the voice it already had.
+ */
+const onest = Onest({
+  variable: "--font-onest",
+  subsets: ["latin"],
+  weight: ["300"],
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -33,7 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${archivo.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${archivo.variable} ${onest.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

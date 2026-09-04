@@ -1,15 +1,19 @@
+import Image from "next/image";
+
 import { Reveal } from "@/components/Reveal";
 import { Footer, Nav } from "@/components/SiteChrome";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { Beat } from "@/components/airy/Beat";
+import { Manifesto } from "@/components/airy/Manifesto";
+import { Rail } from "@/components/airy/Rail";
 import { Architecture } from "@/components/diagram/Architecture";
-import { LiveTerminal } from "@/components/gate/LiveTerminal";
 import {
   Corridor,
-  KeysProblem,
   PassExpires,
   PassHandoff,
   SelfEscalation,
 } from "@/components/pass/vignettes";
+import { asset } from "@/lib/asset";
 
 export default function Home() {
   return (
@@ -17,8 +21,9 @@ export default function Home() {
       <Nav />
       <main id="main" className="mx-auto max-w-[1120px] px-5 sm:px-8">
         <Hero />
-        <Shape />
         <Problem />
+        <Statement />
+        <Shape />
         <NotAUser />
         <Mechanism />
         <TrustModel />
@@ -36,116 +41,130 @@ export default function Home() {
 
 function Hero() {
   return (
-    <section className="grid grid-cols-1 gap-12 py-16 sm:py-24 lg:grid-cols-12 lg:gap-10">
-      <div className="lg:col-span-6">
-        <p className="label-mono mb-5 text-ink-soft">
-          Missura — agent access gateway
-        </p>
-        <h1 className="text-[clamp(2.4rem,5.5vw,3.9rem)] font-bold leading-[1.05]">
-          Same API. Smaller permissions. For every agent.
-        </h1>
-        <p className="mt-6 max-w-[54ch] text-lg text-ink-soft">
-          Ship the customer-facing agent you shelved. One command binds each
-          run to a single customer — read-only, 30 minutes, no vendor
-          credentials in the agent&apos;s hands. Keep your SDK. Rewrite
-          nothing.
-        </p>
-        <div className="mt-8" id="early-access">
-          <WaitlistForm id="hero-form" />
+    <section className="flex min-h-[84svh] flex-col justify-end pt-20 pb-16 sm:pt-24">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-end lg:gap-12">
+        {/* The engraving carries its own deckled paper edge, so it needs no
+            frame and no scrim — it is already the same paper as the page. */}
+        <div className="order-2 lg:col-span-6">
+          <Image
+            src={asset("/vignettes/hero-counter.png")}
+            alt="A courier robot presents a paper pass at a service counter, beside a long corridor of numbered doors where exactly one stands open"
+            width={1408}
+            height={768}
+            priority
+            className="h-auto w-full"
+          />
         </div>
-      </div>
-      <div className="lg:col-span-6 lg:pt-10">
-        <LiveTerminal className="shadow-[0_24px_48px_-32px_rgb(0_0_0/.25)]" />
-        <p className="label-mono mt-3 text-ink-soft">
-          Your agent, your workspace — one customer at a time.
-        </p>
+        <div className="order-1 lg:col-span-6">
+          <p className="label-mono mb-7 flex items-center gap-3 text-ink-soft">
+            <span className="ac-dot" aria-hidden="true" />
+            Agent access gateway
+          </p>
+          <h1 className="ac-display">
+            Ship the agent
+            <br />
+            you shelved.
+          </h1>
+          <p className="ac-lead mt-7 max-w-[34ch] text-ink-soft">
+            One command binds a run to a single customer. Read-only, thirty
+            minutes, no vendor credentials in the agent&apos;s hands.
+          </p>
+          <div className="mt-8" id="early-access">
+            <WaitlistForm id="hero-form" />
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-/* ── 1b. Shape — what the thing actually is ─────────────────── */
+/* ── 2b. Statement — the one sentence, revealed on scroll ───── */
+
+function Statement() {
+  return (
+    <section className="py-28 sm:py-40">
+      <Manifesto text="Every call your agent makes to a customer's data crosses one gate, and that gate holds the keys the agent never gets." />
+    </section>
+  );
+}
+
+/* ── 3. Shape — what the thing actually is ──────────────────── */
 
 function Shape() {
   return (
-    <section className="rule py-16 sm:py-20">
-      <Reveal>
-        <div className="max-w-[62ch]">
-          <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+    // full-bleed out of the centred column: the band is the page's one
+    // change of ground, so it has to reach both edges to read as one
+    <section className="relative left-1/2 w-screen -translate-x-1/2 bg-paper-deep py-20 sm:py-28">
+      <div className="mx-auto max-w-[1120px] px-5 sm:px-8">
+        <Reveal>
+          <h2 className="ac-h2 max-w-[20ch]">
             A gate in front of the data, not a wrapper around the agent.
           </h2>
-          <p className="mt-5 text-ink-soft">
-            Missura is a proxy that speaks each vendor&apos;s own API. Your
-            agent keeps its SDK and points it at Missura instead of the vendor;
-            Missura holds the credentials, decides what this run is allowed to
-            see, and calls the vendor for it.
+          <p className="ac-lead mt-6 max-w-[48ch] text-ink-soft">
+            Your agent keeps its SDK and points it here instead of the vendor.
+            Missura holds the credentials, decides what this run may see, and
+            makes the call for it.
           </p>
-        </div>
-      </Reveal>
-      <Reveal>
-        <div className="mt-10">
-          <Architecture />
-        </div>
-      </Reveal>
+        </Reveal>
+        <Reveal>
+          <div className="mt-14">
+            <Architecture />
+          </div>
+        </Reveal>
+      </div>
     </section>
   );
 }
 
 /* ── 2. Problem — the keyring ───────────────────────────────── */
 
-const WAVE_FACTS = [
+const BEATS = [
   {
-    label: "One token per app, not per customer",
-    body: "Vendors scope credentials to applications. A support agent works one customer at a time.",
+    image: "beat-keyring.png",
+    alt: "An overloaded iron keyring sagging with labelled brass keys, beside the robot holding one small paper pass",
+    title: "One key opens every customer",
+    mark: "today",
   },
   {
-    label: "Valid for months, used for minutes",
-    body: "The credential outlives every ticket it was opened for.",
+    image: "beat-clock.png",
+    alt: "A stamped paper pass beside an hourglass nearly run out and a clock reading thirty minutes",
+    title: "A pass that expires on its own",
+    mark: "30 min",
   },
   {
-    label: "Wide in every system at once",
-    body: "The same over-broad token in Zendesk, in Linear, in GitHub — and one agent holds them all.",
+    image: "beat-twin-doors.png",
+    alt: "Two identical closed doors, the robot between them unable to tell which hides a room and which hides nothing",
+    title: "Refused reads exactly like absent",
+    mark: "no oracle",
+  },
+  {
+    image: "beat-ledger.png",
+    alt: "An open ledger of ruled rows marked with green checks and red crosses, sealed with wax, the robot writing the newest line",
+    title: "Every decision leaves a line",
+    mark: "sealed",
   },
 ];
 
 function Problem() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="py-20 sm:py-28">
       <Reveal>
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-start">
-          <div className="lg:col-span-6">
-            <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
-              The agent you didn&apos;t dare launch.
-            </h2>
-            <p className="mt-5 max-w-[54ch] text-ink-soft">
-              A support agent across Zendesk, Linear and GitHub is the easiest
-              one to justify and the hardest to ship. It reads every
-              customer&apos;s data on every run, holding one token that opens
-              the whole workspace. One cross-customer answer ends the launch —
-              so the agent stays in staging.
-            </p>
-            <ul className="mt-8">
-              {WAVE_FACTS.map((f) => (
-                <li key={f.label} className="rule py-4 first:border-t-0">
-                  <p className="label-mono font-medium">{f.label}</p>
-                  <p className="mt-1 text-[0.95rem] text-ink-soft">{f.body}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="lg:col-span-6">
-            <KeysProblem className="mx-auto w-full max-w-[520px]" />
-            <p className="mx-auto mt-4 max-w-[46ch] text-center font-mono text-[0.75rem] leading-relaxed tracking-[0.04em] text-ink-soft">
-              fig. 01 — the keyring. one long-lived token opens{" "}
-              <span className="text-deny">
-                every customer, every ticket, every issue and attachment,
-                every comment — and admin mutations
-              </span>
-              .
-            </p>
-          </div>
-        </div>
+        <h2 className="ac-h2 max-w-[18ch]">
+          One token opens the whole workspace.
+        </h2>
+        <p className="ac-lead mt-6 max-w-[46ch] text-ink-soft">
+          A support agent across Zendesk, Linear and GitHub is the easiest to
+          justify and the hardest to ship. One cross-customer answer ends the
+          launch, so the agent stays in staging.
+        </p>
       </Reveal>
+      <div className="mt-14">
+        <Rail>
+          {BEATS.map((b) => (
+            <Beat key={b.image} {...b} />
+          ))}
+        </Rail>
+      </div>
     </section>
   );
 }
@@ -181,12 +200,12 @@ const APPROACHES = [
 
 function NotAUser() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
         <div className="flex items-start gap-4">
           <BadgeQuestionMark />
           <div>
-            <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+            <h2 className="ac-h2 max-w-[20ch]">
               An agent is not a user.
             </h2>
             <p className="mt-5 max-w-[62ch] text-ink-soft">
@@ -267,11 +286,11 @@ const MAPPINGS = [
 
 function Mechanism() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-center">
           <div className="lg:col-span-6 lg:order-2">
-            <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+            <h2 className="ac-h2 max-w-[20ch]">
               Same request. Filtered response.
             </h2>
             <p className="mt-5 max-w-[54ch] text-ink-soft">
@@ -298,7 +317,7 @@ function Mechanism() {
       </Reveal>
       <div className="mt-4 grid grid-cols-1 gap-6">
         <Reveal>
-          <div className="rounded-lg border border-line bg-white p-3 shadow-[0_16px_32px_-28px_rgb(0_0_0/.3)] sm:p-4">
+          <div className="rounded-lg border border-line bg-white p-3 sm:p-4">
             <div
               className="artefact"
               aria-label="Two-line configuration diff: base URL and token"
@@ -323,7 +342,7 @@ function Mechanism() {
         </Reveal>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Reveal className="h-full">
-            <div className="h-full rounded-lg border border-line bg-white p-3 shadow-[0_16px_32px_-28px_rgb(0_0_0/.3)] sm:p-4">
+            <div className="h-full rounded-lg border border-line bg-white p-3 sm:p-4">
               <div
                 className="artefact h-full"
                 aria-label="Agent request: unfiltered issues query"
@@ -347,7 +366,7 @@ function Mechanism() {
             </div>
           </Reveal>
           <Reveal delay={120} className="h-full">
-            <div className="h-full rounded-lg border border-line bg-white p-3 shadow-[0_16px_32px_-28px_rgb(0_0_0/.3)] sm:p-4">
+            <div className="h-full rounded-lg border border-line bg-white p-3 sm:p-4">
               <div
                 className="artefact h-full"
                 aria-label="Filtered response: only Acme issues, Globex removed"
@@ -436,9 +455,9 @@ function TrustRow({
 
 function TrustModel() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
-        <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+        <h2 className="ac-h2 max-w-[20ch]">
           Three ways out. All closed.
         </h2>
       </Reveal>
@@ -547,9 +566,9 @@ const LEDGER = [
 
 function DayOne() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
-        <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+        <h2 className="ac-h2 max-w-[20ch]">
           Day one needs no map.
         </h2>
         <p className="mt-5 max-w-[62ch] text-ink-soft">
@@ -614,9 +633,9 @@ const OAUTH_MAP = [
 
 function Standards() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
-        <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+        <h2 className="ac-h2 max-w-[20ch]">
           You already run this pattern everywhere.
         </h2>
         <p className="mt-5 max-w-[62ch] text-ink-soft">
@@ -716,9 +735,9 @@ const GUARANTEES = [
 
 function Guarantees() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
-        <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+        <h2 className="ac-h2 max-w-[20ch]">
           Built to pass your security review.
         </h2>
       </Reveal>
@@ -757,9 +776,9 @@ function Guarantees() {
 
 function FinalCta() {
   return (
-    <section className="rule py-16 sm:py-24">
+    <section className="rule py-20 sm:py-28">
       <Reveal>
-        <h2 className="text-[clamp(1.7rem,3.5vw,2.8rem)] font-bold leading-[1.15]">
+        <h2 className="ac-h2 max-w-[16ch]">
           Bring the agent you shelved.
         </h2>
         <p className="mt-4 max-w-[50ch] text-lg text-ink-soft">
