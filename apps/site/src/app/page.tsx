@@ -48,7 +48,7 @@ function Hero() {
         <div className="order-2 lg:col-span-6">
           <Image
             src={asset("/vignettes/hero-counter.png")}
-            alt="A courier robot presents a paper pass at a service counter, beside a long corridor of numbered doors where exactly one stands open"
+            alt="A courier robot hands a paper pass through a clerk's window, beside a wall of numbered pigeonholes receding into the distance, one of them standing open in green"
             width={1408}
             height={768}
             priority
