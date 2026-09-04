@@ -1,6 +1,7 @@
 import { Reveal } from "@/components/Reveal";
 import { Footer, Nav } from "@/components/SiteChrome";
 import { WaitlistForm } from "@/components/WaitlistForm";
+import { Architecture } from "@/components/diagram/Architecture";
 import { LiveTerminal } from "@/components/gate/LiveTerminal";
 import {
   Corridor,
@@ -16,6 +17,7 @@ export default function Home() {
       <Nav />
       <main id="main" className="mx-auto max-w-[1120px] px-5 sm:px-8">
         <Hero />
+        <Shape />
         <Problem />
         <NotAUser />
         <Mechanism />
@@ -58,6 +60,33 @@ function Hero() {
           Your agent, your workspace — one customer at a time.
         </p>
       </div>
+    </section>
+  );
+}
+
+/* ── 1b. Shape — what the thing actually is ─────────────────── */
+
+function Shape() {
+  return (
+    <section className="rule py-16 sm:py-20">
+      <Reveal>
+        <div className="max-w-[62ch]">
+          <h2 className="text-[clamp(1.7rem,3vw,2.4rem)] font-bold leading-[1.15]">
+            A gate in front of the data, not a wrapper around the agent.
+          </h2>
+          <p className="mt-5 text-ink-soft">
+            Missura is a proxy that speaks each vendor&apos;s own API. Your
+            agent keeps its SDK and points it at Missura instead of the vendor;
+            Missura holds the credentials, decides what this run is allowed to
+            see, and calls the vendor for it.
+          </p>
+        </div>
+      </Reveal>
+      <Reveal>
+        <div className="mt-10">
+          <Architecture />
+        </div>
+      </Reveal>
     </section>
   );
 }
