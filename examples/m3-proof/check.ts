@@ -28,10 +28,10 @@
  *
  *  3. Terminal 1:  missura run
  *
- *  4. Terminal 2 — the mission needs BOTH scopes, `--customer` for Linear and
+ *  4. Terminal 2 — the mission needs BOTH scopes, `--entity` for Linear and
  *     `--repo` for GitHub; with one missing, that vendor's checks SKIP:
  *
- *        missura exec --customer acme --repo you/your-repo \
+ *        missura exec --entity customer:acme --repo you/your-repo \
  *          --purpose "m3 proof" -- pnpm demo:m3
  *
  * `pnpm demo:m3` sets MISSURA_LIVE=1; without it this script refuses to run.
@@ -73,8 +73,8 @@ async function main(): Promise<void> {
   const envDetail = assertNoVendorCredentials();
   const token = requireToken();
   const claims = readClaims(token);
-  if (claims.customer === undefined && claims.repos.length === 0) {
-    fail("this mission is unscoped — mint one with --customer and --repo");
+  if (claims.entity === undefined && claims.repos.length === 0) {
+    fail("this mission is unscoped — mint one with --entity and --repo");
   }
 
   const linear = new LinearClient({ accessToken: token, apiUrl: linearUrl() });
@@ -88,17 +88,17 @@ async function main(): Promise<void> {
   ];
   process.stderr.write(
     `mission ${claims.id} — ${claims.purpose} (${claims.actor})\n` +
-      `scope: ${claims.customer ?? "-"} ${claims.repos.join(" ")}\n\n`,
+      `scope: ${claims.entity ?? "-"} ${claims.repos.join(" ")}\n\n`,
   );
 
   // The order is the human's reading order, not the vendors' — the table tells
   // one story: the SDK works (2, 3, 4), the search M2 refused works (5), a
   // refusal teaches without leaking (6), and the client can still see the
   // vendor's rate limits (7).
-  const scoped = claims.customer !== undefined;
+  const scoped = claims.entity !== undefined;
   if (!scoped) {
     process.stderr.write(
-      "no customer in this mission — the Linear checks (2, 3, 4, 6) ARE the criterion; re-run with --customer\n\n",
+      "no entity in this mission — the Linear checks (2, 3, 4, 6) ARE the criterion; re-run with --entity\n\n",
     );
   }
   if (scoped) await linearScopeChecks(results, linear);

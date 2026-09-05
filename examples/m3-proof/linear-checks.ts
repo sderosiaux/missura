@@ -235,7 +235,7 @@ export async function linearDenialCheck(
   linear: LinearClient,
   claims: MissionClaims,
 ): Promise<void> {
-  const scope = `customer:${claims.customer ?? ""}`;
+  const scope = claims.entity ?? "";
 
   await check(
     results,

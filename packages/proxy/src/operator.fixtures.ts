@@ -85,7 +85,7 @@ export function mintPayload(over: Record<string, unknown> = {}): string {
         type: "mission",
         purpose: "support case 42",
         actor: "ops@local",
-        scope: { customer: "acme" },
+        scope: { entity: "customer:acme" },
         ttl: 900,
         ...over,
       },

@@ -119,8 +119,8 @@ export function resolveScope(
     resolved.githubRepos.push(repo);
   };
 
-  if (scope.customer !== undefined) {
-    const key = `customer:${scope.customer}`;
+  if (scope.entity !== undefined) {
+    const key = scope.entity;
     const mapping = map.get(key);
     if (!mapping) throw new Error(`unknown entity: ${key}`);
     if (mapping.linearCustomerId !== undefined) {

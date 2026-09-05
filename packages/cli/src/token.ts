@@ -15,7 +15,7 @@ export function tokenCommand(
 ): number {
   if (!dev) {
     throw new Error(
-      "missura token mints an unscoped dev token — use `missura exec --customer <name> --purpose <why> -- <cmd>` for a real mission, or pass --dev if you meant it",
+      "missura token mints an unscoped dev token — use `missura exec --entity <type:name> --purpose <why> -- <cmd>` for a real mission, or pass --dev if you meant it",
     );
   }
   const paths = resolveHome(io.env);

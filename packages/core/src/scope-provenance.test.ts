@@ -178,7 +178,7 @@ describe("a mission records what its scope was built from", () => {
       {
         purpose: "p",
         actor: "a",
-        scope: { customer: "acme" },
+        scope: { entity: "customer:acme" },
         ttlSeconds: 600,
       },
       { githubRepos: [] },

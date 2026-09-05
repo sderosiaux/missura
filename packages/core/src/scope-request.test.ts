@@ -14,11 +14,22 @@ describe("what a mission scope asks the graph", () => {
     });
   });
 
-  it("reads a customer scope as its entity key", () => {
-    expect(scopeRequestFor({ customer: "adeo" })).toEqual({
+  it("reads an entity scope as the key it already holds — no prefixing", () => {
+    expect(scopeRequestFor({ entity: "customer:adeo" })).toEqual({
       kind: "entity",
       key: "customer:adeo",
     });
+  });
+
+  it("carries any entity type, because an entity is not always a customer", () => {
+    expect(scopeRequestFor({ entity: "employee:stephane" })).toEqual({
+      kind: "entity",
+      key: "employee:stephane",
+    });
+  });
+
+  it("refuses a bare name — the scope holds a key, never a name", () => {
+    expect(() => scopeRequestFor({ entity: "adeo" })).toThrow(/type:name/);
   });
 
   it("asks the graph nothing for a scope that names no entity", () => {
@@ -28,7 +39,10 @@ describe("what a mission scope asks the graph", () => {
 
   it("refuses a scope that is both — one scope, one meaning", () => {
     expect(() =>
-      scopeRequestFor({ customer: "adeo", native: { system: "zendesk", id: "1" } }),
+      scopeRequestFor({
+        entity: "customer:adeo",
+        native: { system: "zendesk", id: "1" },
+      }),
     ).toThrow(/both/i);
   });
 

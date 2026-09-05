@@ -68,7 +68,7 @@ function client(apiUrl: string): LinearClient {
         id: "msn_sdk",
         purpose: "sdk denial contract",
         actor: "tester@local",
-        scope: { customer: "acme" },
+        scope: { entity: "customer:acme" },
         connections: ["linear"],
         allow: ["read", "search"],
       },

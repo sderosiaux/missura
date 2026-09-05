@@ -2,7 +2,13 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { LinkSystem } from "./entity-graph";
 
 export interface MissionScope {
-  customer?: string;
+  /**
+   * The entity the mission is about, as its WHOLE key: `customer:adeo`,
+   * `employee:stephane`, `project:atlas`. Not a bare name with a type inferred
+   * around it — an entity is not always a customer, and nothing downstream
+   * builds a key by concatenation any more (`entity-key.ts`).
+   */
+  entity?: string;
   repos?: string[];
   /**
    * A mission scoped DIRECTLY to one native id, with no entity behind it — the
@@ -12,9 +18,9 @@ export interface MissionScope {
    * It is single-system by construction: the graph may widen it to the other
    * systems of the entity that confirms this id, and can do nothing else. A
    * deployment with no graph at all still mints and still works, which is why
-   * this field exists beside `customer` rather than being expressed through it.
+   * this field exists beside `entity` rather than being expressed through it.
    *
-   * `customer` and `native` are mutually exclusive — see `scopeRequestFor`.
+   * `entity` and `native` are mutually exclusive — see `scopeRequestFor`.
    */
   native?: { system: LinkSystem; id: string };
 }

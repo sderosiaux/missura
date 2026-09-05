@@ -33,7 +33,7 @@ const FOREIGN = [
 
 const SCOPED: MissionClaims = {
   ...CLAIMS,
-  scope: { customer: "acme" },
+  scope: { entity: "customer:acme" },
   connections: ["linear", "github"],
   allow: ["read", "search"],
   exp: Math.floor(Date.now() / 1000) + 600,

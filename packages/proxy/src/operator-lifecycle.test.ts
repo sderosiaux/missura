@@ -140,7 +140,7 @@ describe("operator API — GET /v1/missions", () => {
     expect(payload.missions[0]?.id).toBe(minted.mission_id);
     expect(payload.missions[0]?.purpose).toBe("support case 42");
     expect(payload.missions[0]?.actor).toBe("ops@local");
-    expect(payload.missions[0]?.scope).toEqual({ customer: "acme" });
+    expect(payload.missions[0]?.scope).toEqual({ entity: "customer:acme" });
     expect(payload.missions[0]?.expiresAt).toBeGreaterThan(0);
     expect(text).not.toContain("msr_");
     expect(text).not.toContain("access_token");

@@ -77,7 +77,7 @@ export async function initCommand(io: CliIo): Promise<number> {
   io.stdout(`events      ${paths.eventsDir}`);
   io.stdout("");
   io.stdout(
-    "next: missura run   (then: missura exec --customer <name> --purpose <why> -- <cmd>)",
+    "next: missura run   (then: missura exec --entity <type:name> --purpose <why> -- <cmd>)",
   );
   return 0;
 }

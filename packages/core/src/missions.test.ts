@@ -15,7 +15,7 @@ function statePath(): string {
 const INPUT: CreateMission = {
   purpose: "support case 482",
   actor: "sam@acme.io",
-  scope: { customer: "acme", repos: ["acme-corp/product"] },
+  scope: { entity: "customer:acme", repos: ["acme-corp/product"] },
   ttlSeconds: 900,
 };
 
@@ -33,7 +33,7 @@ describe("mission store — create", () => {
     expect(claims.actor).toBe("sam@acme.io");
     expect(claims.purpose).toBe("support case 482");
     expect(claims.scope).toEqual({
-      customer: "acme",
+      entity: "customer:acme",
       repos: ["acme-corp/product"],
     });
     expect(claims.id).toBe(record.id);
@@ -53,7 +53,7 @@ describe("mission store — create", () => {
   it("derives linear only when the scope resolves to a customer and no repo", () => {
     const store = new MissionStore(statePath(), KEY);
     const { token } = store.create(
-      { ...INPUT, scope: { customer: "acme" } },
+      { ...INPUT, scope: { entity: "customer:acme" } },
       { linearCustomerId: "c_18", githubRepos: [] },
     );
     expect(verifyMissionToken(token, { key: KEY }).connections).toEqual([
@@ -78,7 +78,7 @@ describe("mission store — create", () => {
     // GitHub call on the connection check.
     const store = new MissionStore(statePath(), KEY);
     const { token } = store.create(
-      { ...INPUT, scope: { customer: "acme" } },
+      { ...INPUT, scope: { entity: "customer:acme" } },
       RESOLVED,
     );
     expect(verifyMissionToken(token, { key: KEY }).connections).toEqual([
@@ -210,6 +210,6 @@ describe("mission store — active", () => {
     const [mission] = store.active();
     expect(mission?.actor).toBe("sam@acme.io");
     expect(mission?.purpose).toBe("support case 482");
-    expect(mission?.scope.customer).toBe("acme");
+    expect(mission?.scope.entity).toBe("customer:acme");
   });
 });

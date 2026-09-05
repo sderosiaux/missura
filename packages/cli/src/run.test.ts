@@ -76,7 +76,7 @@ async function mint(
   h: Harness,
   servers: RunningProxy,
   scope: Record<string, unknown> = {
-    customer: "acme",
+    entity: "customer:acme",
     repos: ["acme-corp/product"],
   },
 ): Promise<Minted> {
@@ -228,7 +228,7 @@ describe("missura run — operator plane and NARROW wired", () => {
       // one would leave `github` off the token, 403 every GitHub call on the
       // connection check, and make `github.repos` look load-bearing while
       // doing nothing.
-      const minted = await mint(h, servers, { customer: "acme" });
+      const minted = await mint(h, servers, { entity: "customer:acme" });
       const auth = { authorization: `Bearer ${minted.token}` };
 
       const allowed = await fetch(
@@ -268,7 +268,7 @@ describe("missura run — operator plane and NARROW wired", () => {
               type: "mission",
               purpose: "p",
               actor: "a",
-              scope: { customer: "globex" },
+              scope: { entity: "customer:globex" },
               ttl: 300,
             },
           ],

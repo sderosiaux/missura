@@ -14,7 +14,7 @@ function seed(h: Harness): { id: string; token: string } {
     {
       purpose: "support case 42",
       actor: "ops@local",
-      scope: { customer: "acme" },
+      scope: { entity: "customer:acme" },
       ttlSeconds: 600,
     },
     { linearCustomerId: "c_18", githubRepos: [] },

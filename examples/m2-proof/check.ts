@@ -7,7 +7,7 @@
  *      and one of your repos, e.g.
  *      { "customer:acme": { "linear.customer": "<uuid>", "github.repos": ["you/your-repo"] } }
  *   2. missura run                                     # terminal 1
- *   3. missura exec --customer acme --repo you/your-repo \
+ *   3. missura exec --entity customer:acme --repo you/your-repo \
  *        --purpose "m2 proof" -- pnpm demo:m2          # terminal 2
  *
  * `pnpm demo:m2` sets MISSURA_LIVE=1; without it this script refuses to run.
@@ -119,8 +119,8 @@ async function main(): Promise<void> {
   const envDetail = assertNoVendorCredentials();
   const token = requireToken();
   const claims = readClaims(token);
-  if (claims.customer === undefined && claims.repos.length === 0) {
-    fail("this mission is unscoped — mint one with --customer and/or --repo");
+  if (claims.entity === undefined && claims.repos.length === 0) {
+    fail("this mission is unscoped — mint one with --entity and/or --repo");
   }
 
   const linear = new LinearClient({
@@ -137,10 +137,10 @@ async function main(): Promise<void> {
   ];
   process.stderr.write(
     `mission ${claims.id} — ${claims.purpose} (${claims.actor})\n` +
-      `scope: ${claims.customer ?? "-"} ${claims.repos.join(" ")}\n\n`,
+      `scope: ${claims.entity ?? "-"} ${claims.repos.join(" ")}\n\n`,
   );
 
-  if (claims.customer !== undefined) await linearChecks(results, linear);
+  if (claims.entity !== undefined) await linearChecks(results, linear);
   await githubChecks(results, octokit, claims, token);
   await revocationCheck(results, claims, token);
 

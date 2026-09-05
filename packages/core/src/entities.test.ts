@@ -118,14 +118,14 @@ describe("scope resolution", () => {
   const map = loadEntityMap(write(MAP_JSON));
 
   it("resolves a customer scope to its linear id and repos", () => {
-    expect(resolveScope(map, { customer: "acme" })).toEqual({
+    expect(resolveScope(map, { entity: "customer:acme" })).toEqual({
       linearCustomerId: "c_18",
       githubRepos: [{ repo: "acme-corp/product" }, { repo: "acme-corp/docs" }],
     });
   });
 
   it("throws naming the entity when the customer is unknown", () => {
-    expect(() => resolveScope(map, { customer: "initech" })).toThrow(
+    expect(() => resolveScope(map, { entity: "customer:initech" })).toThrow(
       "unknown entity: customer:initech",
     );
   });
@@ -133,7 +133,7 @@ describe("scope resolution", () => {
   it("unions explicit repos with the entity's repos", () => {
     expect(
       resolveScope(map, {
-        customer: "acme",
+        entity: "customer:acme",
         repos: ["acme-corp/tools"],
       }).githubRepos,
     ).toEqual([
@@ -146,7 +146,7 @@ describe("scope resolution", () => {
   it("dedupes repos case-insensitively, keeping the entity spelling", () => {
     expect(
       resolveScope(map, {
-        customer: "acme",
+        entity: "customer:acme",
         repos: ["ACME-Corp/Product"],
       }).githubRepos,
     ).toEqual([{ repo: "acme-corp/product" }, { repo: "acme-corp/docs" }]);
@@ -204,7 +204,7 @@ describe("scope resolution", () => {
         }),
       ),
     );
-    expect(resolveScope(reposOnly, { customer: "acme" })).toEqual({
+    expect(resolveScope(reposOnly, { entity: "customer:acme" })).toEqual({
       githubRepos: [{ repo: "acme-corp/product" }],
     });
   });

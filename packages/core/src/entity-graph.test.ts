@@ -90,6 +90,22 @@ describe("entity graph refusals", () => {
     expect(bad({ version: 2, entities: {} })).toThrow(/version/i);
   });
 
+  /**
+   * An entity key nothing could name is an entity nothing can reach. The same
+   * rule the mission scope and the CLI flag are held to, applied where the key
+   * is written rather than where it is looked up.
+   */
+  it("refuses an entity key that is not type:name", () => {
+    expect(
+      bad({
+        version: 1,
+        entities: {
+          adeo: { displayName: "ADEO", domains: ["adeo.com"], links: [] },
+        },
+      }),
+    ).toThrow(/type:name/);
+  });
+
   it("names the offending entity when a link has no evidence", () => {
     expect(
       bad({

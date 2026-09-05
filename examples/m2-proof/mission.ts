@@ -16,7 +16,7 @@ export interface MissionClaims {
   id: string;
   purpose: string;
   actor: string;
-  customer?: string;
+  entity?: string;
   repos: string[];
 }
 
@@ -36,7 +36,7 @@ export function assertLive(): void {
     fail(
       "refusing to run: this is a live proof against real vendor APIs.\n" +
         "Start the proxy (missura run), then:\n" +
-        "  missura exec --customer <name> --repo <owner/name> --purpose 'm2 proof' -- pnpm demo:m2\n" +
+        "  missura exec --entity <type:name> --repo <owner/name> --purpose 'm2 proof' -- pnpm demo:m2\n" +
         "To run this file directly, set MISSURA_LIVE=1.",
     );
   }
@@ -66,7 +66,7 @@ export function requireToken(): string {
   ).trim();
   if (token.length === 0) {
     fail(
-      "no mission token — run this under: missura exec --customer <name> --repo <owner/name> --purpose 'm2 proof' -- pnpm demo:m2",
+      "no mission token — run this under: missura exec --entity <type:name> --repo <owner/name> --purpose 'm2 proof' -- pnpm demo:m2",
     );
   }
   return token;
@@ -107,9 +107,7 @@ export function readClaims(token: string): MissionClaims {
     id: parsed.id,
     purpose: parsed.purpose,
     actor: parsed.actor,
-    ...(typeof scope.customer === "string"
-      ? { customer: scope.customer }
-      : {}),
+    ...(typeof scope.entity === "string" ? { entity: scope.entity } : {}),
     repos,
   };
 }

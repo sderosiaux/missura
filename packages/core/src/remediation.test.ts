@@ -6,7 +6,7 @@ const CLAIMS: MissionClaims = {
   id: "msn_1",
   purpose: "support investigation",
   actor: "sam@acme",
-  scope: { customer: "acme" },
+  scope: { entity: "customer:acme" },
   connections: ["linear"],
   allow: ["read", "search"],
   jti: "jti-1",

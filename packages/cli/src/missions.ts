@@ -25,7 +25,10 @@ export function openStore(paths: MissuraPaths): MissionStore {
 
 export function formatScope(scope: MissionScope): string {
   const parts: string[] = [];
-  if (scope.customer !== undefined) parts.push(`customer:${scope.customer}`);
+  if (scope.entity !== undefined) parts.push(scope.entity);
+  if (scope.native !== undefined) {
+    parts.push(`${scope.native.system}:${scope.native.id}`);
+  }
   for (const repo of scope.repos ?? []) parts.push(repo);
   return parts.length === 0 ? "-" : parts.join(" ");
 }

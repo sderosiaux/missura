@@ -37,6 +37,7 @@
  */
 
 import type { ResolvedScope } from "./entities";
+import { assertEntityKey } from "./entity-key";
 import {
   LINK_SYSTEMS,
   isConfirmed,
@@ -237,13 +238,16 @@ function whyNoEntity(refs: readonly EntityLinkRef[]): DegradeReason {
  */
 export function scopeRequestFor(scope: MissionScope): ScopeRequest | undefined {
   if (scope.native !== undefined) {
-    if (scope.customer !== undefined) {
-      throw new Error("mission scope names both a customer and a native id");
+    if (scope.entity !== undefined) {
+      throw new Error("mission scope names both an entity and a native id");
     }
     return { kind: "native", system: scope.native.system, id: scope.native.id };
   }
-  if (scope.customer !== undefined) {
-    return { kind: "entity", key: `customer:${scope.customer}` };
+  // The scope carries the WHOLE key, so nothing here builds one. Checked rather
+  // than trusted: a claims object reaches this from a token, and a key no
+  // lookup could match must fail loudly instead of resolving to nothing.
+  if (scope.entity !== undefined) {
+    return { kind: "entity", key: assertEntityKey(scope.entity) };
   }
   return undefined;
 }

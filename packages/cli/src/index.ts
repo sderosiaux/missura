@@ -25,7 +25,10 @@ const USAGE = [
   "  missura run [--linear-port N]    boot the two connector listeners + the operator plane",
   "              [--github-port N] [--operator-port N] [--entities PATH]",
   "  missura exec --purpose WHY       run a command under a scoped mission",
-  "              [--customer NAME] [--repo REPO]... [--ttl 30m] [--actor WHO]",
+  "              [--entity KEY] [--repo REPO]... [--ttl 30m] [--actor WHO]",
+  "              KEY is the entity's whole key — customer:adeo, employee:sam,",
+  "              project:atlas. The type is yours to choose; the graph in",
+  "              ~/.missura/entities.json is what maps it to vendor ids.",
   "              -- <cmd> [args...]",
   "              REPO is owner/name for the whole repository, or",
   "              owner/name:some/path to cover only that path inside it —",
@@ -48,7 +51,7 @@ const OPTIONS = {
   ttl: { type: "string" },
   purpose: { type: "string" },
   actor: { type: "string" },
-  customer: { type: "string" },
+  entity: { type: "string" },
   repo: { type: "string", multiple: true },
   entities: { type: "string" },
   dev: { type: "boolean" },
@@ -113,8 +116,8 @@ function execOptions(
     ttlSeconds: parseTtl(text(values, "ttl")),
     argv,
   };
-  const customer = text(values, "customer")?.trim();
-  if (customer !== undefined && customer.length > 0) options.customer = customer;
+  const entity = text(values, "entity")?.trim();
+  if (entity !== undefined && entity.length > 0) options.entity = entity;
   const entities = text(values, "entities");
   if (entities !== undefined) options.entitiesPath = entities;
   const linearPort = portOf(values, "linear-port");

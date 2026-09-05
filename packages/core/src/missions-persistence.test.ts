@@ -25,7 +25,7 @@ function statePath(): string {
 const INPUT: CreateMission = {
   purpose: "aaaaa",
   actor: "sam@acme.io",
-  scope: { customer: "acme", repos: ["acme-corp/product"] },
+  scope: { entity: "customer:acme", repos: ["acme-corp/product"] },
   ttlSeconds: 900,
 };
 

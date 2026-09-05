@@ -38,7 +38,7 @@ describe("operator API — POST /v1/token", () => {
     expect(claims.id).toBe(payload.mission_id);
     expect(claims.actor).toBe("ops@local");
     expect(claims.purpose).toBe("support case 42");
-    expect(claims.scope).toEqual({ customer: "acme" });
+    expect(claims.scope).toEqual({ entity: "customer:acme" });
     // Both, from the RESOLVED scope: the entity `customer:acme` maps a linear
     // customer AND a repo, and the token grants what the scope resolves to.
     expect(claims.connections).toEqual(["linear", "github"]);
@@ -49,7 +49,7 @@ describe("operator API — POST /v1/token", () => {
     const res = await post(
       base,
       "/v1/token",
-      mintPayload({ scope: { customer: "acme", repos: ["octo/tool"] } }),
+      mintPayload({ scope: { entity: "customer:acme", repos: ["octo/tool"] } }),
     );
     const payload = (await res.json()) as TokenBody;
     const claims = verifyMissionToken(payload.access_token, {
@@ -127,7 +127,7 @@ describe("operator API — POST /v1/token", () => {
     const res = await post(
       base,
       "/v1/token",
-      mintPayload({ scope: { customer: "globex" } }),
+      mintPayload({ scope: { entity: "customer:globex" } }),
     );
     const payload = (await res.json()) as {
       error: { field: string; reason: string };

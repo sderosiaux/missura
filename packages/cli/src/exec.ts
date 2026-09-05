@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import {
+  assertEntityKey,
   loadEntityMap,
   resolveScope,
   type MissionScope,
@@ -13,7 +14,8 @@ import { resolveHome } from "./paths";
 export interface ExecOptions {
   purpose: string;
   actor: string;
-  customer?: string;
+  /** The entity's whole key — `customer:adeo`, `project:atlas`. Never a name. */
+  entity?: string;
   repos?: readonly string[];
   ttlSeconds: number;
   /** The command and its arguments, as given after `--`. */
@@ -59,11 +61,13 @@ function childEnv(
 function scopeOf(options: ExecOptions): MissionScope {
   const repos = [...(options.repos ?? [])];
   const scope: MissionScope = {};
-  if (options.customer !== undefined) scope.customer = options.customer;
+  // Checked here, before anything is opened: a key nobody could look up must
+  // not reach the graph as an "unknown entity" it never had a chance to hold.
+  if (options.entity !== undefined) scope.entity = assertEntityKey(options.entity);
   if (repos.length > 0) scope.repos = repos;
-  if (scope.customer === undefined && repos.length === 0) {
+  if (scope.entity === undefined && repos.length === 0) {
     throw new Error(
-      "a mission must name a target: --customer <name> and/or --repo owner/name",
+      "a mission must name a target: --entity <type:name> and/or --repo owner/name",
     );
   }
   return scope;

@@ -32,9 +32,16 @@ import type { MissionClaims, MissionScope } from "./token";
  */
 export function scopeLabel(scope: MissionScope): string {
   const parts: string[] = [];
-  if (scope.customer !== undefined && scope.customer !== "") {
-    parts.push(`customer:${scope.customer}`);
+  // The entity KEY, as the mission holds it. It is the agent's own grant, and
+  // it is the one thing here worth naming: `customer:acme` tells it which
+  // boundary it hit, where a count would not.
+  if (scope.entity !== undefined && scope.entity !== "") {
+    parts.push(scope.entity);
   }
+  // A native scope names ONE vendor id the agent's own mission carries — the
+  // system, counted like the repos, because the id is the vendor's spelling and
+  // the wording must not start reading like an object the agent may look up.
+  if (scope.native !== undefined) parts.push(`native:${scope.native.system}`);
   if (scope.repos !== undefined && scope.repos.length > 0) {
     parts.push(`repos:${String(scope.repos.length)}`);
   }

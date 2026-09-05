@@ -31,7 +31,7 @@ const MISSION = {
   id: "msn_482",
   purpose: "support case 482",
   actor: "sam@acme.io",
-  scope: { customer: "acme", repos: ["acme-corp/product"] },
+  scope: { entity: "customer:acme", repos: ["acme-corp/product"] },
   connections: ["linear", "github"],
   allow: ["search", "read"] as const,
 };
@@ -43,7 +43,7 @@ describe("mission token", () => {
     expect(claims.id).toBe("msn_482");
     expect(claims.purpose).toBe("support case 482");
     expect(claims.actor).toBe("sam@acme.io");
-    expect(claims.scope.customer).toBe("acme");
+    expect(claims.scope.entity).toBe("customer:acme");
     expect(claims.allow).toEqual(["search", "read"]);
     expect(claims.jti).toMatch(/^[0-9a-f-]{36}$/);
   });

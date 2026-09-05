@@ -122,7 +122,7 @@ export function mintMission(
       purpose: "compatibility suite — direct vs proxied, read-only",
       actor: "compat@local",
       scope: {
-        customer: "compat",
+        entity: "customer:compat",
         ...(github === undefined ? {} : { repos: [github.repo] }),
       },
       connections: connectionsOf(credentials),

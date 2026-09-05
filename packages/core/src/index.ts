@@ -2,6 +2,7 @@ export * from "./catalog";
 export * from "./cursor";
 export * from "./entities";
 export * from "./entity-graph";
+export * from "./entity-key";
 export * from "./entity-graph-store";
 export * from "./entity-resolve";
 export * from "./events";

@@ -54,7 +54,7 @@ describe("missura exec", () => {
 
     const result = await run(
       execArgv(
-        ["--customer", "acme", "--purpose", "support case 42", "--ttl", "5m"],
+        ["--entity", "customer:acme", "--purpose", "support case 42", "--ttl", "5m"],
         DUMP,
       ),
       h.io,
@@ -73,7 +73,7 @@ describe("missura exec", () => {
     const h = await inited();
 
     const result = await run(
-      execArgv(["--customer", "acme", "--purpose", "p"], "process.exit(7)"),
+      execArgv(["--entity", "customer:acme", "--purpose", "p"], "process.exit(7)"),
       h.io,
     );
 
@@ -83,7 +83,7 @@ describe("missura exec", () => {
   it("revokes the mission once the child is gone", async () => {
     const h = await inited();
 
-    await run(execArgv(["--customer", "acme", "--purpose", "p"], "0"), h.io);
+    await run(execArgv(["--entity", "customer:acme", "--purpose", "p"], "0"), h.io);
     h.out.length = 0;
     const listed = await run(["missions"], h.io);
 
@@ -91,19 +91,19 @@ describe("missura exec", () => {
     expect(h.out.join("\n")).not.toMatch(/msn_/);
   }, 30_000);
 
-  it("refuses a mission that names neither a customer nor a repo", async () => {
+  it("refuses a mission that names neither an entity nor a repo", async () => {
     const h = await inited();
 
     const result = await run(execArgv(["--purpose", "anything"], "0"), h.io);
 
     expect(result.code).toBe(1);
-    expect(h.err.join("\n")).toMatch(/--customer|--repo/);
+    expect(h.err.join("\n")).toMatch(/--entity|--repo/);
   });
 
   it("requires a purpose", async () => {
     const h = await inited();
 
-    const result = await run(execArgv(["--customer", "acme"], "0"), h.io);
+    const result = await run(execArgv(["--entity", "customer:acme"], "0"), h.io);
 
     expect(result.code).toBe(1);
     expect(h.err.join("\n")).toMatch(/purpose/);
@@ -114,7 +114,7 @@ describe("missura exec", () => {
 
     const result = await run(
       execArgv(
-        ["--customer", "acme", "--purpose", "p", "--ttl", "999m"],
+        ["--entity", "customer:acme", "--purpose", "p", "--ttl", "999m"],
         "process.exit(3)",
       ),
       h.io,
@@ -128,12 +128,29 @@ describe("missura exec", () => {
     const h = await inited();
 
     const result = await run(
-      execArgv(["--customer", "globex", "--purpose", "p"], "0"),
+      execArgv(["--entity", "customer:globex", "--purpose", "p"], "0"),
       h.io,
     );
 
     expect(result.code).toBe(1);
     expect(h.err.join("\n")).toContain("unknown entity: customer:globex");
+  });
+
+  /**
+   * `--customer acme` was the pre-M5 spelling and `acme` was its whole value.
+   * Read as an entity key it would name nothing, so it is refused by shape —
+   * a stale habit must not become a mission scoped to an entity nobody has.
+   */
+  it("refuses a bare name where a key belongs, and says what a key is", async () => {
+    const h = await inited();
+
+    const result = await run(
+      execArgv(["--entity", "acme", "--purpose", "p"], "0"),
+      h.io,
+    );
+
+    expect(result.code).toBe(1);
+    expect(h.err.join("\n")).toContain("type:name");
   });
 
   it("takes repeated --repo into the mission scope", async () => {

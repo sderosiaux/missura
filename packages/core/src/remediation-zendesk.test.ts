@@ -18,7 +18,7 @@ const CLAIMS: MissionClaims = {
   id: "msn_1",
   purpose: "support triage",
   actor: "ops@acme.test",
-  scope: { customer: "acme" },
+  scope: { entity: "customer:acme" },
   connections: ["zendesk"],
   allow: ["read", "search"],
   jti: "j1",

@@ -22,6 +22,7 @@ import {
   type LinkMethod,
   type LinkStatus,
 } from "./entity-graph";
+import { assertEntityKey } from "./entity-key";
 import { parseGithubRepoScope } from "./github-scope";
 
 const METHODS: readonly LinkMethod[] = ["deterministic", "inferred", "manual"];
@@ -130,7 +131,8 @@ export function assertSingleValued(entity: Entity): void {
   }
 }
 
-function readEntity(key: string, value: unknown): Entity {
+function readEntity(rawKey: string, value: unknown): Entity {
+  const key = assertEntityKey(rawKey);
   const where = `entity "${key}"`;
   if (!isRecord(value)) throw new Error(`${where}: must be an object`);
   if (!Array.isArray(value.domains)) {

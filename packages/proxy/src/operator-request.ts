@@ -1,4 +1,4 @@
-import { MAX_TTL_SECONDS } from "@missura/core";
+import { assertEntityKey, MAX_TTL_SECONDS } from "@missura/core";
 import type { CreateMission, MissionScope } from "@missura/core";
 
 /**
@@ -41,12 +41,28 @@ function requireText(field: string, value: unknown): string {
   return value;
 }
 
+/**
+ * The entity key's own shape, refused as a NAMED field rather than as a 500:
+ * `assertEntityKey` is the one rule, and the operator plane owes its caller the
+ * field it got wrong — not an opaque internal error.
+ */
+function readEntityKey(value: string): string {
+  try {
+    return assertEntityKey(value);
+  } catch (err) {
+    throw new FieldError(
+      "scope",
+      err instanceof Error ? err.message : "scope.entity is not an entity key",
+    );
+  }
+}
+
 function readScope(value: unknown): MissionScope {
   if (!isRecord(value))
     throw new FieldError("scope", "scope must be an object");
   const scope: MissionScope = {};
-  if (value.customer !== undefined) {
-    scope.customer = requireText("scope", value.customer);
+  if (value.entity !== undefined) {
+    scope.entity = readEntityKey(requireText("scope", value.entity));
   }
   if (value.repos !== undefined) {
     if (
@@ -58,8 +74,8 @@ function readScope(value: unknown): MissionScope {
     scope.repos = value.repos as string[];
   }
   // Deny by default: a mission with no target is a scope-all mission.
-  if (scope.customer === undefined && (scope.repos ?? []).length === 0) {
-    throw new FieldError("scope", "scope must name a customer or repos");
+  if (scope.entity === undefined && (scope.repos ?? []).length === 0) {
+    throw new FieldError("scope", "scope must name an entity or repos");
   }
   return scope;
 }
