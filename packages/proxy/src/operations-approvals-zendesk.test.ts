@@ -69,11 +69,14 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
 
     const res = await requestOp(rig, REPLY_OP, { ...REPLY_PARAMS, approval: id });
     expect(res.status).toBe(200);
+    // Proven when opened, proven AGAIN right before the write — never from
+    // the memo (L5) — then the PUT.
     expect(rig.connector.calls.map((c) => [c.init.method ?? "GET", c.url])).toEqual([
+      ["GET", "https://acme.zendesk.com/api/v2/tickets/35"],
       ["GET", "https://acme.zendesk.com/api/v2/tickets/35"],
       ["PUT", "https://acme.zendesk.com/api/v2/tickets/35"],
     ]);
-    const put = rig.connector.calls[1];
+    const put = rig.connector.calls[2];
     expect(put?.init.body).toBe(
       '{"ticket":{"comment":{"body":"Thanks — we are on it.","public":true}}}',
     );
@@ -150,6 +153,45 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
     expect(res.status).toBe(409);
     expect(graphqlDenial(res.body).code).toBe("missura_approval_not_opened");
     expect(rig.store.pendingApprovals()).toHaveLength(MAX_PENDING_APPROVALS_PER_MISSION);
+  });
+
+  /**
+   * PoC F (L5): the read path memoizes a ticket's proof for the mission, and
+   * the reply shares the proof key. Read the comments (proof memoized), get
+   * the reply approved, move the ticket to another organization at the
+   * vendor, re-POST: the PUT left, and the customer got the comment. A
+   * write never reuses a memoized proof — it re-probes right before it
+   * leaves, and refuses when the proof no longer holds.
+   */
+  it("re-proves the ticket at execution: a ticket that moved organization since the read gets no PUT", async () => {
+    let organization = 4200;
+    const vendor = (url: string): Promise<Response> => {
+      const id = /\/api\/v2\/tickets\/(\d+)/.exec(url)?.[1] ?? "0";
+      const body = url.endsWith("/comments")
+        ? JSON.stringify({ comments: [] })
+        : JSON.stringify({ ticket: { id: Number(id), organization_id: organization } });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    };
+    const rig = approvalRig("zendesk", { vendor });
+    // 1. A raw read of the ticket's comments: the probe runs, `ticket:35` is memoized.
+    const read = await handle(rig.connector.deps, request({ method: "GET", path: "/api/v2/tickets/35/comments" }));
+    expect(read.status).toBe(200);
+    // 2. The approval is opened and approved while the ticket is the mission's.
+    const id = await opened(rig, REPLY_OP, REPLY_PARAMS);
+    rig.store.decideApproval(id, "approved", "ops@acme.io");
+    // 3. The ticket moves to another organization at the vendor.
+    organization = 9999;
+    const res = await requestOp(rig, REPLY_OP, { ...REPLY_PARAMS, approval: id });
+
+    const calls = rig.connector.calls.map(
+      (c) => `${c.init.method ?? "GET"} ${c.url.replace("https://acme.zendesk.com", "")}`,
+    );
+    expect(calls).not.toContain("PUT /api/v2/tickets/35");
+    expect(calls.slice(-2)).toEqual(["GET /api/v2/tickets/35", "GET /api/v2/tickets/35"]);
+    expect(res.status).toBe(404);
+    expect(JSON.parse(bodyText(res.body))).toMatchObject({ error: "RecordNotFound" });
   });
 
   it("never writes on the raw path: the agent's own PUT is not in the catalog", async () => {

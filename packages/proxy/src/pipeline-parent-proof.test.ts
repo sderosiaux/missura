@@ -1,19 +1,23 @@
-import {
-  createParentProofStore,
-  type CatalogDecision,
-  type MissionClaims,
-  type ParentProofStore,
-} from "@missura/core";
+import { createParentProofStore, type CatalogDecision, type MissionClaims } from "@missura/core";
 import { describe, expect, it } from "vitest";
+import {
+  COMMENT_PAGE,
+  COMMENTS,
+  decideZendeskish,
+  FOREIGN,
+  json,
+  narrowed,
+  owned,
+  serialized,
+  setup,
+  TICKET,
+  ticket,
+  vendorDouble,
+  ZENDESK_CLAIMS,
+} from "./parent-proof.fixtures";
 import type { NarrowResult } from "./narrow";
 import { handle } from "./pipeline";
-import {
-  bodyText,
-  CLAIMS,
-  harness,
-  request,
-  VENDOR_HEADER,
-} from "./pipeline.fixtures";
+import { bodyText, harness, request, VENDOR_HEADER } from "./pipeline.fixtures";
 
 /**
  * PARENT PROOF, at the pipeline: a child the connector cannot prove from its own
@@ -23,141 +27,6 @@ import {
  * neither an organization nor a ticket — but nothing here is Zendesk-shaped:
  * the pipeline sees a key, a probe and an owner path.
  */
-
-const TICKET = "/api/v2/tickets/35436";
-const COMMENTS = "/api/v2/tickets/35436/comments";
-const MINE = "22989442";
-const FOREIGN = "360001";
-
-const ZENDESK_CLAIMS: MissionClaims = {
-  ...CLAIMS,
-  connections: ["zendesk"],
-  jti: "jti-proof",
-};
-
-const ALLOWED: CatalogDecision = {
-  decision: "allow",
-  operation: "tickets.comments.list",
-  action: "read",
-  reason: "allowlisted route",
-};
-
-const PROBE_ALLOWED: CatalogDecision = {
-  decision: "allow",
-  operation: "tickets.get",
-  action: "read",
-  reason: "allowlisted route",
-};
-
-function decideZendeskish(path: string): CatalogDecision {
-  if (path.startsWith(COMMENTS)) return ALLOWED;
-  if (path.startsWith(TICKET)) return PROBE_ALLOWED;
-  return {
-    decision: "deny",
-    operation: "unknown",
-    action: "unknown",
-    reason: "not in the Zendesk read catalog",
-  };
-}
-
-function narrowed(over: Partial<NarrowResult> = {}): NarrowResult {
-  return {
-    decision: "allow",
-    path: COMMENTS,
-    denyShape: "zendesk404",
-    missionScopeSize: 2,
-    missionOwnerIds: [MINE],
-    parentProof: {
-      key: "ticket:35436",
-      probe: { method: "GET", path: TICKET, body: "" },
-      ownerPath: ["ticket", "organization_id"],
-    },
-    filterPlan: { rules: [], strip: [] },
-    ...over,
-  };
-}
-
-interface Vendor {
-  fetchImpl: typeof fetch;
-  urls: string[];
-  auth: (string | undefined)[];
-}
-
-function vendorDouble(route: (url: string) => Response): Vendor {
-  const urls: string[] = [];
-  const auth: (string | undefined)[] = [];
-  return {
-    urls,
-    auth,
-    fetchImpl: (input, init): Promise<Response> => {
-      const url = input instanceof Request ? input.url : input.toString();
-      urls.push(url);
-      const headers = (init?.headers ?? {}) as Record<string, string>;
-      auth.push(headers.authorization);
-      return Promise.resolve(route(url));
-    },
-  };
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
-const COMMENT_PAGE = { comments: [{ id: 1, body: "hello" }], count: 1 };
-
-/** The parent as the vendor answers it, owned by `organizationId`. */
-function ticket(organizationId: string): Response {
-  return json({ ticket: { id: 35436, organization_id: Number(organizationId) } });
-}
-
-interface Setup {
-  deps: Parameters<typeof handle>[0];
-  vendor: Vendor;
-  events: { decision: string; operation: string }[];
-}
-
-function setup(
-  route: (url: string) => Response,
-  over: {
-    result?: NarrowResult;
-    proofs?: ParentProofStore;
-    isRevoked?: (jti: string) => boolean;
-  } = {},
-): Setup {
-  const vendor = vendorDouble(route);
-  const result = over.result ?? narrowed();
-  const h = harness({
-    provider: "zendesk",
-    upstreamBase: "https://acme.zendesk.com",
-    verifyToken: (): MissionClaims => ZENDESK_CLAIMS,
-    decide: (req): CatalogDecision => decideZendeskish(req.path),
-    narrow: (): NarrowResult => result,
-    proofs: over.proofs ?? createParentProofStore(),
-    fetchImpl: vendor.fetchImpl,
-    now: (): number => 1_700_000_000_000,
-    ...(over.isRevoked === undefined ? {} : { isRevoked: over.isRevoked }),
-  });
-  return { deps: h.deps, vendor, events: h.events };
-}
-
-/** Everything the agent can observe about one answer. */
-function serialized(res: {
-  status: number;
-  headers: Record<string, string>;
-  body: string | Uint8Array;
-}): string {
-  return JSON.stringify({
-    status: res.status,
-    headers: res.headers,
-    body: bodyText(res.body),
-  });
-}
-
-const owned = (url: string): Response =>
-  url.includes("/comments") ? json(COMMENT_PAGE) : ticket(MINE);
 
 describe("parent proof — proving the parent before serving the child", () => {
   it("asks the vendor for the parent first, then for the child", async () => {

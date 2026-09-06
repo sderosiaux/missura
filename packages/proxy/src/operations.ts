@@ -315,12 +315,16 @@ export async function executeOperation(
     // ticket, and that read is one the mission already holds — the
     // alternative is asking the human to approve a target that is not
     // theirs, which makes them the ownership oracle.
+    // On the re-request the parent proof is the pipeline's, run fresh right
+    // before the write leaves (`parent-proof.ts`): proving it here too would
+    // cost the vendor a second probe and prove nothing more.
     for (const step of plan.steps) {
       const proof = admit(target, { ...step, via }, claims, opCtx, ctx.startedAt);
       if ("refusal" in proof) {
         emitEvent(deps, opCtx, claimsDenial(verdict, STEP_REFUSED_REASON));
         return proof.refusal;
       }
+      if (split.approval !== undefined) continue;
       const unproven = await proveStep(target, innerRequest(req, step), proof, opCtx, claims);
       if (unproven !== undefined) {
         emitEvent(deps, opCtx, claimsDenial(verdict, STEP_REFUSED_REASON));

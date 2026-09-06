@@ -1,9 +1,10 @@
-import type {
-  CatalogDecision,
-  CatalogRequest,
-  MissionClaims,
-  ParentProof,
-  ParentProofStore,
+import {
+  isWriteEffect,
+  type CatalogDecision,
+  type CatalogRequest,
+  type MissionClaims,
+  type ParentProof,
+  type ParentProofStore,
 } from "@missura/core";
 import { claimsDenial, emitEvent, type RequestContext } from "./audit";
 import { isOwned } from "./filter-owner";
@@ -48,6 +49,12 @@ import type { IncomingShape } from "./transport";
  *   - the vendor's rate-limit budget relayed on the child's answer is one call
  *     lower on a first access, for the same reason and with the same reading.
  *     REFILL makes the same tradeoff, in the other direction.
+ *
+ * Both residuals are READ-side. A WRITE never reuses a memoized proof (L5):
+ * the object may have moved since the read that bought the proof — a ticket
+ * handed to another organization — and on a write the residual is not a
+ * timing difference but an irreversible call on an object outside the
+ * mission. So a write re-probes every time, right before it leaves.
  */
 
 /** The audit reason for every parent-proof refusal, whatever failed. */
@@ -87,6 +94,11 @@ export interface ParentProofCall {
   req: IncomingShape;
   ctx: RequestContext;
   claims: MissionClaims;
+  /**
+   * Skip the memo and probe now, whatever was proven before. Set for every
+   * write: a proof bought by a read says where the object WAS.
+   */
+  fresh: boolean;
 }
 
 /**
@@ -122,8 +134,8 @@ export async function proveParent(
 ): Promise<boolean> {
   const { proof, claims } = call;
   // Already proven for THIS mission: no extra call, no extra event, no extra
-  // vendor budget spent.
-  if (deps.proofs.isProven(claims.jti, proof.key)) return true;
+  // vendor budget spent — on a read. A write asks again.
+  if (!call.fresh && deps.proofs.isProven(claims.jti, proof.key)) return true;
 
   const verdict = deps.decide(proof.probe);
   if (verdict.decision === "deny") return false;
@@ -201,6 +213,9 @@ export async function parentProofStage(
     req: stage.req,
     ctx: stage.ctx,
     claims: stage.claims,
+    // Decided off the catalog verdict, the one thing that says what the
+    // request costs: a write's proof is never the memo's.
+    fresh: isWriteEffect(stage.verdict.action),
   });
   if (proven) return undefined;
   emitEvent(
