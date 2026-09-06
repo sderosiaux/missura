@@ -140,6 +140,14 @@ export function actionCovered(
   return operationAllowed(claims, via);
 }
 
+/** A name-grant the catalogue cannot honour: the operator's input, refused by name. */
+export class OperationGrantError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OperationGrantError";
+  }
+}
+
 /**
  * What a mint may add to `allow`: catalogued writes, by exact name, once each.
  * A name the catalogue does not hold fails here — loudly, naming it — rather
@@ -154,9 +162,9 @@ export function grantableOperations(
   const out: string[] = [];
   for (const name of names) {
     const op = catalogue.find((entry) => entry.name === name);
-    if (op === undefined) throw new Error(`unknown operation: ${name}`);
+    if (op === undefined) throw new OperationGrantError(`unknown operation: ${name}`);
     if (op.effect === "read") {
-      throw new Error(
+      throw new OperationGrantError(
         `operation ${name} is a read — reads are granted by the read verb, not by name`,
       );
     }

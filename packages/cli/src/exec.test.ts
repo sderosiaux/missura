@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -279,5 +279,71 @@ describe("missura exec", () => {
 
     expect(result.code).toBe(1);
     expect(h.err.join("\n")).toMatch(/glob/i);
+  });
+});
+
+/**
+ * THE M8 GRANT, at the surface a human types. `--allow NAME` adds an
+ * operation NAME to the mission — the only way a mission reaches a write —
+ * and the default mission is unchanged. A name the catalogue does not know
+ * fails before a token exists, naming it: a typo must not mint a grant that
+ * matches nothing and run the child as if it had.
+ */
+describe("missura exec --allow", () => {
+  function allowOf(h: Harness): string[] {
+    const token = childEnv(h).MISSION_TOKEN ?? "";
+    return (
+      JSON.parse(
+        Buffer.from(token.slice(4).split(".")[0] ?? "", "base64url").toString("utf8"),
+      ) as { allow: string[] }
+    ).allow;
+  }
+
+  it("grants read and search, and nothing else, by default", async () => {
+    const h = await inited();
+    const result = await run(
+      execArgv(["--entity", "customer:acme", "--purpose", "p"], DUMP),
+      h.io,
+    );
+    expect(result.code).toBe(0);
+    expect(allowOf(h)).toEqual(["read", "search"]);
+  });
+
+  it("adds each --allow NAME to the claim, once", async () => {
+    const h = await inited();
+    const result = await run(
+      execArgv(
+        [
+          "--entity",
+          "customer:acme",
+          "--purpose",
+          "p",
+          "--allow",
+          "github.issue.comment.create",
+          "--allow",
+          "github.issue.comment.create",
+        ],
+        DUMP,
+      ),
+      h.io,
+    );
+    expect(result.code).toBe(0);
+    expect(allowOf(h)).toEqual(["read", "search", "github.issue.comment.create"]);
+  });
+
+  it("refuses a name the catalogue does not know, before minting or spawning", async () => {
+    const h = await inited();
+    const result = await run(
+      execArgv(
+        ["--entity", "customer:acme", "--purpose", "p", "--allow", "github.issue.coment.create"],
+        DUMP,
+      ),
+      h.io,
+    );
+    expect(result.code).toBe(1);
+    expect(h.err.join("\n")).toContain("unknown operation: github.issue.coment.create");
+    expect(existsSync(join(h.home, "child-env.json"))).toBe(false);
+    // Nothing was minted: the store never even wrote its file.
+    expect(existsSync(join(h.home, "missions.json"))).toBe(false);
   });
 });

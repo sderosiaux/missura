@@ -54,6 +54,7 @@ const status = async (url, init) => (await fetch(url, init)).status;
 }
 
 export interface Call {
+  method: string;
   url: string;
   body: string;
   authorization: string;
@@ -77,14 +78,19 @@ function requestUrl(input: RequestInfo | URL): string {
 export function stubFetch(calls: Call[]): typeof fetch {
   return (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = requestUrl(input);
+    const method = init?.method ?? "GET";
     calls.push({
+      method,
       url,
       body: typeof init?.body === "string" ? init.body : "",
       authorization: authorizationOf(init),
     });
+    // A posted comment answers as GitHub does — the created object.
     const body = url.includes("/api/v2/")
       ? '{"tickets":[]}'
-      : JSON.stringify({ data: { issues: { nodes: [] } } });
+      : method === "POST" && url.includes("/comments")
+        ? '{"id":9001}'
+        : JSON.stringify({ data: { issues: { nodes: [] } } });
     return Promise.resolve(
       new Response(body, {
         status: 200,
@@ -109,12 +115,17 @@ export async function boot(h: Harness, calls: Call[]): Promise<RunningProxy> {
   });
 }
 
-/** Runs `missura exec --entity <entity> -- node -e <child>` and reads its proof. */
+/**
+ * Runs `missura exec --entity <entity> [flags] -- node -e <child>` and reads
+ * its proof. `flags` is what a milestone adds to the command a human types —
+ * M8's `--allow NAME`.
+ */
 export async function exec<T>(
   h: Harness,
   servers: RunningProxy,
   entity: string,
   child: string,
+  flags: readonly string[] = [],
 ): Promise<T> {
   const zendesk = servers.zendesk;
   if (zendesk === undefined) throw new Error("no zendesk listener was booted");
@@ -123,6 +134,7 @@ export async function exec<T>(
       "exec",
       "--entity",
       entity,
+      ...flags,
       "--ttl",
       "30m",
       "--purpose",

@@ -139,3 +139,51 @@ describe("operator API — POST /v1/token", () => {
     expect(store.active()).toHaveLength(0);
   });
 });
+
+/**
+ * THE M8 GRANT, on the operator plane: `allow` lists operation NAMES to add
+ * to the read verbs. Validated against the catalogue the store was built
+ * with, so a typo is a named 400 rather than a mission that refuses the one
+ * thing it was minted for.
+ */
+describe("operator API — POST /v1/token with allow", () => {
+  it("adds a catalogued write by name to the token", async () => {
+    const { base } = await boot();
+    const res = await post(
+      base,
+      "/v1/token",
+      mintPayload({ allow: ["github.issue.comment.create"] }),
+    );
+    const payload = (await res.json()) as TokenBody;
+    const claims = verifyMissionToken(payload.access_token, { key: SIGNING_KEY });
+
+    expect(res.status).toBe(200);
+    expect(claims.allow).toEqual(["read", "search", "github.issue.comment.create"]);
+  });
+
+  it("refuses an unknown name on the `allow` field, naming it, and mints nothing", async () => {
+    const { base, store } = await boot();
+    const res = await post(
+      base,
+      "/v1/token",
+      mintPayload({ allow: ["github.issue.coment.create"] }),
+    );
+    const payload = (await res.json()) as { error: { field: string; reason: string } };
+
+    expect(res.status).toBe(400);
+    expect(payload.error.field).toBe("allow");
+    expect(payload.error.reason).toContain("github.issue.coment.create");
+    expect(store.active()).toHaveLength(0);
+  });
+
+  it("refuses an `allow` that is not a list of strings", async () => {
+    const { base, store } = await boot();
+    for (const allow of ["github.issue.comment.create", [7], { name: "x" }]) {
+      const res = await post(base, "/v1/token", mintPayload({ allow }));
+      const payload = (await res.json()) as { error: { field: string } };
+      expect(res.status).toBe(400);
+      expect(payload.error.field).toBe("allow");
+    }
+    expect(store.active()).toHaveLength(0);
+  });
+});

@@ -80,6 +80,19 @@ function readScope(value: unknown): MissionScope {
   return scope;
 }
 
+/**
+ * The operation names to grant on top of the read verbs (M8). Shape only —
+ * whether each name exists is the store's question, against its catalogue —
+ * and absent means the default, read-only grant.
+ */
+function readAllow(value: unknown): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((name) => typeof name !== "string")) {
+    throw new FieldError("allow", "allow must be an array of operation names");
+  }
+  return value as string[];
+}
+
 function readTtl(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new FieldError("ttl", "ttl must be a positive integer of seconds");
@@ -120,10 +133,12 @@ export function readMissionRequest(
       'authorization_details[0].type must be "mission"',
     );
   }
+  const allow = readAllow(entry.allow);
   return {
     purpose: requireText("purpose", entry.purpose),
     actor: requireText("actor", entry.actor),
     scope: readScope(entry.scope),
     ttlSeconds: readTtl(entry.ttl),
+    ...(allow === undefined ? {} : { allow }),
   };
 }

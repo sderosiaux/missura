@@ -11,6 +11,18 @@ import {
   ZENDESK_TOKEN,
 } from "./harness.fixtures";
 import {
+  childM7,
+  unclocked,
+  type ProofM7,
+} from "./milestone-m7.fixtures";
+import {
+  childM8,
+  M8_BODY,
+  M8_OPERATION,
+  restUnclocked,
+  type ProofM8,
+} from "./milestone-m8.fixtures";
+import {
   boot,
   childM5,
   events,
@@ -177,69 +189,6 @@ describe("M6 — the agent can ask what it is, and is told what it is not", () =
  * Linear asking for the Linear operation gets the raw GraphQL refusal, byte
  * for byte, and is never told the operation exists.
  */
-interface Answer {
-  status: number;
-  body: string;
-  headers: Record<string, string | null>;
-}
-
-interface ProofM7 {
-  raw: Answer;
-  op: Answer;
-  linearOp: Answer;
-  linearRaw: Answer;
-  mission: { operations: { name: string; effect: string }[] };
-}
-
-/** The same ticket list, asked raw and asked as an operation; then Linear both ways. */
-function childM7(organization: string): string {
-  return `
-const fs = require("node:fs");
-const auth = { authorization: "Bearer " + process.env.MISSION_TOKEN };
-const call = async (url, init) => {
-  const r = await fetch(url, init);
-  return {
-    status: r.status,
-    body: await r.text(),
-    headers: {
-      "content-type": r.headers.get("content-type"),
-      "missura-reduced": r.headers.get("missura-reduced"),
-    },
-  };
-};
-(async () => {
-  const zd = process.env.ZENDESK_API_URL;
-  const out = {
-    raw: await call(zd + "/api/v2/organizations/${organization}/tickets.json", { headers: auth }),
-    op: await call(zd + "/missura/op/zendesk.tickets.for_entity", { method: "POST", headers: auth }),
-    linearOp: await call(process.env.GITHUB_API_URL + "/missura/op/linear.issues.for_entity", {
-      method: "POST",
-      headers: auth,
-    }),
-    linearRaw: await call(process.env.LINEAR_API_URL, {
-      method: "POST",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ query: "{ issues { nodes { id } } }" }),
-    }),
-    mission: await (await fetch(process.env.MISSURA_MISSION_URL, { headers: auth })).json(),
-  };
-  fs.writeFileSync(process.env.MISSURA_HOME + "/proof.json", JSON.stringify(out));
-})();
-`;
-}
-
-/** A refusal body with its clock taken out, and the clock on its own. */
-function unclocked(body: string): { rest: string; expiresIn: number } {
-  const parsed = JSON.parse(body) as {
-    errors: { extensions: { missura: { mission: { expires_in: number } } } }[];
-  };
-  const mission = parsed.errors[0]?.extensions.missura.mission;
-  if (mission === undefined) throw new Error("no missura block in the refusal");
-  const expiresIn = mission.expires_in;
-  mission.expires_in = 0;
-  return { rest: JSON.stringify(parsed), expiresIn };
-}
-
 describe("M7 — an operation runs through the same pipeline as a raw call", () => {
   it("asks the vendor exactly what the raw path asks, and logs it under the operation", async () => {
     const h = await initedHarness(ZENDESK_INIT_ENV);
@@ -317,6 +266,109 @@ describe("M7 — an operation runs through the same pipeline as a raw call", () 
       // 4. Two operations listed, and the Linear one is not named anywhere.
       expect(proof.mission.operations).toHaveLength(2);
       expect(JSON.stringify(proof.mission.operations)).not.toContain("linear");
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+});
+
+/**
+ * THE M8 PROOF: the first write, and the two things that make it safe. The
+ * child, under a mission that NAMES the operation, posts one comment on the
+ * entity's repository — the vendor double sees one POST, vault-credentialed,
+ * and the log says append/allow under the operation and the mission. Then
+ * the same operation aimed at a foreign repository is refused with the bytes
+ * a foreign READ gets, the agent's own POST to the vendor route is refused
+ * at the catalog, and the double has seen nothing since the first call:
+ * writes happen only through operations, and a write is proven before it
+ * happens or it does not happen.
+ */
+describe("M8 — the first write: proven before, operation-only, on the record", () => {
+  it("posts one comment on the mission's repo, refuses the rest before the vendor", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const proof = await exec<ProofM8>(h, servers, "customer:acme", childM8(), [
+        "--allow",
+        M8_OPERATION,
+      ]);
+
+      // 1. One write, and exactly one vendor call: the comments route on the
+      // entity's repository, the vault's GitHub credential, the agent's body.
+      expect(proof.write.status).toBe(200);
+      expect(JSON.parse(proof.write.body)).toEqual({
+        operation: M8_OPERATION,
+        effect: "append",
+        results: [{ id: 9001 }],
+      });
+      expect(calls).toEqual([
+        {
+          method: "POST",
+          url: expect.stringMatching(/\/repos\/acme-corp\/product\/issues\/7\/comments$/) as string,
+          body: JSON.stringify({ body: M8_BODY }),
+          authorization: `Bearer ${GITHUB_TOKEN}`,
+        },
+      ]);
+      expect(calls[0]?.authorization).not.toMatch(/msr_/);
+      const record = missions(h).at(-1);
+      expect(events(h)).toContainEqual(
+        expect.objectContaining({
+          provider: "github",
+          operation: "repos.issues.comments.create",
+          action: "append",
+          decision: "allow",
+          viaOperation: M8_OPERATION,
+          missionId: record?.id,
+        }),
+      );
+
+      // 2. A foreign repository: the not-found a foreign read gets, byte for
+      // byte but for the clock — and the double saw nothing further.
+      expect(proof.foreign.status).toBe(404);
+      expect(proof.foreign.status).toBe(proof.foreignRead.status);
+      const foreign = restUnclocked(proof.foreign.body);
+      const read = restUnclocked(proof.foreignRead.body);
+      expect(foreign.rest).toBe(read.rest);
+      expect(Math.abs(foreign.expiresIn - read.expiresIn)).toBeLessThanOrEqual(1);
+      expect(proof.foreign.body).toContain('"message":"Not Found"');
+      expect(proof.foreign.body).toContain("missura_out_of_mission_scope");
+
+      // 3. THE RAW PATH NEVER WRITES. The agent's own POST, same token, same
+      // route the operation just used, is not in the catalog — and no vendor
+      // call happened for it. This is the assertion that makes writes
+      // operation-only.
+      expect(proof.raw.status).toBe(403);
+      expect(proof.raw.body).toContain("missura_operation_not_in_catalog");
+      expect(calls).toHaveLength(1);
+
+      // 4. Introspection lists the write, by name and effect.
+      expect(proof.mission.allow).toEqual(["read", "search", M8_OPERATION]);
+      expect(proof.mission.operations).toContainEqual({
+        name: M8_OPERATION,
+        effect: "append",
+      });
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("refuses the write under a mission that does not name it, and never lists it", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const proof = await exec<ProofM8>(h, servers, "customer:acme", childM8());
+
+      expect(proof.write.status).toBe(403);
+      expect(proof.write.body).toContain("missura_action_not_allowed");
+      expect(proof.foreign.status).toBe(403);
+      expect(proof.raw.status).toBe(403);
+      expect(calls).toEqual([]);
+      expect(proof.mission.allow).toEqual(["read", "search"]);
+      expect(JSON.stringify(proof.mission.operations)).not.toContain(M8_OPERATION);
     } finally {
       await servers.close();
     }

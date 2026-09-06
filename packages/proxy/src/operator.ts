@@ -5,12 +5,13 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import type {
-  MissionClaims,
-  MissionRecord,
-  MissionResolution,
-  MissionScope,
-  MissionStore,
+import {
+  OperationGrantError,
+  type MissionClaims,
+  type MissionRecord,
+  type MissionResolution,
+  type MissionScope,
+  type MissionStore,
 } from "@missura/core";
 import {
   FieldError,
@@ -125,11 +126,15 @@ function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
       err instanceof Error ? err.message : "unresolvable scope",
     );
   }
-  const created: { record: MissionRecord; token: string } = deps.store.create(
-    input,
-    resolved.scope,
-    resolved.resolution,
-  );
+  let created: { record: MissionRecord; token: string };
+  try {
+    created = deps.store.create(input, resolved.scope, resolved.resolution);
+  } catch (err) {
+    // A name the catalogue does not hold is the operator's field to fix,
+    // named as such; anything else the store refuses is still a 500.
+    if (err instanceof OperationGrantError) throw new FieldError("allow", err.message);
+    throw err;
+  }
   return {
     mission_id: created.record.id,
     access_token: created.token,

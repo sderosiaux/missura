@@ -4,6 +4,7 @@ import {
   MissionStore,
   type MissionRecord,
   type MissionScope,
+  type Operation,
 } from "@missura/core";
 import type { CliIo } from "./io";
 import { resolveHome, type MissuraPaths } from "./paths";
@@ -12,14 +13,21 @@ import { resolveHome, type MissuraPaths } from "./paths";
  * The mission store the operator's own commands share with `missura run`:
  * the same file, so a mission created by `exec` is revocable from another
  * terminal and a revoke is seen by a running proxy on its next request.
+ *
+ * `catalogue` is what a name-grant may name. The commands that never mint
+ * leave it empty, which grants nothing — not a default, a refusal.
  */
-export function openStore(paths: MissuraPaths): MissionStore {
+export function openStore(
+  paths: MissuraPaths,
+  catalogue: readonly Operation[] = [],
+): MissionStore {
   if (!existsSync(paths.signingKeyPath)) {
     throw new Error("no signing key found — run missura init");
   }
   return new MissionStore(
     paths.missionsPath,
     loadOrCreateKey(paths.signingKeyPath),
+    catalogue,
   );
 }
 

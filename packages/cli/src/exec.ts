@@ -11,6 +11,7 @@ import {
   DEFAULT_LINEAR_PORT,
   DEFAULT_ZENDESK_PORT,
   INTROSPECTION_PATH,
+  operationCatalogue,
 } from "@missura/proxy";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
@@ -22,6 +23,12 @@ export interface ExecOptions {
   /** The entity's whole key — `customer:adeo`, `project:atlas`. Never a name. */
   entity?: string;
   repos?: readonly string[];
+  /**
+   * Operation NAMES granted on top of the read verbs — the only way this
+   * mission reaches a write. Checked against the catalogue before a token
+   * exists (`MissionStore`), so a typo fails here, not at the first call.
+   */
+  allow?: readonly string[];
   ttlSeconds: number;
   /** The command and its arguments, as given after `--`. */
   argv: readonly string[];
@@ -141,13 +148,18 @@ export async function execCommand(
   const graph = openEntityGraph(options.entitiesPath ?? paths.entitiesPath);
   const { scope: resolved, resolution } = resolveMissionScope(graph, scope);
 
-  const store = openStore(paths);
+  // The whole catalogue: `exec` mints without booting a proxy, so it cannot
+  // know which connections the running one serves. A name that exists but is
+  // not served there is refused at the first call as unknown, like any other.
+  const store = openStore(paths, operationCatalogue({ zendesk: true }));
+  const allow = options.allow ?? [];
   const { record, token } = store.create(
     {
       purpose: options.purpose,
       actor: options.actor,
       scope,
       ttlSeconds: options.ttlSeconds,
+      ...(allow.length === 0 ? {} : { allow }),
     },
     resolved,
     // The graph's own account of the scope, degradations included. Dropped

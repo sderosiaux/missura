@@ -15,6 +15,7 @@ import {
   type MissionScope,
 } from "@missura/core";
 import { startOperatorServer, type OperatorDeps } from "./operator";
+import { operationCatalogue } from "./server";
 
 /**
  * Shared test-only harness for the operator API specs (not exported by the
@@ -73,7 +74,13 @@ const servers: Server[] = [];
 
 export async function boot(): Promise<Operator> {
   const dir = mkdtempSync(join(tmpdir(), "missura-operator-"));
-  const store = new MissionStore(join(dir, "missions.json"), SIGNING_KEY);
+  // The catalogue a proxy with these two connections serves: what `allow`
+  // may name (M8).
+  const store = new MissionStore(
+    join(dir, "missions.json"),
+    SIGNING_KEY,
+    operationCatalogue({ zendesk: false }),
+  );
   const deps: OperatorDeps = {
     store,
     resolve: (scope: MissionScope): MissionResolution =>

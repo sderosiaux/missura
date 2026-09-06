@@ -12,6 +12,7 @@ import {
 import {
   createServers,
   DEFAULT_OPERATOR_PORT,
+  operationCatalogue,
   startOperatorServer,
   type NarrowFn,
   type ProxyServers,
@@ -123,7 +124,6 @@ export async function runCommand(
   const paths = resolveHome(io.env);
   const vault = openVault(paths);
   const signingKey = loadOrCreateKey(paths.signingKeyPath);
-  const store = openStore(paths);
   const resolve: Resolver = scopeResolver(
     options.entitiesPath ?? paths.entitiesPath,
   );
@@ -133,6 +133,9 @@ export async function runCommand(
     zendeskNarrow(resolve),
     options.zendeskPort,
   );
+  // The operator plane mints against the catalogue THIS proxy serves: a
+  // name-grant for an operation with no listener here is refused at mint.
+  const store = openStore(paths, operationCatalogue({ zendesk: zendesk !== undefined }));
   const servers = await createServers({
     signingKey,
     isRevoked: (jti: string): boolean => store.isRevoked(jti),
