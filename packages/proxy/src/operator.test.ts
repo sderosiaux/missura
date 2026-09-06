@@ -6,6 +6,7 @@ import {
   boot,
   closeAll,
   mintPayload,
+  OPERATOR_BEARER,
   OPERATOR_HEX,
   post,
   SIGNING_KEY,
@@ -176,6 +177,36 @@ describe("operator API — POST /v1/token with allow", () => {
     expect(store.active()).toHaveLength(0);
   });
 
+  /**
+   * M9: a name the catalogue holds but the entity cannot run is refused as
+   * the GAP — cause, system, remediation — under the `allow` field, so the
+   * 400 says what to do next rather than "unknown operation".
+   */
+  it("refuses a grant the entity cannot run with the gap under `allow`, and mints nothing", async () => {
+    const { base, store } = await boot();
+    const res = await post(
+      base,
+      "/v1/token",
+      mintPayload({
+        scope: { entity: "customer:initech" },
+        allow: ["github.issue.comment.create"],
+      }),
+    );
+    const payload = (await res.json()) as {
+      error: { field: string; reason: string; gap: Record<string, unknown> };
+    };
+
+    expect(res.status).toBe(400);
+    expect(payload.error.field).toBe("allow");
+    expect(payload.error.gap).toMatchObject({
+      name: "github.issue.comment.create",
+      cause: "no_link",
+      system: "github",
+    });
+    expect(payload.error.reason).toContain("missura entity link customer:initech github");
+    expect(store.active()).toHaveLength(0);
+  });
+
   it("refuses an `allow` that is not a list of strings", async () => {
     const { base, store } = await boot();
     for (const allow of ["github.issue.comment.create", [7], { name: "x" }]) {
@@ -185,5 +216,81 @@ describe("operator API — POST /v1/token with allow", () => {
       expect(payload.error.field).toBe("allow");
     }
     expect(store.active()).toHaveLength(0);
+  });
+});
+
+/**
+ * THE GAP REPORT on the operator plane (M9): what an entity can run now and,
+ * for everything else, the one cause and the command that closes it.
+ * Operator-key authenticated like the mint — it names systems, statuses and
+ * commands, which is the operator's view and nobody else's.
+ */
+describe("operator API — GET /v1/feasibility", () => {
+  it("reports possible operations and each gap with its cause, for the names asked", async () => {
+    const { base } = await boot();
+    const res = await fetch(
+      `${base}/v1/feasibility?entity=customer:initech&allow=github.issue.comment.create`,
+      { headers: { authorization: OPERATOR_BEARER } },
+    );
+    const payload = (await res.json()) as {
+      entity: string;
+      operations: { name: string; possible: boolean; cause?: string; system: string; status?: string }[];
+    };
+
+    expect(res.status).toBe(200);
+    expect(payload.entity).toBe("customer:initech");
+    expect(payload.operations.find((op) => op.name === "linear.issues.for_entity")).toMatchObject({
+      possible: false,
+      cause: "link_not_confirmed",
+      system: "linear",
+      status: "proposed",
+    });
+    expect(payload.operations.find((op) => op.name === "github.issue.comment.create")).toMatchObject({
+      possible: false,
+      cause: "no_link",
+      system: "github",
+    });
+    // Booted without Zendesk: the first cause, whatever the graph says.
+    expect(payload.operations.find((op) => op.name === "zendesk.tickets.for_entity")).toMatchObject({
+      possible: false,
+      cause: "system_not_connected",
+    });
+  });
+
+  it("marks a write not_granted when the names asked leave it out", async () => {
+    const { base } = await boot();
+    const res = await fetch(`${base}/v1/feasibility?entity=customer:acme`, {
+      headers: { authorization: OPERATOR_BEARER },
+    });
+    const payload = (await res.json()) as {
+      operations: { name: string; possible: boolean; cause?: string }[];
+    };
+
+    expect(res.status).toBe(200);
+    expect(payload.operations.find((op) => op.name === "github.issue.comment.create")).toMatchObject({
+      possible: false,
+      cause: "not_granted",
+    });
+    expect(payload.operations.find((op) => op.name === "github.issues.for_entity")).toMatchObject({
+      possible: true,
+    });
+  });
+
+  it("names the entity field on a missing, malformed or unknown entity", async () => {
+    const { base } = await boot();
+    for (const query of ["", "?entity=acme", "?entity=customer:globex"]) {
+      const res = await fetch(`${base}/v1/feasibility${query}`, {
+        headers: { authorization: OPERATOR_BEARER },
+      });
+      const payload = (await res.json()) as { error: { field: string } };
+      expect(res.status, query).toBe(400);
+      expect(payload.error.field, query).toBe("entity");
+    }
+  });
+
+  it("checks the operator key first", async () => {
+    const { base } = await boot();
+    const res = await fetch(`${base}/v1/feasibility?entity=customer:acme`);
+    expect(res.status).toBe(401);
   });
 });

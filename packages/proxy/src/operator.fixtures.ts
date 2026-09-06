@@ -6,16 +6,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   entityGraphReader,
+  feasibilityReport,
   MissionStore,
   parseEntityGraph,
   resolveMissionScope,
   verifyMissionToken,
+  type FeasibilityReport,
+  type LinkSystem,
   type MissionClaims,
   type MissionResolution,
   type MissionScope,
 } from "@missura/core";
 import { startOperatorServer, type OperatorDeps } from "./operator";
-import { operationCatalogue } from "./server";
+import { ALL_OPERATIONS, operationCatalogue } from "./server";
 
 /**
  * Shared test-only harness for the operator API specs (not exported by the
@@ -33,7 +36,11 @@ const CONFIRMED = {
   confirmedBy: "ops@missura.dev",
 } as const;
 
-/** The real graph shape, in memory — no file, so no operator test owns a path. */
+/**
+ * The real graph shape, in memory — no file, so no operator test owns a path.
+ * `customer:acme` is whole; `customer:initech` has a Linear link nobody has
+ * confirmed and no GitHub link at all — the two gaps a mint can name (M9).
+ */
 export const GRAPH = entityGraphReader(
   parseEntityGraph(
     {
@@ -52,11 +59,27 @@ export const GRAPH = entityGraphReader(
             },
           ],
         },
+        "customer:initech": {
+          displayName: "Initech",
+          domains: ["initech.example"],
+          links: [
+            {
+              system: "linear",
+              id: "c_55",
+              evidence: "name matches",
+              method: "inferred",
+              status: "proposed",
+            },
+          ],
+        },
       },
     },
     "operator fixtures",
   ),
 );
+
+/** What this proxy serves: two connections, no Zendesk. */
+const CONNECTED: readonly LinkSystem[] = ["linear", "github"];
 
 export interface TokenBody {
   mission_id: string;
@@ -85,6 +108,14 @@ export async function boot(): Promise<Operator> {
     store,
     resolve: (scope: MissionScope): MissionResolution =>
       resolveMissionScope(GRAPH, scope),
+    feasibility: (entity: string, allow: readonly string[]): FeasibilityReport =>
+      feasibilityReport({
+        reader: GRAPH,
+        entity,
+        catalogue: ALL_OPERATIONS,
+        connected: CONNECTED,
+        allow,
+      }),
     operatorKey: OPERATOR_KEY,
     verifyToken: (token: string): MissionClaims =>
       verifyMissionToken(token, { key: SIGNING_KEY }),

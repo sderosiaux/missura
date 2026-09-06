@@ -1,5 +1,5 @@
 import { assertEntityKey, MAX_TTL_SECONDS } from "@missura/core";
-import type { CreateMission, MissionScope } from "@missura/core";
+import type { CreateMission, MissionScope, OperationGap } from "@missura/core";
 
 /**
  * Reading an operator's request, and refusing it by name. Nothing here talks
@@ -8,12 +8,18 @@ import type { CreateMission, MissionScope } from "@missura/core";
  * mission would have been refused later.
  */
 
-/** A validation failure that names the field the operator got wrong. */
+/**
+ * A validation failure that names the field the operator got wrong — and,
+ * when the field is a grant the entity cannot run, the gap that says why
+ * (M9): the one cause, and the command that closes it.
+ */
 export class FieldError extends Error {
   readonly field: string;
-  constructor(field: string, reason: string) {
+  readonly gap: OperationGap | undefined;
+  constructor(field: string, reason: string, gap?: OperationGap) {
     super(reason);
     this.field = field;
+    this.gap = gap;
   }
 }
 
@@ -106,6 +112,33 @@ function readTtl(value: unknown): number {
     );
   }
   return value;
+}
+
+/**
+ * `GET /v1/feasibility?entity=<key>&allow=<a,b>`: the entity is required and
+ * checked by shape, like the mint's; the names are what the mint would be
+ * asked for — absent, the report answers for the default read-only grant.
+ */
+export function readFeasibilityQuery(query: URLSearchParams): {
+  entity: string;
+  allow: readonly string[];
+} {
+  const entity = query.get("entity");
+  if (entity === null || entity.trim() === "") {
+    throw new FieldError("entity", "entity is required: ?entity=<type:name>");
+  }
+  const allow = (query.get("allow") ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  try {
+    return { entity: assertEntityKey(entity), allow };
+  } catch (err) {
+    throw new FieldError(
+      "entity",
+      err instanceof Error ? err.message : "entity is not an entity key",
+    );
+  }
 }
 
 /**

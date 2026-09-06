@@ -1,11 +1,10 @@
-import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import {
   appendEvent,
   formatEventLine,
   loadOrCreateKey,
-  loadVault,
+  openEntityGraph,
   verifyMissionToken,
   type VaultData,
 } from "@missura/core";
@@ -18,18 +17,19 @@ import {
   type ProxyServers,
   type ZendeskConnectionConfig,
 } from "@missura/proxy";
+import { connectedSystems, deploymentFeasibility, openVault } from "./deployment";
 import { ZENDESK_BASE, ZENDESK_CREDENTIAL } from "./init-zendesk";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
 import {
   githubNarrow,
+  graphResolver,
   linearNarrow,
   scopeForOperations,
-  scopeResolver,
   zendeskNarrow,
   type Resolver,
 } from "./narrow-wiring";
-import { resolveHome, type MissuraPaths } from "./paths";
+import { resolveHome } from "./paths";
 
 export interface RunOptions {
   linearPort?: number;
@@ -54,13 +54,6 @@ function credential(vault: VaultData, connection: string): string {
     );
   }
   return value;
-}
-
-function openVault(paths: MissuraPaths): VaultData {
-  if (!existsSync(paths.vaultPath)) {
-    throw new Error("vault not found — run missura init");
-  }
-  return loadVault(paths.vaultPath, loadOrCreateKey(paths.vaultKeyPath));
 }
 
 function origin(server: Server): string {
@@ -124,9 +117,8 @@ export async function runCommand(
   const paths = resolveHome(io.env);
   const vault = openVault(paths);
   const signingKey = loadOrCreateKey(paths.signingKeyPath);
-  const resolve: Resolver = scopeResolver(
-    options.entitiesPath ?? paths.entitiesPath,
-  );
+  const graph = openEntityGraph(options.entitiesPath ?? paths.entitiesPath);
+  const resolve: Resolver = graphResolver(graph);
 
   const zendesk = zendeskConnection(
     vault,
@@ -166,6 +158,9 @@ export async function runCommand(
       {
         store,
         resolve,
+        // The gap report, over the graph the mint resolves against and the
+        // connections this very boot has (M9).
+        feasibility: deploymentFeasibility(graph, connectedSystems(vault)),
         operatorKey: loadOrCreateKey(paths.operatorKeyPath),
         verifyToken: (token: string) =>
           verifyMissionToken(token, { key: signingKey }),

@@ -111,6 +111,13 @@ export function operationCatalogue(connections: {
   ];
 }
 
+/**
+ * Every operation the product knows, whether or not this deployment serves
+ * it. The gap report (M9) is computed over this one: an operation on a
+ * system nobody connected is a gap with a cause, not a name nobody knows.
+ */
+export const ALL_OPERATIONS: readonly Operation[] = operationCatalogue({ zendesk: true });
+
 function catalogueFor(config: ProxyConfig): readonly Operation[] {
   if (config.operations === undefined) return [];
   return operationCatalogue({ zendesk: config.zendesk !== undefined });

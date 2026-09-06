@@ -6,7 +6,10 @@ import {
   type ServerResponse,
 } from "node:http";
 import {
+  assertGrantable,
+  OperationGapError,
   OperationGrantError,
+  type FeasibilityReport,
   type MissionClaims,
   type MissionRecord,
   type MissionResolution,
@@ -16,6 +19,7 @@ import {
 import {
   FieldError,
   parseJson,
+  readFeasibilityQuery,
   readMissionRequest,
 } from "./operator-request";
 import { DEFAULT_GITHUB_PORT, DEFAULT_LINEAR_PORT } from "./server";
@@ -35,6 +39,13 @@ export interface OperatorDeps {
    * to use — the operator plane must not be the one path that loses it.
    */
   resolve(scope: MissionScope): MissionResolution;
+  /**
+   * The gap report for an entity under a would-be grant (M9): what it can
+   * run, and for the rest the one cause and the command that closes it. Read
+   * from the same graph `resolve` reads, over every operation the product
+   * knows. Throws on an unknown entity, like `resolve`.
+   */
+  feasibility(entity: string, allow: readonly string[]): FeasibilityReport;
   /** Compared against the presented bearer, never echoed anywhere. */
   operatorKey: Buffer;
   verifyToken(token: string): MissionClaims;
@@ -126,6 +137,18 @@ function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
       err instanceof Error ? err.message : "unresolvable scope",
     );
   }
+  // A name the entity cannot run is refused as its GAP, before the store is
+  // asked: the 400 then says which link or connection to fix, not "unknown".
+  // A name the catalogue does not hold at all is left to the store.
+  const allow = input.allow ?? [];
+  if (input.scope.entity !== undefined && allow.length > 0) {
+    try {
+      assertGrantable(deps.feasibility(input.scope.entity, allow), allow);
+    } catch (err) {
+      if (err instanceof OperationGapError) throw new FieldError("allow", err.message, err.gap);
+      throw err;
+    }
+  }
   let created: { record: MissionRecord; token: string };
   try {
     created = deps.store.create(input, resolved.scope, resolved.resolution);
@@ -191,12 +214,27 @@ function listing(deps: OperatorDeps): { missions: MissionListing[] } {
   };
 }
 
+/**
+ * The operator's whole view of an entity's reach: systems, link statuses,
+ * commands. Served here and nowhere an agent can reach, for exactly that
+ * reason. An unknown entity is the operator's field to fix, like the mint's.
+ */
+function feasibility(deps: OperatorDeps, query: URLSearchParams): FeasibilityReport {
+  const { entity, allow } = readFeasibilityQuery(query);
+  try {
+    return deps.feasibility(entity, allow);
+  } catch (err) {
+    throw new FieldError("entity", err instanceof Error ? err.message : "unresolvable entity");
+  }
+}
+
 function route(
   deps: OperatorDeps,
   method: string,
-  path: string,
+  url: URL,
   raw: string | undefined,
 ): { status: number; payload: unknown } {
+  const path = url.pathname;
   try {
     if (method === "POST" && path === "/v1/token") {
       return { status: 200, payload: mint(deps, parseJson(raw)) };
@@ -206,6 +244,9 @@ function route(
     }
     if (method === "GET" && path === "/v1/missions") {
       return { status: 200, payload: listing(deps) };
+    }
+    if (method === "GET" && path === "/v1/feasibility") {
+      return { status: 200, payload: feasibility(deps, url.searchParams) };
     }
     return { status: 404, payload: { error: { code: "missura_not_found" } } };
   } catch (err) {
@@ -217,6 +258,7 @@ function route(
             code: "missura_invalid_request",
             field: err.field,
             reason: err.message,
+            ...(err.gap === undefined ? {} : { gap: err.gap }),
           },
         },
       };
@@ -236,8 +278,9 @@ export function createOperatorServer(deps: OperatorDeps): Server {
           send(res, 401, { error: { code: "missura_unauthorized" } });
           return;
         }
-        const path = (req.url ?? "/").split("?")[0] ?? "/";
-        const out = route(deps, req.method ?? "GET", path, raw);
+        // The origin is a placeholder: only the path and the query are read.
+        const url = new URL(req.url ?? "/", "http://operator.invalid");
+        const out = route(deps, req.method ?? "GET", url, raw);
         send(res, out.status, out.payload);
       } catch {
         send(res, 500, { error: { code: "missura_internal" } });

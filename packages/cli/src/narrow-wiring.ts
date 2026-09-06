@@ -2,8 +2,8 @@ import { narrowGithub as narrowGithubPath } from "@missura/connectors-github";
 import { narrowLinear as narrowLinearBody } from "@missura/connectors-linear";
 import { narrowZendesk as narrowZendeskPath } from "@missura/connectors-zendesk";
 import {
-  openEntityGraph,
   resolveMissionScope,
+  type EntityGraphReader,
   type MissionResolution,
   type MissionScope,
   type ResolvedScope,
@@ -15,15 +15,15 @@ export type Resolver = (scope: MissionScope) => MissionResolution;
 const UNRESOLVED = "mission scope no longer resolves to an entity";
 
 /**
- * The entity graph is read once, at boot: a proxy must not re-read a file on
- * the hot path, and an operator editing `entities.json` under a running proxy
- * is making a policy change — it takes a restart, deliberately.
+ * The entity graph is read once, at boot (`openEntityGraph` in `run.ts`): a
+ * proxy must not re-read a file on the hot path, and an operator editing
+ * `entities.json` under a running proxy is making a policy change — it takes
+ * a restart, deliberately.
  *
  * One resolver for the data planes and the operator plane, so a mission minted
  * on 8480 is enforced against the very graph that admitted it.
  */
-export function scopeResolver(entitiesPath: string): Resolver {
-  const graph = openEntityGraph(entitiesPath);
+export function graphResolver(graph: EntityGraphReader): Resolver {
   return (scope: MissionScope): MissionResolution =>
     resolveMissionScope(graph, scope);
 }
