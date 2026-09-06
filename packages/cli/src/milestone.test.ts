@@ -5,9 +5,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupHomes,
+  GITHUB_TOKEN,
   initedHarness,
+  LINEAR_KEY,
   writeEntityGraph,
+  ZENDESK_EMAIL,
   ZENDESK_INIT_ENV,
+  ZENDESK_TOKEN,
   type Harness,
 } from "./harness.fixtures";
 import { run } from "./index";
@@ -65,6 +69,12 @@ const status = async (url, init) => (await fetch(url, init)).status;
 interface Call {
   url: string;
   body: string;
+  authorization: string;
+}
+
+function authorizationOf(init: RequestInit | undefined): string {
+  const headers = new Headers(init?.headers ?? {});
+  return headers.get("authorization") ?? "";
 }
 
 function requestUrl(input: RequestInfo | URL): string {
@@ -83,6 +93,7 @@ function stubFetch(calls: Call[]): typeof fetch {
     calls.push({
       url,
       body: typeof init?.body === "string" ? init.body : "",
+      authorization: authorizationOf(init),
     });
     const body = url.includes("/api/v2/")
       ? '{"tickets":[]}'
@@ -194,6 +205,20 @@ describe("M5 — one entity key, every confirmed system, through the graph", () 
       expect(calls[0]?.body).toContain("c_18");
       expect(calls[1]?.url).toContain("/repos/acme-corp/product");
       expect(calls[2]?.url).toContain("/api/v2/organizations/4200/tickets");
+
+      // And each one carried its OWN vendor's credential, taken from the vault
+      // `missura init` wrote — the Zendesk call in particular, whose whole
+      // credential path (subdomain, agent email, API token, Basic header) had
+      // no caller before this milestone.
+      expect(calls[2]?.authorization).toBe(
+        `Basic ${Buffer.from(`${ZENDESK_EMAIL}/token:${ZENDESK_TOKEN}`, "utf8").toString("base64")}`,
+      );
+      expect(calls[1]?.authorization).toBe(`Bearer ${GITHUB_TOKEN}`);
+      expect(calls[0]?.authorization).toBe(LINEAR_KEY);
+      // The mission token is the agent's, and it never travels to a vendor.
+      const missionToken = readFileSync(join(h.home, "proof.json"), "utf8");
+      expect(missionToken).not.toContain(ZENDESK_TOKEN);
+      for (const call of calls) expect(call.authorization).not.toMatch(/msr_/);
     } finally {
       await servers.close();
     }
