@@ -1,6 +1,4 @@
 import { readFileSync } from "node:fs";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -8,14 +6,18 @@ import {
   GITHUB_TOKEN,
   initedHarness,
   LINEAR_KEY,
-  writeEntityGraph,
   ZENDESK_EMAIL,
   ZENDESK_INIT_ENV,
   ZENDESK_TOKEN,
-  type Harness,
 } from "./harness.fixtures";
-import { run } from "./index";
-import { runCommand, type RunningProxy } from "./run";
+import {
+  boot,
+  childM5,
+  events,
+  exec,
+  missions,
+  type Call,
+} from "./milestone.fixtures";
 
 /**
  * THE M5 PROOF, end to end and through the CLI a human actually types.
@@ -33,100 +35,6 @@ import { runCommand, type RunningProxy } from "./run";
  * by name — a bad inference costs reach, never somebody else's data.
  */
 
-/**
- * What the child does with the mission it was handed: one call per vendor, in
- * each vendor's own SDK-shaped spelling, and a record of what it is holding.
- */
-function child(repo: string, organization: string): string {
-  return `
-const fs = require("node:fs");
-const auth = { authorization: "Bearer " + process.env.MISSION_TOKEN };
-const status = async (url, init) => (await fetch(url, init)).status;
-(async () => {
-  const out = {
-    holdsToken: (process.env.MISSION_TOKEN ?? "").startsWith("msr_"),
-    holdsVendorKeys: ["LINEAR_API_KEY", "GITHUB_TOKEN", "ZENDESK_API_TOKEN"]
-      .filter((n) => (process.env[n] ?? "").length > 0),
-    linear: await status(process.env.LINEAR_API_URL, {
-      method: "POST",
-      headers: { ...auth, "content-type": "application/json" },
-      body: JSON.stringify({ query: "{ issues { nodes { id } } }" }),
-    }),
-    github: await status(process.env.GITHUB_API_URL + "/repos/${repo}", {
-      headers: auth,
-    }),
-    zendesk: await status(
-      process.env.ZENDESK_API_URL +
-        "/api/v2/organizations/${organization}/tickets.json",
-      { headers: auth },
-    ),
-    // What the mission says it is, asked the way an agent would: the URL
-    // from the environment, the token it already holds.
-    mission: await (
-      await fetch(process.env.MISSURA_MISSION_URL, { headers: auth })
-    ).json(),
-  };
-  fs.writeFileSync(process.env.MISSURA_HOME + "/proof.json", JSON.stringify(out));
-})();
-`;
-}
-
-interface Call {
-  url: string;
-  body: string;
-  authorization: string;
-}
-
-function authorizationOf(init: RequestInit | undefined): string {
-  const headers = new Headers(init?.headers ?? {});
-  return headers.get("authorization") ?? "";
-}
-
-function requestUrl(input: RequestInfo | URL): string {
-  if (typeof input === "string") return input;
-  return input instanceof URL ? input.href : input.url;
-}
-
-/**
- * One double for the three vendors, answering each in its own envelope: the
- * proxy's FILTER reads the body, so a GraphQL answer handed to Zendesk would
- * fail closed and the proof would prove nothing.
- */
-function stubFetch(calls: Call[]): typeof fetch {
-  return (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = requestUrl(input);
-    calls.push({
-      url,
-      body: typeof init?.body === "string" ? init.body : "",
-      authorization: authorizationOf(init),
-    });
-    const body = url.includes("/api/v2/")
-      ? '{"tickets":[]}'
-      : JSON.stringify({ data: { issues: { nodes: [] } } });
-    return Promise.resolve(
-      new Response(body, {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-  };
-}
-
-function port(server: Server): string {
-  return String((server.address() as AddressInfo).port);
-}
-
-async function boot(h: Harness, calls: Call[]): Promise<RunningProxy> {
-  writeEntityGraph(h);
-  return runCommand(h.io, {
-    linearPort: 0,
-    githubPort: 0,
-    zendeskPort: 0,
-    operatorPort: 0,
-    fetchImpl: stubFetch(calls),
-  });
-}
-
 interface Proof {
   holdsToken: boolean;
   holdsVendorKeys: string[];
@@ -134,55 +42,6 @@ interface Proof {
   github: number;
   zendesk: number;
   mission: Record<string, unknown>;
-}
-
-async function exec(
-  h: Harness,
-  servers: RunningProxy,
-  entity: string,
-  target: { repo: string; organization: string },
-): Promise<Proof> {
-  const zendesk = servers.zendesk;
-  if (zendesk === undefined) throw new Error("no zendesk listener was booted");
-  const code = await run(
-    [
-      "exec",
-      "--entity",
-      entity,
-      "--ttl",
-      "30m",
-      "--purpose",
-      "m5 proof",
-      "--linear-port",
-      port(servers.linear),
-      "--github-port",
-      port(servers.github),
-      "--zendesk-port",
-      port(zendesk),
-      "--",
-      process.execPath,
-      "-e",
-      child(target.repo, target.organization),
-    ],
-    h.io,
-  );
-  expect(code.code).toBe(0);
-  return JSON.parse(readFileSync(join(h.home, "proof.json"), "utf8")) as Proof;
-}
-
-interface Recorded {
-  scope: { entity?: string };
-  resolution?: {
-    entityKey?: string;
-    degraded: { system: string; reason: string; id: string }[];
-  };
-}
-
-function missions(h: Harness): Recorded[] {
-  const state = JSON.parse(
-    readFileSync(join(h.home, "missions.json"), "utf8"),
-  ) as { missions: Recorded[] };
-  return state.missions;
 }
 
 afterEach(cleanupHomes);
@@ -194,10 +53,12 @@ describe("M5 — one entity key, every confirmed system, through the graph", () 
     const servers = await boot(h, calls);
 
     try {
-      const proof = await exec(h, servers, "customer:acme", {
-        repo: "acme-corp/product",
-        organization: "4200",
-      });
+      const proof = await exec<Proof>(
+        h,
+        servers,
+        "customer:acme",
+        childM5("acme-corp/product", "4200"),
+      );
 
       expect(proof.holdsToken).toBe(true);
       // The red line: three vendors reached, no vendor credential in the child.
@@ -236,10 +97,12 @@ describe("M5 — one entity key, every confirmed system, through the graph", () 
     const servers = await boot(h, calls);
 
     try {
-      const proof = await exec(h, servers, "customer:zoetis", {
-        repo: "acme-corp/zoetis",
-        organization: "4300",
-      });
+      const proof = await exec<Proof>(
+        h,
+        servers,
+        "customer:zoetis",
+        childM5("acme-corp/zoetis", "4300"),
+      );
 
       // The two confirmed systems are reached; Linear is refused on the
       // connection check, before anything is asked of the vendor.
@@ -275,10 +138,12 @@ describe("M6 — the agent can ask what it is, and is told what it is not", () =
     const servers = await boot(h, []);
 
     try {
-      const { mission } = await exec(h, servers, "customer:zoetis", {
-        repo: "acme-corp/zoetis",
-        organization: "4300",
-      });
+      const { mission } = await exec<Proof>(
+        h,
+        servers,
+        "customer:zoetis",
+        childM5("acme-corp/zoetis", "4300"),
+      );
 
       expect(mission).toMatchObject({
         entity: "customer:zoetis",
@@ -298,6 +163,160 @@ describe("M6 — the agent can ask what it is, and is told what it is not", () =
         "systems",
       ]);
       expect(JSON.stringify(mission)).not.toContain("c_77");
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+});
+
+/**
+ * THE M7 PROOF: missura executing an operation is not missura bypassing
+ * itself. The child asks for the entity's tickets by NAME, and the vendor
+ * double sees the very call the raw path makes — same org-scoped route, same
+ * vault credential — with the decision log naming both. A mission that lacks
+ * Linear asking for the Linear operation gets the raw GraphQL refusal, byte
+ * for byte, and is never told the operation exists.
+ */
+interface Answer {
+  status: number;
+  body: string;
+  headers: Record<string, string | null>;
+}
+
+interface ProofM7 {
+  raw: Answer;
+  op: Answer;
+  linearOp: Answer;
+  linearRaw: Answer;
+  mission: { operations: { name: string; effect: string }[] };
+}
+
+/** The same ticket list, asked raw and asked as an operation; then Linear both ways. */
+function childM7(organization: string): string {
+  return `
+const fs = require("node:fs");
+const auth = { authorization: "Bearer " + process.env.MISSION_TOKEN };
+const call = async (url, init) => {
+  const r = await fetch(url, init);
+  return {
+    status: r.status,
+    body: await r.text(),
+    headers: {
+      "content-type": r.headers.get("content-type"),
+      "missura-reduced": r.headers.get("missura-reduced"),
+    },
+  };
+};
+(async () => {
+  const zd = process.env.ZENDESK_API_URL;
+  const out = {
+    raw: await call(zd + "/api/v2/organizations/${organization}/tickets.json", { headers: auth }),
+    op: await call(zd + "/missura/op/zendesk.tickets.for_entity", { method: "POST", headers: auth }),
+    linearOp: await call(process.env.GITHUB_API_URL + "/missura/op/linear.issues.for_entity", {
+      method: "POST",
+      headers: auth,
+    }),
+    linearRaw: await call(process.env.LINEAR_API_URL, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ query: "{ issues { nodes { id } } }" }),
+    }),
+    mission: await (await fetch(process.env.MISSURA_MISSION_URL, { headers: auth })).json(),
+  };
+  fs.writeFileSync(process.env.MISSURA_HOME + "/proof.json", JSON.stringify(out));
+})();
+`;
+}
+
+/** A refusal body with its clock taken out, and the clock on its own. */
+function unclocked(body: string): { rest: string; expiresIn: number } {
+  const parsed = JSON.parse(body) as {
+    errors: { extensions: { missura: { mission: { expires_in: number } } } }[];
+  };
+  const mission = parsed.errors[0]?.extensions.missura.mission;
+  if (mission === undefined) throw new Error("no missura block in the refusal");
+  const expiresIn = mission.expires_in;
+  mission.expires_in = 0;
+  return { rest: JSON.stringify(parsed), expiresIn };
+}
+
+describe("M7 — an operation runs through the same pipeline as a raw call", () => {
+  it("asks the vendor exactly what the raw path asks, and logs it under the operation", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const proof = await exec<ProofM7>(h, servers, "customer:acme", childM7("4200"));
+
+      expect(proof.raw.status).toBe(200);
+      expect(proof.op.status).toBe(200);
+      expect(JSON.parse(proof.op.body)).toEqual({
+        operation: "zendesk.tickets.for_entity",
+        effect: "read",
+        results: [{ tickets: [] }],
+      });
+
+      // 1. The vendor double received the raw call and the operation's inner
+      // call as the SAME call: org-scoped route, vault credential, no token.
+      const [raw, inner] = calls;
+      expect(inner).toEqual(raw);
+      expect(inner?.url).toContain("/api/v2/organizations/4200/tickets");
+      expect(inner?.authorization).toBe(
+        `Basic ${Buffer.from(`${ZENDESK_EMAIL}/token:${ZENDESK_TOKEN}`, "utf8").toString("base64")}`,
+      );
+      expect(inner?.authorization).not.toMatch(/msr_/);
+
+      // 2. The inner call is a decision of its own, attributed to the mission
+      // and naming the operation it served — beside the route it cost.
+      const record = missions(h).at(-1);
+      const served = events(h).filter(
+        (ev) => ev.viaOperation === "zendesk.tickets.for_entity",
+      );
+      expect(served).toContainEqual(
+        expect.objectContaining({
+          provider: "zendesk",
+          operation: "organizations.tickets.list",
+          action: "read",
+          decision: "allow",
+          missionId: record?.id,
+        }),
+      );
+
+      // 4. Introspection lists the three operations this whole mission runs.
+      expect(proof.mission.operations).toEqual([
+        { name: "linear.issues.for_entity", effect: "read" },
+        { name: "github.issues.for_entity", effect: "read" },
+        { name: "zendesk.tickets.for_entity", effect: "read" },
+      ]);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("refuses an operation on a degraded connector with the raw call's own bytes", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const proof = await exec<ProofM7>(h, servers, "customer:zoetis", childM7("4300"));
+
+      // 3. Status, body and the missura-relevant headers, equal. The clock is
+      // the one field two calls a moment apart may not share.
+      expect(proof.linearOp.status).toBe(403);
+      expect(proof.linearOp.status).toBe(proof.linearRaw.status);
+      expect(proof.linearOp.headers).toEqual(proof.linearRaw.headers);
+      const op = unclocked(proof.linearOp.body);
+      const raw = unclocked(proof.linearRaw.body);
+      expect(op.rest).toBe(raw.rest);
+      expect(Math.abs(op.expiresIn - raw.expiresIn)).toBeLessThanOrEqual(1);
+      expect(proof.linearOp.body).toContain("missura_connection_not_in_mission");
+      expect(calls.map((c) => c.url).some((u) => u.includes("graphql"))).toBe(false);
+
+      // 4. Two operations listed, and the Linear one is not named anywhere.
+      expect(proof.mission.operations).toHaveLength(2);
+      expect(JSON.stringify(proof.mission.operations)).not.toContain("linear");
     } finally {
       await servers.close();
     }

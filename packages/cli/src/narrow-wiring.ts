@@ -47,6 +47,18 @@ function resolved(
   }
 }
 
+/**
+ * What the operation executor plans from: the SAME resolution the three
+ * NARROWs below run, on the same graph. A plan built from one reading and
+ * checked against another would be a way for the two to disagree about what
+ * the mission covers — this is one function so they cannot.
+ */
+export function scopeForOperations(
+  resolve: Resolver,
+): (scope: MissionScope) => ResolvedScope | undefined {
+  return (scope) => resolved(resolve, scope);
+}
+
 export function linearNarrow(resolve: Resolver): NarrowFn {
   return (req, claims): NarrowResult => {
     const scope = resolved(resolve, claims.scope);

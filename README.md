@@ -56,6 +56,16 @@ class — never the id somebody proposed. A response the proxy filtered or
 refilled carries one boolean (`extensions.missura.reduced` on GraphQL,
 `missura-reduced` on REST) and no count of what was removed.
 
+**Missura running something for the agent is not missura bypassing itself.**
+`POST /missura/op/<name>` with the mission token runs a named read
+(`zendesk.tickets.for_entity`, `linear.issues.for_entity`,
+`github.issues.for_entity`) and every vendor call it costs re-enters the same
+pipeline a raw request goes through — same catalog, same narrowing, same
+filter, same refusals, one decision event each, marked with the operation it
+served. An operation on a connector the mission lacks is refused with the raw
+call's own bytes, and introspection lists only the operations the mission can
+run.
+
 ## What `exec` does and does not protect
 
 `missura exec` removes `LINEAR_API_KEY`, `GITHUB_TOKEN`, `ZENDESK_API_TOKEN`

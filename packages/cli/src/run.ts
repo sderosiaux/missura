@@ -23,6 +23,7 @@ import { openStore } from "./missions";
 import {
   githubNarrow,
   linearNarrow,
+  scopeForOperations,
   scopeResolver,
   zendeskNarrow,
   type Resolver,
@@ -150,6 +151,9 @@ export async function runCommand(
       ...(options.githubPort === undefined ? {} : { port: options.githubPort }),
     },
     ...(zendesk === undefined ? {} : { zendesk }),
+    // Operations plan from the resolver the NARROWs enforce with: one graph,
+    // one reading of it.
+    operations: { resolveScope: scopeForOperations(resolve) },
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
   });
 
