@@ -49,6 +49,13 @@ confirmed by a human, that system is simply not in the mission and the agent is
 told which ones are missing. A ticket arriving at 3am does not wait for someone
 to approve a mapping.
 
+**The agent is told what it is, and when its view was cut.** `GET
+/missura/mission` with the mission token (the URL is in `MISSURA_MISSION_URL`
+under `exec`) lists the systems in the mission and the ones left out, by reason
+class — never the id somebody proposed. A response the proxy filtered or
+refilled carries one boolean (`extensions.missura.reduced` on GraphQL,
+`missura-reduced` on REST) and no count of what was removed.
+
 ## What `exec` does and does not protect
 
 `missura exec` removes `LINEAR_API_KEY`, `GITHUB_TOKEN`, `ZENDESK_API_TOKEN`
