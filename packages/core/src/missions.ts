@@ -1,6 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
+  approvalState,
+  mergeApprovals,
+  type ApprovalDecision,
+  type ApprovalRecord,
+  type ApprovalRequest,
+} from "./approvals";
+import {
   fileStamp,
   parseState,
   writeState,
@@ -91,6 +98,8 @@ export class MissionStore {
    */
   private readonly catalogue: readonly Operation[];
   private records: MissionRecord[];
+  /** The approvals hanging on those missions (M10). Merged forward-only. */
+  private approvals: ApprovalRecord[] = [];
   /** jti → revocation time. Entries are added, never removed. */
   private readonly revoked = new Map<string, number>();
   /** The file's stamp as of the last successful read or write. */
@@ -136,6 +145,9 @@ export class MissionStore {
       if (revokedAt !== undefined) record.revokedAt = revokedAt;
     }
     this.records = state.missions;
+    // Forward-only: a file that reads as "approved" cannot take back a
+    // consumption this process already recorded (`mergeApprovals`).
+    this.approvals = mergeApprovals(state.approvals, this.approvals);
   }
 
   /** The file as it stands, or nothing at all when it cannot be read. */
@@ -143,7 +155,7 @@ export class MissionStore {
     try {
       return parseState(readFileSync(this.stateFile, "utf8"));
     } catch {
-      return { missions: [], revoked: [] };
+      return { missions: [], revoked: [], approvals: [] };
     }
   }
 
@@ -288,6 +300,120 @@ export class MissionStore {
   }
 
   /**
+   * The mission an approval hangs on, live. Unknown, revoked and expired each
+   * refuse by name: an approval is exactly as alive as its mission, and a
+   * caller must never be able to use one past the grant it was asked under.
+   */
+  private liveMission(missionId: string, now: number): MissionRecord {
+    const record = this.records.find((m) => m.id === missionId);
+    if (record === undefined) throw new Error(`unknown mission: ${missionId}`);
+    if (record.revokedAt !== undefined || this.revoked.has(record.jti)) {
+      throw new Error(`mission ${missionId} is revoked`);
+    }
+    if (record.expiresAt <= Math.floor(now / 1000)) {
+      throw new Error(`mission ${missionId} has expired`);
+    }
+    return record;
+  }
+
+  private approvalById(id: string): ApprovalRecord {
+    const approval = this.approvals.find((a) => a.id === id);
+    if (approval === undefined) throw new Error(`unknown approval: ${id}`);
+    return approval;
+  }
+
+  /**
+   * Writes an approval down, pending, on a live mission: what was asked and
+   * the exact inner call(s) that would go (M10). Nothing runs here.
+   */
+  requestApproval(
+    missionId: string,
+    request: ApprovalRequest,
+    now: number = Date.now(),
+  ): ApprovalRecord {
+    this.refresh();
+    this.liveMission(missionId, now);
+    const approval: ApprovalRecord = {
+      operation: request.operation,
+      params: { ...request.params },
+      planned: request.planned.map((step) => ({ ...step })),
+      id: `apr_${randomBytes(8).toString("hex")}`,
+      missionId,
+      requestedAt: Math.floor(now / 1000),
+    };
+    this.approvals.push(approval);
+    this.persist();
+    return approval;
+  }
+
+  /**
+   * THIS mission's approval by id, while the mission lives — `undefined` for
+   * another mission's id, an id that never existed, and a mission that is
+   * gone, all alike: the data plane must not be able to tell them apart.
+   */
+  approvalFor(
+    missionId: string,
+    id: string,
+    now: number = Date.now(),
+  ): ApprovalRecord | undefined {
+    this.refresh();
+    const approval = this.approvals.find((a) => a.id === id && a.missionId === missionId);
+    if (approval === undefined) return undefined;
+    try {
+      this.liveMission(missionId, now);
+    } catch {
+      return undefined;
+    }
+    return approval;
+  }
+
+  /** What the operator has to decide: pending, on missions still live. */
+  pendingApprovals(now: number = Date.now()): ApprovalRecord[] {
+    this.refresh();
+    const live = new Set(this.active(now).map((m) => m.id));
+    return this.approvals.filter(
+      (a) => approvalState(a) === "pending" && live.has(a.missionId),
+    );
+  }
+
+  /**
+   * Records a human's decision — and only records it. Once: a decision is
+   * not something a second operator gets to flip, in either direction.
+   */
+  decideApproval(
+    id: string,
+    decision: ApprovalDecision,
+    actor: string,
+    now: number = Date.now(),
+  ): ApprovalRecord {
+    this.refresh();
+    const approval = this.approvalById(id);
+    requireText("actor", actor);
+    this.liveMission(approval.missionId, now);
+    const state = approvalState(approval);
+    if (state !== "pending") throw new Error(`approval ${id} is already ${state}`);
+    approval.decision = { decision, actor, at: Math.floor(now / 1000) };
+    this.persist();
+    return approval;
+  }
+
+  /**
+   * Spends an approved approval, at most once. Called BEFORE the call leaves,
+   * so a request racing this one finds it consumed rather than approved — a
+   * failed vendor call then costs a new approval, which is the safe side.
+   */
+  consumeApproval(id: string, now: number = Date.now()): ApprovalRecord {
+    this.refresh();
+    const approval = this.approvalById(id);
+    this.liveMission(approval.missionId, now);
+    const state = approvalState(approval);
+    if (state !== "approved") throw new Error(`approval ${id} is ${state}, not approved`);
+    approval.consumedAt = Math.floor(now / 1000);
+    this.persist();
+    return approval;
+  }
+
+  /**
    * Writes the whole file, so it first merges what the file holds.
    *
    * `refresh` is a read optimisation guarded by a stat, not a lock: the file
@@ -313,11 +439,16 @@ export class MissionStore {
     const byId = new Map<string, MissionRecord>();
     for (const record of disk.missions) byId.set(record.id, record);
     for (const record of this.records) byId.set(record.id, record);
-    this.adopt({ missions: [...byId.values()], revoked: [] });
+    this.adopt({
+      missions: [...byId.values()],
+      revoked: [],
+      approvals: mergeApprovals(disk.approvals, this.approvals),
+    });
 
     writeState(this.stateFile, {
       missions: this.records,
       revoked: [...this.revoked].map(([jti, revokedAt]) => ({ jti, revokedAt })),
+      approvals: this.approvals,
     });
     // Our own write is not a change to react to; anyone else's still is.
     this.stamp = fileStamp(this.stateFile);

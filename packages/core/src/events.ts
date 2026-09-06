@@ -11,7 +11,11 @@ import { redactDegradation, redactLinkUse } from "./scope-provenance";
  * until a mission is minted against it.
  */
 export type Provider = LinkSystem;
-export type Decision = "allow" | "deny";
+/**
+ * `pending` is the third verdict (M10): the request was proven and refused
+ * nothing, and it still ran nothing — an approval is waiting on a human.
+ */
+export type Decision = "allow" | "deny" | "pending";
 
 export interface DecisionEvent {
   ts: string;
@@ -34,6 +38,11 @@ export interface DecisionEvent {
    * the log reads both as what was asked and as what it cost.
    */
   viaOperation?: string;
+  /**
+   * The approval an operation opened (`pending`) or ran under (`allow`), so
+   * the log reads from the request to the human's decision to the one run.
+   */
+  approvalId?: string;
   /**
    * How many objects the response FILTER removed (dropped from a list or
    * nulled). Absent when no filter plan ran; `0` when one ran and found the
@@ -75,6 +84,7 @@ const SERIALIZED_FIELDS = [
   "purpose",
   "traceId",
   "viaOperation",
+  "approvalId",
   "objectsRemoved",
   "scopeVia",
   "scopeEntity",

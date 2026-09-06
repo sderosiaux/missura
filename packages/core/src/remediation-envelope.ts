@@ -29,6 +29,8 @@ const LINEAR_ERROR_TYPE: Record<DenialCode, string> = {
   missura_response_too_large: "Forbidden",
   missura_upstream_error: "NetworkError",
   missura_internal: "InternalError",
+  missura_approval_unknown: "Forbidden",
+  missura_approval_refused: "Forbidden",
 };
 
 /**

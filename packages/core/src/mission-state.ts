@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { parseApprovals, type ApprovalRecord } from "./approvals";
 import { SECRET_FILE_MODE } from "./keys";
 import type { MissionRecord } from "./missions";
 
@@ -24,6 +25,8 @@ export interface RevocationEntry {
 export interface StateFile {
   missions: MissionRecord[];
   revoked: RevocationEntry[];
+  /** The pending and decided approvals, beside the missions they hang on (M10). */
+  approvals: ApprovalRecord[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,6 +87,7 @@ export function parseState(raw: string): StateFile {
   return {
     missions: parseMissions(parsed.missions),
     revoked: parseRevoked(parsed.revoked),
+    approvals: parseApprovals(parsed.approvals),
   };
 }
 

@@ -25,7 +25,11 @@ export type DenialCode =
   | "missura_request_too_large"
   | "missura_response_too_large"
   | "missura_upstream_error"
-  | "missura_internal";
+  | "missura_internal"
+  /** No approval by that id on THIS mission — another mission's and none at all read alike. */
+  | "missura_approval_unknown"
+  /** The approval exists on this mission and cannot run this request: not approved, spent, or for something else. */
+  | "missura_approval_refused";
 
 /** The mission as the agent may be told about it — its own grant, nothing else. */
 export interface MissionSummary {

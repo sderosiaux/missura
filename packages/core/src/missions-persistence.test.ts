@@ -67,7 +67,7 @@ describe("mission store — a write must not erase another writer's record", () 
     const before = statSync(path);
     writeFileSync(
       path,
-      JSON.stringify({ missions: [twin(mine, "zzzzz")], revoked: [] }),
+      JSON.stringify({ missions: [twin(mine, "zzzzz")], revoked: [], approvals: [] }),
       "utf8",
     );
     utimesSync(path, pinned, pinned);

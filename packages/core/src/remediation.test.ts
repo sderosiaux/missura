@@ -61,6 +61,8 @@ describe("buildDenial", () => {
       "missura_response_too_large",
       "missura_upstream_error",
       "missura_internal",
+      "missura_approval_unknown",
+      "missura_approval_refused",
     ] as const;
     for (const code of codes) {
       const denial = buildDenial({
@@ -76,6 +78,19 @@ describe("buildDenial", () => {
       expect(denial.remediation.length, code).toBeGreaterThan(20);
       expect(Array.isArray(denial.try_instead), code).toBe(true);
       expect(denial.introspect.length, code).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * The two approval refusals (M10) point at the approval flow — poll, then
+   * re-request with the id — and suggest no vendor shape: a read would not
+   * be what the agent was trying to do.
+   */
+  it("points an approval refusal at the approval route, with no vendor shape", () => {
+    for (const code of ["missura_approval_unknown", "missura_approval_refused"] as const) {
+      const denial = buildDenial({ code, reason: "r", provider: "github", claims: CLAIMS, now: NOW });
+      expect(denial.remediation, code).toContain("/missura/approvals/");
+      expect(denial.try_instead, code).toEqual([]);
     }
   });
 

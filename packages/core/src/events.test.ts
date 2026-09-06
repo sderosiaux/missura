@@ -141,6 +141,23 @@ describe("decision events", () => {
     expect(parsed.viaOperation).toBe("zendesk.tickets.for_entity");
   });
 
+  /**
+   * An operation that waits on a human is a third decision, not an allow
+   * and not a deny (M10): the record says `pending` and names the approval,
+   * so the log reads from the request to the decision to the one run.
+   */
+  it("serializes a pending decision with the approval it opened", () => {
+    const dir = tmpDir();
+    appendEvent(dir, { ...EVENT, decision: "pending", approvalId: "apr_0123456789abcdef" });
+    const parsed = JSON.parse(
+      readFileSync(join(dir, "2026-08-14.jsonl"), "utf8").trimEnd(),
+    ) as DecisionEvent;
+
+    expect(parsed.decision).toBe("pending");
+    expect(parsed.approvalId).toBe("apr_0123456789abcdef");
+    expect(formatEventLine(parsed)).toContain("PENDING");
+  });
+
   it("omits the removal count when no filter ran", () => {
     const dir = tmpDir();
     appendEvent(dir, EVENT);

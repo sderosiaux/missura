@@ -159,6 +159,12 @@ export function remediationFor(code: DenialCode, ctx: Ctx): string {
       return `the vendor could not be reached, so no decision about your mission was involved. Retry with backoff; if it persists, tell the operator — this is not something the request can fix.`;
     case "missura_internal":
       return `missura failed while deciding this request and fails closed rather than forwarding it. Retry once; if it persists, tell the operator — nothing about the request is at fault.`;
+    // Neither says whether the id exists for someone else: an approval is
+    // this mission's or it is nothing.
+    case "missura_approval_unknown":
+      return `no approval by that id is on this mission. An approval is opened by requesting the operation without one — the \`202\` answer carries its id — and its state is read at \`GET /missura/approvals/<id>\` with the same bearer.`;
+    case "missura_approval_refused":
+      return `this approval cannot run this request — \`reason\` says why: it is not approved yet, it was denied, it has already run, or it was opened for a different operation or parameters. Poll \`GET /missura/approvals/<id>\` and re-request the SAME operation with the SAME parameters plus \`approval: <id>\` once it reads \`approved\`; anything else needs a new approval.`;
   }
 }
 
@@ -195,6 +201,10 @@ export function tryInsteadFor(code: DenialCode, ctx: Ctx): readonly string[] {
     // a vendor shape here would send the agent off the operation it wanted.
     case "missura_operation_unknown":
     case "missura_invalid_parameters":
+    // The alternative is the approval route, named in the remediation; a
+    // read shape would send the agent off the write it was waiting on.
+    case "missura_approval_unknown":
+    case "missura_approval_refused":
       return [];
     case "missura_request_too_large":
     case "missura_response_too_large":

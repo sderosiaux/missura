@@ -1,3 +1,4 @@
+export * from "./approvals";
 export * from "./catalog";
 export * from "./cursor";
 export * from "./entity-graph";
