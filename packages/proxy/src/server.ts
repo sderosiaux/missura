@@ -95,17 +95,25 @@ export interface ProxyServers {
 
 
 /**
- * The operations this proxy can run: each connector's own, for the connectors
- * that have a listener. A Zendesk operation on a proxy without a Zendesk
- * connection is not "unavailable to this mission" — it does not exist here.
+ * The operations a proxy with these connections can run: each connector's
+ * own, for the connectors that have a listener. A Zendesk operation on a
+ * proxy without a Zendesk connection is not "unavailable to this mission" —
+ * it does not exist here. Exported so a mint validates a name-grant against
+ * the same list the proxy serves (`MissionStore`).
  */
-function catalogueFor(config: ProxyConfig): readonly Operation[] {
-  if (config.operations === undefined) return [];
+export function operationCatalogue(connections: {
+  zendesk: boolean;
+}): readonly Operation[] {
   return [
     ...LINEAR_OPERATIONS,
     ...GITHUB_OPERATIONS,
-    ...(config.zendesk === undefined ? [] : ZENDESK_OPERATIONS),
+    ...(connections.zendesk ? ZENDESK_OPERATIONS : []),
   ];
+}
+
+function catalogueFor(config: ProxyConfig): readonly Operation[] {
+  if (config.operations === undefined) return [];
+  return operationCatalogue({ zendesk: config.zendesk !== undefined });
 }
 
 /**
@@ -217,7 +225,9 @@ export async function createServers(
           "github",
           config,
           config.github,
-          (req): CatalogDecision => decideGithub(req.method, req.path),
+          // The origin travels: the one write route opens only under `via`,
+          // which the executor sets in-process and the listener never does.
+          (req): CatalogDecision => decideGithub(req.method, req.path, req.via),
           DEFAULT_GITHUB_UPSTREAM,
           operations,
         ),

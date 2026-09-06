@@ -1,10 +1,16 @@
+import {
+  decideGithub,
+  issueCommentCreate,
+  narrowGithub,
+} from "@missura/connectors-github";
 import type {
+  CatalogDecision,
   MissionClaims,
   Operation,
   OperationStep,
   ResolvedScope,
 } from "@missura/core";
-import type { NarrowFn } from "./narrow";
+import type { NarrowFn, NarrowResult } from "./narrow";
 import type { OperationsDeps } from "./operations";
 import { OPERATION_ROUTE } from "./operations";
 import {
@@ -58,6 +64,67 @@ export const LINEAR_ISSUES: Operation = {
 };
 
 export const CATALOGUE: readonly Operation[] = [GITHUB_ISSUES, LINEAR_ISSUES];
+
+/**
+ * The write (M8): the SHIPPED operation, not a stand-in — the proof is that
+ * the real plan's step is decided by the real catalog and the real NARROW.
+ */
+export const GITHUB_COMMENT: Operation = issueCommentCreate;
+
+/** A mission that names the write, the only way a mission reaches one. */
+export const GRANTED: MissionClaims = {
+  ...CLAIMS,
+  allow: ["read", GITHUB_COMMENT.name],
+};
+
+/** The write's own parameters, aimed at a repository the scope covers. */
+export const COMMENT_PARAMS = {
+  repo: "acme-corp/product",
+  issue: 7,
+  body: "Tracked in Linear — thanks.",
+};
+
+/**
+ * The rig for the write: the GitHub listener runs the shipped catalog and the
+ * shipped NARROW over the fixed scope, so a POST is decided exactly as the
+ * CLI-wired proxy decides it. The linear listener stays the M7 stand-in.
+ */
+export function writeRig(claims: MissionClaims = GRANTED): Rig {
+  const github = harness({
+    provider: "github",
+    verifyToken: (): MissionClaims => claims,
+    decide: (req): CatalogDecision => decideGithub(req.method, req.path, req.via),
+    narrow: (req): NarrowResult =>
+      narrowGithub(
+        req.path,
+        { githubRepos: SCOPE.githubRepos },
+        { method: req.method, ...(req.via === undefined ? {} : { via: req.via }) },
+      ),
+    now: () => NOW,
+  });
+  const linear = harness({
+    provider: "linear",
+    verifyToken: (): MissionClaims => claims,
+    now: () => NOW,
+  });
+  const operations: OperationsDeps = {
+    catalogue: [...CATALOGUE, GITHUB_COMMENT],
+    resolveScope: (): ResolvedScope => SCOPE,
+    pipelineFor: (connector) => {
+      if (connector === "github") return github.deps;
+      return connector === "linear" ? linear.deps : undefined;
+    },
+  };
+  github.deps.operations = operations;
+  linear.deps.operations = operations;
+  const outer = harness({
+    provider: "linear",
+    verifyToken: (): MissionClaims => claims,
+    now: () => NOW,
+    operations,
+  });
+  return { outer, github, linear };
+}
 
 /**
  * A NARROW that leaves a mark: the path it lets through is rewritten, so the

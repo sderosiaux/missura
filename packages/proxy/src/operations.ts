@@ -1,11 +1,15 @@
 import {
+  operationAllowed,
+  OperationParameterError,
   scopeSatisfies,
   type CatalogDecision,
   type MissionClaims,
   type MissionScope,
   type Operation,
+  type OperationStep,
   type Provider,
   type ResolvedScope,
+  type ViaOperation,
 } from "@missura/core";
 import {
   ACTION_REASON,
@@ -66,11 +70,17 @@ export interface OperationsDeps {
   pipelineFor(connector: Provider): PipelineDeps | undefined;
 }
 
-/** How the executor runs an inner request: `handle`, handed in by the pipeline. */
+/**
+ * How the executor runs an inner request: `handle`, handed in by the
+ * pipeline. `via` is the in-process context that names the operation — and,
+ * for a write, the only thing that opens its route (M8). It is built here,
+ * from the catalogue entry the executor already resolved, and never from
+ * anything the outer request carried.
+ */
 export type RunInner = (
   deps: PipelineDeps,
   req: IncomingShape,
-  via: { operation: string },
+  via: ViaOperation,
 ) => Promise<ResponseShape>;
 
 /**
@@ -148,6 +158,31 @@ function verdictFor(op: Operation): CatalogDecision {
   };
 }
 
+/**
+ * What the refusal tells the agent it lacks: the verb for a read, the NAME
+ * for a write — the grant an operator would actually have to make.
+ */
+function grantFor(op: Operation): string {
+  return op.effect === "read" ? "read" : op.name;
+}
+
+/**
+ * The plan, or the parameter it could not plan from. Only the typed error is
+ * an answer; anything else a plan throws is a bug and stays a 500 upstream.
+ */
+function planned(
+  op: Operation,
+  scope: ResolvedScope,
+  params: Readonly<Record<string, unknown>>,
+): { steps: readonly OperationStep[] } | { invalid: string } {
+  try {
+    return { steps: op.plan(scope, params) };
+  } catch (err) {
+    if (err instanceof OperationParameterError) return { invalid: err.message };
+    throw err;
+  }
+}
+
 const UNKNOWN_VERDICT: CatalogDecision = {
   decision: "deny",
   operation: OPERATION_ROUTE_NAME,
@@ -191,9 +226,11 @@ export async function executeOperation(
     emitEvent(deps, opCtx, claimsDenial(verdict, CONNECTION_REASON));
     return denialResponse(op.connector, connectionDenial(mission));
   }
-  if (!claims.allow.includes(op.effect)) {
+  // A read by the verb, a write by its exact name (`operationAllowed`) —
+  // decided here, before a plan exists, so an ungranted write costs nothing.
+  if (!operationAllowed(claims, op)) {
     emitEvent(deps, opCtx, claimsDenial(verdict, ACTION_REASON));
-    return denialResponse(op.connector, actionDenial(mission, op.effect));
+    return denialResponse(op.connector, actionDenial(mission, grantFor(op)));
   }
   const params = readParams(req.body);
   if (params === undefined) {
@@ -220,10 +257,21 @@ export async function executeOperation(
     });
   }
 
+  const plan = planned(op, scope, params);
+  if ("invalid" in plan) {
+    emitEvent(deps, opCtx, claimsDenial(verdict, plan.invalid));
+    return denialResponse(deps.provider, {
+      status: 400,
+      code: "missura_invalid_parameters",
+      reason: plan.invalid,
+      ...mission,
+    });
+  }
+
   const results: unknown[] = [];
   let reduced = false;
-  for (const step of op.plan(scope, params)) {
-    const answer = await run(target, innerRequest(req, step), { operation: name });
+  for (const step of plan.steps) {
+    const answer = await run(target, innerRequest(req, step), { operation: op.name });
     // A refused step is the operation's answer, untouched: the pipeline built
     // it in the vendor's shape with the mission's remediation, and rewrapping
     // it would be the one refusal an SDK behind this route could not parse.

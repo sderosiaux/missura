@@ -144,7 +144,7 @@ export function remediationFor(code: DenialCode, ctx: Ctx): string {
     case "missura_operation_unknown":
       return `no operation by that name is available to this mission. ${INTROSPECT} — its \`operations\` field lists, by name and effect, the ones you can run as \`POST /missura/op/<name>\`.`;
     case "missura_invalid_parameters":
-      return `an operation takes its parameters as one JSON object in the request body — an empty body when it needs none. Re-issue the call with a body that parses as an object.`;
+      return `an operation takes its parameters as one JSON object in the request body — an empty body when it needs none. Re-issue the call with a body that parses as an object, each parameter in the shape \`reason\` names.`;
     case "missura_out_of_mission_scope":
       return outOfScope(ctx);
     case "missura_out_of_path_scope":

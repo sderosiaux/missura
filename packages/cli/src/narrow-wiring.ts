@@ -77,7 +77,13 @@ export function githubNarrow(resolve: Resolver): NarrowFn {
     if (scope === undefined) {
       return { decision: "deny", denyShape: "github404", reason: UNRESOLVED };
     }
-    return narrowGithubPath(req.path, { githubRepos: scope.githubRepos });
+    // The origin travels with the path: the write's re-check of the canonical
+    // target must ask the catalog the question the pipeline asked it.
+    return narrowGithubPath(
+      req.path,
+      { githubRepos: scope.githubRepos },
+      { method: req.method, ...(req.via === undefined ? {} : { via: req.via }) },
+    );
   };
 }
 

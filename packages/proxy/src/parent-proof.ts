@@ -1,5 +1,6 @@
 import type {
   CatalogDecision,
+  CatalogRequest,
   MissionClaims,
   ParentProof,
   ParentProofStore,
@@ -55,9 +56,11 @@ export const PARENT_PROOF_REASON = "parent not proven in mission scope";
 export interface ParentProofDeps extends ForwardDeps {
   /**
    * The connector's catalog. Shared with the pipeline so a probe is decided by
-   * exactly the rules the agent's own request was.
+   * exactly the rules the agent's own request was. A probe never carries
+   * `via`: it is a read the proxy makes on its own account, and the raw
+   * catalog is the one it must pass.
    */
-  decide(req: { method: string; path: string; body: string }): CatalogDecision;
+  decide(req: CatalogRequest): CatalogDecision;
   /**
    * Which parents this mission has already proven. Required: defaulting it away
    * would either re-probe on every request or, worse, invite a caller to skip

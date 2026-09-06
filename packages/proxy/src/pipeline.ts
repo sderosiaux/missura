@@ -1,7 +1,10 @@
 import {
+  actionCovered,
   MissionExpiredError,
+  type CatalogRequest,
   type CursorStore,
   type MissionClaims,
+  type ViaOperation,
 } from "@missura/core";
 import {
   ACTION_REASON,
@@ -106,15 +109,17 @@ function verified(
  * with an actionable missura block attached (SPEC §4.8bis) — a refusal an SDK
  * cannot parse never reaches the agent that has to act on it.
  *
- * `via` is set on the inner calls of an operation (`operations.ts`) and does
- * one thing: it names the operation on this request's audit records. Nothing
- * else about the decision reads it — an inner call is decided exactly like the
- * raw request it is.
+ * `via` is set on the inner calls of an operation (`operations.ts`) and on
+ * nothing else — the listener never passes one, so a request off the wire
+ * cannot carry it. It names the operation on this request's audit records,
+ * and it is the ONE thing that can open a write route (M8): the catalog sees
+ * it, and the action check accepts a write only under the operation it
+ * serves. A read is decided exactly like the raw request it is.
  */
 export async function handle(
   deps: PipelineDeps,
   req: IncomingShape,
-  via?: { operation: string },
+  via?: ViaOperation,
 ): Promise<ResponseShape> {
   const startedAt = deps.now?.() ?? Date.now();
   const traceId = traceIdOf(req.headers.traceparent);
@@ -123,6 +128,14 @@ export async function handle(
   const provenance = {
     ...(traceId === undefined ? {} : { traceId }),
     ...(via === undefined ? {} : { viaOperation: via.operation }),
+  };
+  // What the catalog and NARROW decide on: the request, and where it came
+  // from. Built once, so the two cannot be asked about different origins.
+  const decided: CatalogRequest = {
+    method: req.method,
+    path: req.path,
+    body: req.body,
+    ...(via === undefined ? {} : { via }),
   };
   try {
     const { claims, expired } = verified(deps, bearerToken(req.headers));
@@ -207,11 +220,7 @@ export async function handle(
       return deny(connectionDenial(mission));
     }
 
-    const verdict = deps.decide({
-      method: req.method,
-      path: req.path,
-      body: req.body,
-    });
+    const verdict = deps.decide(decided);
     if (verdict.decision === "deny") {
       emitEvent(deps, ctx, verdict);
       return deny({
@@ -223,18 +232,23 @@ export async function handle(
     }
 
     // The catalog says what the connector can serve; the mission says what
-    // this agent may do with it. An ALLOW the mission does not cover is a deny.
-    if (!claims.allow.includes(verdict.action)) {
+    // this agent may do with it. An ALLOW the mission does not cover is a
+    // deny. A read is covered by the verb; a write only by the operation this
+    // call serves, when its effect is the verdict's and its name is granted.
+    const servedBy =
+      via === undefined
+        ? undefined
+        : deps.operations.catalogue.find((op) => op.name === via.operation);
+    if (!actionCovered(claims, verdict.action, servedBy)) {
       emitEvent(deps, ctx, claimsDenial(verdict, ACTION_REASON));
       return deny(actionDenial(mission, verdict.action));
     }
 
     // NARROW runs last, on an already-cataloged request: it shrinks what the
-    // agent asked for to what the mission proves it may see.
-    const narrowed = deps.narrow(
-      { method: req.method, path: req.path, body: req.body },
-      claims,
-    );
+    // agent asked for to what the mission proves it may see. For a write it
+    // is the only check there is — a comment cannot be filtered after it
+    // was posted — and it runs here, before the vendor is reached.
+    const narrowed = deps.narrow(decided, claims);
     if (narrowed.decision === "deny") {
       const reason = narrowed.reason ?? "narrowed out of mission scope";
       emitEvent(deps, ctx, claimsDenial(verdict, reason), reason);

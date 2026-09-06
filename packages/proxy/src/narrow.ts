@@ -1,4 +1,5 @@
 import type {
+  CatalogRequest,
   DenialCode,
   FilterPlan,
   MissionClaims,
@@ -101,10 +102,13 @@ export interface NarrowResult {
   missionOwnerIds?: readonly string[];
 }
 
-export type NarrowFn = (
-  req: { method: string; path: string; body: string },
-  claims: MissionClaims,
-) => NarrowResult;
+/**
+ * The request NARROW sees is the one the catalog saw, origin included: an
+ * inner call of an operation carries `via`, a request off the wire cannot.
+ * A connector that re-checks its catalog on a rewritten target needs it to
+ * ask the same question the catalog was asked.
+ */
+export type NarrowFn = (req: CatalogRequest, claims: MissionClaims) => NarrowResult;
 
 /**
  * The seam's neutral element: used until a connector installs its own NARROW,
