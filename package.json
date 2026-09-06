@@ -8,6 +8,7 @@
     "demo:m1": "MISSURA_LIVE=1 tsx examples/m1-proof/check.ts",
     "demo:m2": "MISSURA_LIVE=1 tsx examples/m2-proof/check.ts",
     "demo:m3": "MISSURA_LIVE=1 tsx examples/m3-proof/check.ts",
+    "demo:m8": "MISSURA_LIVE=1 tsx examples/m8-proof/check.ts",
     "compat": "MISSURA_LIVE=1 tsx examples/compat/run.ts",
     "compat:manifest": "tsx examples/compat/baseline.ts",
     "schema:refresh": "tsx packages/connectors-linear/src/schema/extract.ts"

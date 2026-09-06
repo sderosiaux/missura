@@ -14,7 +14,8 @@ customer, an employee, a project; whatever the operator's graph names.
 
 ## Status
 
-v0, in progress. Not production-ready. Read-only everywhere.
+v0, in progress. Not production-ready. Read-only on every vendor route; one
+write exists, and it runs only as a named operation.
 
 Working today: mission tokens minted by an operator (never by the agent), the
 vault that keeps vendor credentials out of the agent's environment, connectors
@@ -65,6 +66,21 @@ filter, same refusals, one decision event each, marked with the operation it
 served. An operation on a connector the mission lacks is refused with the raw
 call's own bytes, and introspection lists only the operations the mission can
 run.
+
+**Writes happen only through operations, and a write is proven before it
+happens.** The first one is `github.issue.comment.create` (`effect: append`).
+A mission reaches it only when the operator names it — `missura exec --allow
+github.issue.comment.create`, or `allow: [...]` on the operator mint — on top
+of `read` and `search`; no verb grants a write, and a name the catalogue does
+not hold is refused before a token exists. The vendor's own write route is not
+in the catalog for anything that arrives over HTTP: it opens only for the
+inner call the executor builds in-process, so an agent's raw `POST` stays
+refused with the same token that just wrote through the operation. A read can
+be let through and filtered on the way back; a comment cannot be un-posted, so
+the repository check runs on the inner call before anything leaves, and a
+repository outside the mission answers the same not-found a foreign read
+answers — zero vendor calls. `pnpm demo:m8` runs it for real against a
+repository you own (read its header first: it writes one comment).
 
 ## What `exec` does and does not protect
 

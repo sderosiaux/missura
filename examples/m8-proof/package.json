@@ -1,0 +1,16 @@
+{
+  "name": "@missura/example-m8-proof",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint via root eslint' && exit 0"
+  },
+  "//dependencies": "Plain fetch, on purpose: the M8 proof is about the operation route and the raw route side by side, and a client the proxy has never met is the point. No @missura/* import either — the guarantees under test must hold for code that knows nothing of the implementation.",
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
