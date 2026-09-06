@@ -1,4 +1,5 @@
 import type { Provider } from "./events";
+import type { AgentGapCause } from "./feasibility";
 import type { MissionClaims } from "./token";
 
 /**
@@ -42,6 +43,12 @@ export interface MissuraDenial {
   remediation: string;
   try_instead: readonly string[];
   introspect: string;
+  /**
+   * WHY, in the agent's own vocabulary (M9): `not_granted`, or the reason
+   * class its token carries for the system it went to. Absent when the token
+   * holds no reason — a refusal never learns one from anywhere else.
+   */
+  cause?: AgentGapCause;
 }
 
 export interface DenialInput {

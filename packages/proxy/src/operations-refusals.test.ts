@@ -67,6 +67,36 @@ describe("the executor refuses like the pipeline refuses", () => {
     expect(github.fetchCount()).toBe(0);
   });
 
+  /**
+   * M9: the refusal names its cause in the agent's own vocabulary — the reason
+   * class the token carries for the system, or `not_granted` — and it does so
+   * on the raw call too, so the two answers stay the same bytes.
+   */
+  it("carries the token's reason class as `cause`, on the operation and on the raw call alike", async () => {
+    const degraded = {
+      ...CLAIMS,
+      connections: ["github"],
+      degraded: [{ system: "linear" as const, reason: "link_proposed" as const }],
+    };
+    const { outer, linear } = rig({ claims: degraded });
+    const op = await handle(outer.deps, post("linear.issues.for_entity"));
+    const raw = await handle(
+      linear.deps,
+      request({ method: "POST", path: "/graphql", body: LINEAR_QUERY }),
+    );
+
+    expect(graphqlDenial(op.body).cause).toBe("link_proposed");
+    expect(bodyText(op.body)).toBe(bodyText(raw.body));
+    expect(bodyText(op.body).replace(/link_proposed/g, "")).not.toContain("proposed");
+  });
+
+  it("carries not_granted as `cause` when the effect is outside `allow`", async () => {
+    const { outer } = rig({ claims: { ...CLAIMS, allow: ["search"] } });
+    const op = await handle(outer.deps, post("github.issues.for_entity"));
+
+    expect(restDenial(op.body).cause).toBe("not_granted");
+  });
+
   it("refuses a body that is not a parameter object", async () => {
     const { outer, github } = rig();
     const res = await handle(outer.deps, post("github.issues.for_entity", "[1,2]"));

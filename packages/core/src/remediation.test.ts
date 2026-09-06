@@ -242,6 +242,51 @@ describe("buildDenial", () => {
     expect(github.try_instead.join(" ")).toContain("per_page");
   });
 
+  /**
+   * THE GAP, agent side (M9): a refusal says WHY in the one vocabulary the
+   * token already speaks — `not_granted`, or the reason class the mission
+   * carries for the system it went to. Nothing the agent could not read from
+   * `GET /missura/mission`; and nothing at all when the token holds no reason.
+   */
+  it("carries the agent's cause: not_granted on an action refusal", () => {
+    const denial = buildDenial({
+      code: "missura_action_not_allowed",
+      reason: "action not allowed by mission",
+      provider: "linear",
+      claims: CLAIMS,
+      now: NOW,
+      requiredAction: "github.issue.comment.create",
+    });
+    expect(denial.cause).toBe("not_granted");
+  });
+
+  it("carries the token's own reason class on a connection refusal, or nothing", () => {
+    const degraded = {
+      ...CLAIMS,
+      connections: ["github"],
+      degraded: [{ system: "linear" as const, reason: "link_proposed" as const }],
+    };
+    const known = buildDenial({
+      code: "missura_connection_not_in_mission",
+      reason: "connection not in mission",
+      provider: "linear",
+      claims: degraded,
+      now: NOW,
+    });
+    expect(known.cause).toBe("link_proposed");
+    const unknown = buildDenial({
+      code: "missura_connection_not_in_mission",
+      reason: "connection not in mission",
+      provider: "zendesk",
+      claims: degraded,
+      now: NOW,
+    });
+    expect("cause" in unknown).toBe(false);
+    // The status word itself never appears — the reason class is the whole answer.
+    expect(JSON.stringify(known)).not.toContain("proposed,");
+    expect(JSON.stringify(known).replace(/link_proposed/g, "")).not.toContain("proposed");
+  });
+
   it("points at the introspection route exactly as it is served", () => {
     const denial = buildDenial({
       code: "missura_internal",

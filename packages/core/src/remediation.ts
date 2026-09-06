@@ -1,3 +1,4 @@
+import { agentCause } from "./feasibility";
 import {
   fieldOf,
   INTROSPECT,
@@ -73,6 +74,9 @@ export function buildDenial(input: DenialInput): MissuraDenial {
     requiredAction: input.requiredAction,
     field: fieldOf(input.reason),
   };
+  // From the claims alone, like everything else here: the reason class the
+  // token carries for this provider, or nothing (`agentCause`).
+  const cause = agentCause(input.code, input.provider, input.claims);
   return {
     code: input.code,
     reason: input.reason,
@@ -80,5 +84,6 @@ export function buildDenial(input: DenialInput): MissuraDenial {
     remediation: remediationFor(input.code, ctx),
     try_instead: tryInsteadFor(input.code, ctx),
     introspect: INTROSPECT,
+    ...(cause === undefined ? {} : { cause }),
   };
 }
