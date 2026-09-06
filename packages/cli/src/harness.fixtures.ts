@@ -23,6 +23,8 @@ const CONFIRMED = {
  * `customer:acme` is whole: every system confirmed. `customer:zoetis` is the
  * degraded one — its Linear link exists and nobody has signed it off, which is
  * exactly the case a mission must survive narrower rather than refuse.
+ * `customer:initech` has no GitHub link at all (M9): the gap a write grant
+ * hits is "add a link", not "confirm one".
  */
 export const ENTITY_GRAPH = {
   version: 1,
@@ -59,6 +61,14 @@ export const ENTITY_GRAPH = {
           ...CONFIRMED,
         },
         { system: "zendesk", id: "4300", evidence: "operator", ...CONFIRMED },
+      ],
+    },
+    "customer:initech": {
+      displayName: "Initech",
+      domains: ["initech.example"],
+      links: [
+        { system: "linear", id: "c_55", evidence: "operator", ...CONFIRMED },
+        { system: "zendesk", id: "4400", evidence: "operator", ...CONFIRMED },
       ],
     },
   },

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import {
   assertEntityKey,
+  assertGrantable,
   openEntityGraph,
   resolveMissionScope,
   type MissionScope,
@@ -13,6 +14,7 @@ import {
   INTROSPECTION_PATH,
   operationCatalogue,
 } from "@missura/proxy";
+import { connectedSystems, deploymentFeasibility, openVault } from "./deployment";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
 import { resolveHome } from "./paths";
@@ -148,11 +150,21 @@ export async function execCommand(
   const graph = openEntityGraph(options.entitiesPath ?? paths.entitiesPath);
   const { scope: resolved, resolution } = resolveMissionScope(graph, scope);
 
-  // The whole catalogue: `exec` mints without booting a proxy, so it cannot
-  // know which connections the running one serves. A name that exists but is
-  // not served there is refused at the first call as unknown, like any other.
-  const store = openStore(paths, operationCatalogue({ zendesk: true }));
+  // Which connections this deployment has, read from the vault `missura run`
+  // boots from — so the catalogue a name-grant is checked against is the one
+  // the running proxy serves, and the gap report answers for THIS install.
+  const connected = connectedSystems(openVault(paths));
   const allow = options.allow ?? [];
+  // A name the entity cannot run is refused here, as its gap — the cause and
+  // the command that closes it — before a token exists (M9). A name the
+  // catalogue does not hold at all is still the store's "unknown operation".
+  if (scope.entity !== undefined && allow.length > 0) {
+    assertGrantable(deploymentFeasibility(graph, connected)(scope.entity, allow), allow);
+  }
+  const store = openStore(
+    paths,
+    operationCatalogue({ zendesk: connected.includes("zendesk") }),
+  );
   const { record, token } = store.create(
     {
       purpose: options.purpose,

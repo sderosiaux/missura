@@ -347,3 +347,30 @@ describe("missura exec --allow", () => {
     expect(existsSync(join(h.home, "missions.json"))).toBe(false);
   });
 });
+
+/**
+ * THE GAP, at the surface a human types (M9). A name the catalogue holds but
+ * the entity cannot run is refused before a token exists — as the gap: the
+ * one cause, the system, and the command that closes it. Never "unknown".
+ */
+describe("missura exec --allow — the refusal is the gap", () => {
+  it("names no_link, the system, and the link command for an entity with no github link", async () => {
+    const h = await inited();
+    const result = await run(
+      execArgv(
+        ["--entity", "customer:initech", "--purpose", "p", "--allow", "github.issue.comment.create"],
+        DUMP,
+      ),
+      h.io,
+    );
+
+    expect(result.code).toBe(1);
+    const message = h.err[0] ?? "";
+    expect(message).toContain("no_link");
+    expect(message).toContain("github");
+    expect(message).toContain("missura entity link customer:initech github");
+    expect(message).not.toContain("unknown operation");
+    expect(existsSync(join(h.home, "child-env.json"))).toBe(false);
+    expect(existsSync(join(h.home, "missions.json"))).toBe(false);
+  });
+});

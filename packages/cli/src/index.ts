@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import type { ProxyServers } from "@missura/proxy";
+import { entityCommand, type EntityOptions } from "./entity";
 import { execCommand, type ExecOptions } from "./exec";
 import { initCommand } from "./init";
 import type { CliIo } from "./io";
@@ -45,10 +46,22 @@ const USAGE = [
   "              github.issue.comment.create — on top of read and search.",
   "              A mission never writes otherwise: not through the vendor's",
   "              own routes, not by any verb. A name not in the catalogue",
-  "              is refused before a mission exists.",
+  "              is refused before a mission exists; a name the entity",
+  "              cannot run is refused as its gap — the cause and the",
+  "              command that closes it (see: missura entity show KEY).",
   "              the child runs as your user: vendor keys are removed from its",
   "              environment, but nothing stops it reading ~/.missura — run it",
   "              in a container or as another user if you need containment",
+  "  missura entity show KEY [--json] the entity, its links with status, and per",
+  "                                   operation: possible, or the one gap and",
+  "                                   the command that closes it",
+  "  missura entity confirm KEY SYSTEM [ID]",
+  "                                   sign a link off — the only thing that widens",
+  "                                   a mission. ID is needed when the entity holds",
+  "                                   several links on SYSTEM",
+  "  missura entity link KEY SYSTEM ID",
+  "                                   add a link by hand, confirmed in your name",
+  "                                   (SYSTEM is linear, github or zendesk)",
   "  missura missions                 active missions (no token material)",
   "  missura revoke <mission_id>      revoke a mission — effective on the next request",
   "  missura token --dev [--ttl 30m]  unscoped dev token (deprecated, use exec)",
@@ -64,6 +77,7 @@ const OPTIONS = {
   repo: { type: "string", multiple: true },
   allow: { type: "string", multiple: true },
   entities: { type: "string" },
+  json: { type: "boolean" },
   dev: { type: "boolean" },
   "linear-port": { type: "string" },
   "github-port": { type: "string" },
@@ -165,6 +179,12 @@ async function dispatch(
       return { code: missionsCommand(io) };
     case "revoke":
       return { code: revokeCommand(io, positionals[1]) };
+    case "entity": {
+      const options: EntityOptions = { json: values.json === true, actor: actorOf(values, io) };
+      const entities = text(values, "entities");
+      if (entities !== undefined) options.entitiesPath = entities;
+      return { code: entityCommand(io, positionals[1], positionals.slice(2), options) };
+    }
     case "run": {
       const options: RunOptions = {};
       const linearPort = portOf(values, "linear-port");
