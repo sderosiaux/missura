@@ -1,4 +1,5 @@
 export * from "./filter";
+export { APPROVAL_ROUTE, type ApprovalStore } from "./approvals";
 export { INTROSPECTION_PATH } from "./introspect";
 export * from "./narrow";
 export {

@@ -147,8 +147,9 @@ export async function runCommand(
     },
     ...(zendesk === undefined ? {} : { zendesk }),
     // Operations plan from the resolver the NARROWs enforce with: one graph,
-    // one reading of it.
-    operations: { resolveScope: scopeForOperations(resolve) },
+    // one reading of it. The gated writes (M10) are written down on the same
+    // store the operator plane decides them on — the one file.
+    operations: { resolveScope: scopeForOperations(resolve), approvals: store },
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
   });
 

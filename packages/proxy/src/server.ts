@@ -13,6 +13,7 @@ import {
   type Provider,
   type ResolvedScope,
 } from "@missura/core";
+import { NO_APPROVALS, type ApprovalStore } from "./approvals";
 import { listener, MAX_BODY_BYTES } from "./listener";
 import type { NarrowFn } from "./narrow";
 import type { OperationsDeps } from "./operations";
@@ -80,6 +81,8 @@ export interface ProxyConfig {
    */
   operations?: {
     resolveScope(scope: MissionScope): ResolvedScope | undefined;
+    /** The mission store, for the gated writes to be written down on (M10). */
+    approvals: ApprovalStore;
   };
   /** Overridable so tests can drive an in-process vendor double. */
   fetchImpl?: typeof fetch;
@@ -139,6 +142,7 @@ function operationsFor(
       config.operations?.resolveScope(scope),
     pipelineFor: (connector): PipelineDeps | undefined =>
       pipelines.get(connector),
+    approvals: config.operations?.approvals ?? NO_APPROVALS,
   };
 }
 

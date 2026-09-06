@@ -11,6 +11,7 @@ import {
   type DecisionEvent,
   type ResolvedScope,
 } from "@missura/core";
+import { NO_APPROVALS } from "./approvals";
 import { passThroughNarrow } from "./narrow";
 import { createServers, type ProxyServers } from "./server";
 
@@ -111,7 +112,7 @@ export async function boot(): Promise<{
     emit: (ev: DecisionEvent): void => {
       events.push(ev);
     },
-    operations: { resolveScope: (): ResolvedScope => RESOLVED },
+    operations: { resolveScope: (): ResolvedScope => RESOLVED, approvals: NO_APPROVALS },
     linear: {
       vendorAuthHeader: `Bearer ${LINEAR_SECRET}`,
       port: 0,

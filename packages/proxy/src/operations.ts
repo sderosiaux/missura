@@ -11,6 +11,8 @@ import {
   type ResolvedScope,
   type ViaOperation,
 } from "@missura/core";
+import { admit } from "./admit";
+import type { ApprovalStore } from "./approvals";
 import {
   ACTION_REASON,
   CONNECTION_REASON,
@@ -19,6 +21,12 @@ import {
   type RequestContext,
 } from "./audit";
 import { actionDenial, connectionDenial, denialResponse } from "./deny";
+import {
+  openApproval,
+  requiresApproval,
+  spendApproval,
+  splitApproval,
+} from "./operations-approval";
 import type { PipelineDeps } from "./pipeline";
 import { wasReduced } from "./reduced";
 import { JSON_HEADERS, type IncomingShape, type ResponseShape } from "./transport";
@@ -38,6 +46,14 @@ import { JSON_HEADERS, type IncomingShape, type ResponseShape } from "./transpor
  * Served on ANY listener, like introspection, and before the connection check
  * for the same reason: the route is missura's, not the vendor's, and the inner
  * calls land on the right connector whatever port the agent aimed at.
+ *
+ * A `destroy` or an `egress` (M10) is proven here like any write and then
+ * NOT run: it is written down on the mission and answered `202`, and it runs
+ * only when the agent re-requests it with an approval a human recorded on
+ * the operator plane (`operations-approval.ts`). Re-requested, not run on
+ * approve: the run must stay here, under the agent's token, through the
+ * same `handle` — the operator plane approving is not the operator plane
+ * acting, and it has no path to a vendor to act with.
  */
 export const OPERATION_ROUTE = "/missura/op/";
 
@@ -68,6 +84,12 @@ export interface OperationsDeps {
    * operations are then not in the catalogue either.
    */
   pipelineFor(connector: Provider): PipelineDeps | undefined;
+  /**
+   * Where a gated write is written down and read back (M10): the mission
+   * store, so an approval lives exactly as long as its mission. Required —
+   * a proxy with nowhere to record an approval cannot run a `destroy`.
+   */
+  approvals: ApprovalStore;
 }
 
 /**
@@ -232,8 +254,8 @@ export async function executeOperation(
     emitEvent(deps, opCtx, claimsDenial(verdict, ACTION_REASON));
     return denialResponse(op.connector, actionDenial(mission, grantFor(op)));
   }
-  const params = readParams(req.body);
-  if (params === undefined) {
+  const raw = readParams(req.body);
+  if (raw === undefined) {
     emitEvent(deps, opCtx, claimsDenial(verdict, INVALID_PARAMETERS_REASON));
     return denialResponse(deps.provider, {
       status: 400,
@@ -242,6 +264,20 @@ export async function executeOperation(
       ...mission,
     });
   }
+  // `approval` is the agent's, on a gated operation only; elsewhere the body
+  // is parameters and nothing in it is read here.
+  const gated = requiresApproval(op);
+  const split = gated ? splitApproval(raw) : { params: raw };
+  if ("invalid" in split) {
+    emitEvent(deps, opCtx, claimsDenial(verdict, split.invalid));
+    return denialResponse(deps.provider, {
+      status: 400,
+      code: "missura_invalid_parameters",
+      reason: split.invalid,
+      ...mission,
+    });
+  }
+  const params = split.params;
   // Resolved here only to PLAN — which targets to ask about. Whether the
   // mission may is re-decided per step by the connector's NARROW, which
   // resolves the same scope again on its own.
@@ -268,21 +304,41 @@ export async function executeOperation(
     });
   }
 
+  const via: ViaOperation = { operation: op.name };
+  let runCtx = opCtx;
+  if (gated) {
+    // Proven BEFORE anything is written down or spent, on the target's own
+    // pipeline: a foreign target is the refusal a foreign read gets, with
+    // zero vendor calls and no approval left behind.
+    for (const step of plan.steps) {
+      const proof = admit(target, { ...step, via }, claims, opCtx, ctx.startedAt);
+      if ("refusal" in proof) {
+        emitEvent(deps, opCtx, claimsDenial(verdict, STEP_REFUSED_REASON));
+        return proof.refusal;
+      }
+    }
+    const gate = { deps, ctx: opCtx, claims, op, params, steps: plan.steps, verdict };
+    if (split.approval === undefined) return openApproval(gate);
+    const spent = spendApproval(gate, split.approval);
+    if ("refusal" in spent) return spent.refusal;
+    runCtx = { ...opCtx, approvalId: spent.id };
+  }
+
   const results: unknown[] = [];
   let reduced = false;
   for (const step of plan.steps) {
-    const answer = await run(target, innerRequest(req, step), { operation: op.name });
+    const answer = await run(target, innerRequest(req, step), via);
     // A refused step is the operation's answer, untouched: the pipeline built
     // it in the vendor's shape with the mission's remediation, and rewrapping
     // it would be the one refusal an SDK behind this route could not parse.
     if (answer.status < 200 || answer.status >= 300) {
-      emitEvent(deps, opCtx, claimsDenial(verdict, STEP_REFUSED_REASON));
+      emitEvent(deps, runCtx, claimsDenial(verdict, STEP_REFUSED_REASON));
       return answer;
     }
     reduced = reduced || wasReduced(op.connector, answer);
     results.push(parsed(answer.body));
   }
-  emitEvent(deps, opCtx, verdict);
+  emitEvent(deps, runCtx, verdict);
   const body: OperationResult = {
     operation: op.name,
     effect: op.effect,

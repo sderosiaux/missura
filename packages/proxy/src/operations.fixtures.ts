@@ -10,6 +10,7 @@ import type {
   OperationStep,
   ResolvedScope,
 } from "@missura/core";
+import { NO_APPROVALS } from "./approvals";
 import type { NarrowFn, NarrowResult } from "./narrow";
 import type { OperationsDeps } from "./operations";
 import { OPERATION_ROUTE } from "./operations";
@@ -114,6 +115,7 @@ export function writeRig(claims: MissionClaims = GRANTED): Rig {
       if (connector === "github") return github.deps;
       return connector === "linear" ? linear.deps : undefined;
     },
+    approvals: NO_APPROVALS,
   };
   github.deps.operations = operations;
   linear.deps.operations = operations;
@@ -173,6 +175,7 @@ export function rig(
       if (connector === "github") return github.deps;
       return connector === "linear" ? linear.deps : undefined;
     },
+    approvals: NO_APPROVALS,
   };
   github.deps.operations = operations;
   linear.deps.operations = operations;

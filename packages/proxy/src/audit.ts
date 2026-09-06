@@ -23,6 +23,8 @@ export interface RequestContext {
   traceId?: string;
   /** The missura operation this request serves, when it is an inner call of one. */
   viaOperation?: string;
+  /** The approval an operation opened or ran under (M10). */
+  approvalId?: string;
 }
 
 /** No token, or one whose signature this proxy cannot verify. */
@@ -83,6 +85,7 @@ export function emitEvent(
     ...(ctx.viaOperation === undefined
       ? {}
       : { viaOperation: ctx.viaOperation }),
+    ...(ctx.approvalId === undefined ? {} : { approvalId: ctx.approvalId }),
     ...(objectsRemoved === undefined ? {} : { objectsRemoved }),
   });
 }

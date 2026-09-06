@@ -1,14 +1,13 @@
 import {
-  actionCovered,
   MissionExpiredError,
   type CatalogRequest,
   type CursorStore,
   type MissionClaims,
   type ViaOperation,
 } from "@missura/core";
+import { admit } from "./admit";
+import { approvalIdOf, pollApproval } from "./approvals";
 import {
-  ACTION_REASON,
-  CONNECTION_REASON,
   CURSOR_REASON,
   claimsDenial,
   emitEvent,
@@ -20,12 +19,7 @@ import {
   type RequestContext,
 } from "./audit";
 import { withMissuraCursor, withVendorCursor } from "./cursor-swap";
-import {
-  actionDenial,
-  connectionDenial,
-  denialResponse,
-  type DenialOptions,
-} from "./deny";
+import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
 import {
@@ -33,7 +27,7 @@ import {
   introspectionResponse,
   isIntrospection,
 } from "./introspect";
-import { scopeDenial, type NarrowFn } from "./narrow";
+import type { NarrowFn } from "./narrow";
 import {
   executeOperation,
   operationName,
@@ -98,7 +92,8 @@ function verified(
 }
 
 /**
- * authn → revocation → connections → catalog → action → narrow → origin
+ * authn → revocation → [introspection | operation | approval poll] →
+ * connections → catalog → action → narrow (`admit.ts`) → origin
  * re-validation → parent proof → forward → filter → audit.
  *
  * Deny by default at every step: the upstream is reached only after a mission
@@ -212,48 +207,17 @@ export async function handle(
       return await executeOperation(deps, req, ctx, claims, operation, handle);
     }
 
-    // The mission decides which connections it may touch. Separate ports are a
-    // convenience, not a boundary: a token minted for one connection must not
-    // work against another listener just because the agent aimed at its port.
-    if (!claims.connections.includes(deps.provider)) {
-      emitEvent(deps, ctx, claimsDenial(UNKNOWN_VERDICT, CONNECTION_REASON));
-      return deny(connectionDenial(mission));
-    }
+    // APPROVALS are polled here too (M10): the route is missura's, the
+    // answer is about this mission's own record, and the not-found is the
+    // listener's own (`approvals.ts`).
+    const approvalId = approvalIdOf(req);
+    if (approvalId !== undefined) return pollApproval(deps, ctx, claims, approvalId);
 
-    const verdict = deps.decide(decided);
-    if (verdict.decision === "deny") {
-      emitEvent(deps, ctx, verdict);
-      return deny({
-        status: 403,
-        code: "missura_operation_not_in_catalog",
-        reason: verdict.reason,
-        ...mission,
-      });
-    }
-
-    // The catalog says what the connector can serve; the mission says what
-    // this agent may do with it. An ALLOW the mission does not cover is a
-    // deny. A read is covered by the verb; a write only by the operation this
-    // call serves, when its effect is the verdict's and its name is granted.
-    const servedBy =
-      via === undefined
-        ? undefined
-        : deps.operations.catalogue.find((op) => op.name === via.operation);
-    if (!actionCovered(claims, verdict.action, servedBy)) {
-      emitEvent(deps, ctx, claimsDenial(verdict, ACTION_REASON));
-      return deny(actionDenial(mission, verdict.action));
-    }
-
-    // NARROW runs last, on an already-cataloged request: it shrinks what the
-    // agent asked for to what the mission proves it may see. For a write it
-    // is the only check there is — a comment cannot be filtered after it
-    // was posted — and it runs here, before the vendor is reached.
-    const narrowed = deps.narrow(decided, claims);
-    if (narrowed.decision === "deny") {
-      const reason = narrowed.reason ?? "narrowed out of mission scope";
-      emitEvent(deps, ctx, claimsDenial(verdict, reason), reason);
-      return deny({ ...scopeDenial(narrowed, reason), ...mission });
-    }
+    // Connection → catalog → action → NARROW, in one place shared with the
+    // operation executor's proof of a write (`admit.ts`).
+    const admitted = admit(deps, decided, claims, ctx, startedAt);
+    if ("refusal" in admitted) return admitted.refusal;
+    const { verdict, narrowed } = admitted;
     // The agent paginates with handles of ours, never with vendor positions.
     // One we did not issue to THIS mission is refused here rather than
     // forwarded: it would resume the walk somewhere nothing authorized.

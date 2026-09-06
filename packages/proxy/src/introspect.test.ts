@@ -6,6 +6,7 @@ import {
 } from "@missura/core";
 import { describe, expect, it } from "vitest";
 import { INTROSPECTION_PATH } from "./introspect";
+import { NO_APPROVALS } from "./approvals";
 import { handle } from "./pipeline";
 import {
   bodyText,
@@ -76,6 +77,7 @@ describe("introspection — GET /missura/mission", () => {
         catalogue: CATALOGUE,
         resolveScope: () => undefined,
         pipelineFor: () => undefined,
+        approvals: NO_APPROVALS,
       },
     });
     const res = await handle(h.deps, ask());

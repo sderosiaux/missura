@@ -5,6 +5,7 @@ import type {
   MissionClaims,
   MissuraDenial,
 } from "@missura/core";
+import { NO_APPROVALS } from "./approvals";
 import { passThroughNarrow } from "./narrow";
 import type { IncomingShape, PipelineDeps } from "./pipeline";
 
@@ -115,6 +116,7 @@ export function harness(
       catalogue: [],
       resolveScope: () => undefined,
       pipelineFor: () => undefined,
+      approvals: NO_APPROVALS,
     },
     emit: (ev: DecisionEvent): void => {
       events.push(ev);

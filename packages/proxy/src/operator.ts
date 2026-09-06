@@ -17,6 +17,12 @@ import {
   type MissionStore,
 } from "@missura/core";
 import {
+  approvalIdOf,
+  APPROVALS_PATH,
+  decideApproval,
+  listApprovals,
+} from "./operator-approvals";
+import {
   FieldError,
   parseJson,
   readFeasibilityQuery,
@@ -247,6 +253,14 @@ function route(
     }
     if (method === "GET" && path === "/v1/feasibility") {
       return { status: 200, payload: feasibility(deps, url.searchParams) };
+    }
+    // The approvals (M10): read here, decided here, never run here.
+    if (method === "GET" && path === APPROVALS_PATH) {
+      return { status: 200, payload: listApprovals(deps.store) };
+    }
+    const approvalId = approvalIdOf(path);
+    if (method === "POST" && approvalId !== undefined) {
+      return { status: 200, payload: decideApproval(deps.store, approvalId, parseJson(raw)) };
     }
     return { status: 404, payload: { error: { code: "missura_not_found" } } };
   } catch (err) {
