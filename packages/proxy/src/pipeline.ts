@@ -27,6 +27,7 @@ import {
 } from "./introspect";
 import { scopeDenial, type NarrowFn } from "./narrow";
 import { parentProofStage, type ParentProofDeps } from "./parent-proof";
+import { markReduced } from "./reduced";
 import { refill } from "./refill";
 import { traceIdOf } from "./trace";
 import {
@@ -295,18 +296,21 @@ export async function handle(
       },
       answer,
     );
-    // Last, and on every response the rule describes: the vendor's position is
-    // replaced by a handle. Doing it only on a walked answer would make the
-    // cursor's own format say that a walk happened. `merged.served` rides along
-    // INSIDE the handle — objects the walk collected but had no room for, owed
-    // to the next page rather than dropped.
-    return withMissuraCursor(
+    // On every response the rule describes: the vendor's position is replaced
+    // by a handle. Doing it only on a walked answer would make the cursor's
+    // own format say that a walk happened. `merged.served` rides along INSIDE
+    // the handle — objects the walk collected but had no room for, owed to
+    // the next page rather than dropped.
+    const sealed = withMissuraCursor(
       merged,
       narrowed.filterPlan,
       claims.id,
       deps.cursors,
       merged.served,
     );
+    // Last: a view the filter or the walk cut down says so — as one boolean,
+    // never as a number (`reduced.ts`).
+    return markReduced(deps.provider, sealed, merged.reduced);
   } catch {
     // Never echo the internal error: it may quote the request or the vendor.
     return deny({

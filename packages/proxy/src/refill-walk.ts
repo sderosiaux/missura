@@ -72,6 +72,13 @@ export interface Walk {
   exhausted: boolean;
   /** We stopped without being told: a cap, an error, a shape we cannot read. */
   stopped: boolean;
+  /**
+   * Extra vendor pages read past the first. A fact about the decision, like
+   * `removed` on a forward: it decides whether the answer is flagged as
+   * reduced (`reduced.ts`) and is never serialized — the number is exactly the
+   * measure of hidden objects the flag exists to withhold.
+   */
+  extraPages: number;
 }
 
 function elapsed(deps: ForwardDeps, ctx: RequestContext): number {
@@ -107,6 +114,7 @@ export async function walkPages(
     tail: { at: call.resume?.at, before: 0 },
     exhausted: false,
     stopped: false,
+    extraPages: 0,
   };
   if (rule === undefined) return walk;
   for (let calls = 0; walk.nodes.length - skip < requested; calls += 1) {
@@ -132,6 +140,7 @@ export async function walkPages(
       filter,
       call.claims,
     );
+    walk.extraPages += 1;
     // A refused or failed extra call is not a page: the filter may have failed
     // closed on it, and its body is then the vendor's own not-found.
     if (res.status !== status) return { ...walk, stopped: true };

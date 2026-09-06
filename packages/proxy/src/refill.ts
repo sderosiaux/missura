@@ -51,6 +51,12 @@ export interface RefillOutcome extends ResponseShape {
    * surplus behind inside that page.
    */
   served: number;
+  /**
+   * The view was cut down by policy — the filter removed objects, or the walk
+   * read past the first page. A boolean and nothing more, on purpose: it is
+   * what `reduced.ts` tells the agent, and the numbers behind it stay here.
+   */
+  reduced: boolean;
 }
 
 /**
@@ -150,6 +156,7 @@ export async function refill(
     headers: first.headers,
     body: first.body,
     served: 0,
+    reduced: first.removed > 0,
   };
   const filter = call.filter;
   const rule = filter?.plan.pagination;
@@ -175,6 +182,9 @@ export async function refill(
     rule.requested,
     skip,
   );
+  // Reduced once the vendor was asked for more than the agent's one page —
+  // whether or not the merge below succeeds, the walk happened.
+  const reduced = untouched.reduced || walk.extraPages > 0;
   const kept = walk.nodes.slice(skip, skip + rule.requested);
   const surplus = surplusAt(walk, skip, rule.requested);
   const body = mergedBody(
@@ -183,11 +193,12 @@ export async function refill(
     kept,
     mergedPageInfo(walk, page, skip + kept.length, surplus),
   );
-  if (body === undefined) return untouched;
+  if (body === undefined) return { ...untouched, reduced };
   return {
     status: first.status,
     headers: first.headers,
     body,
     served: surplus?.served ?? 0,
+    reduced,
   };
 }

@@ -124,7 +124,13 @@ describe("pagination refill — the walk is not observable", () => {
     };
   }
 
-  it("answers the same bytes as a vendor page that held those objects, apart from the cursor", async () => {
+  /**
+   * Apart from the cursor and ONE deliberate difference: the walked answer is
+   * flagged as reduced (`reduced.ts`), the direct one is not. The flag is a
+   * boolean — the agent learns that the view was cut down, and nothing in the
+   * bytes says by how many objects or pages.
+   */
+  it("answers the same bytes as a vendor page that held those objects, apart from the cursor and the flag", async () => {
     const { walked, direct } = walkedAndDirect();
 
     const one = await handle(walked.deps, graphqlRequest(3));
@@ -133,7 +139,9 @@ describe("pagination refill — the walk is not observable", () => {
     expect(walked.fetchCount()).toBe(2);
     expect(direct.fetchCount()).toBe(1);
     expect(withoutCursor(one.body)).toBe(withoutCursor(two.body));
-    expect(one.headers).toEqual(two.headers);
+    const { "missura-reduced": flag, ...rest } = one.headers;
+    expect(flag).toBe("true");
+    expect(rest).toEqual(two.headers);
   });
 
   /**
