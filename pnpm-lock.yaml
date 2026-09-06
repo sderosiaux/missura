@@ -126,6 +126,18 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  examples/m10-proof:
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      tsx:
+        specifier: ^4
+        version: 4.23.12
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   examples/m2-proof:
     dependencies:
       '@linear/sdk':

@@ -1,0 +1,16 @@
+{
+  "name": "@missura/example-m10-proof",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "echo 'lint via root eslint' && exit 0"
+  },
+  "//dependencies": "Plain fetch, on purpose, like the M8 proof: the approval flow is a contract between an HTTP client that knows nothing of the implementation, the data plane it holds a mission token for, and the operator plane it holds the operator key for. No @missura/* import.",
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}

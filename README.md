@@ -14,8 +14,9 @@ customer, an employee, a project; whatever the operator's graph names.
 
 ## Status
 
-v0, in progress. Not production-ready. Read-only on every vendor route; one
-write exists, and it runs only as a named operation.
+v0, in progress. Not production-ready. Read-only on every vendor route; three
+writes exist, each runs only as a named operation, and two of them wait for a
+human.
 
 Working today: mission tokens minted by an operator (never by the agent), the
 vault that keeps vendor credentials out of the agent's environment, connectors
@@ -34,7 +35,7 @@ apps/site                 Next.js static landing page (waitlist)
 packages/core             mission tokens, entity graph, shared primitives
 packages/proxy            the data plane: catalog, narrow, filter, refill
 packages/connectors-*     Linear, GitHub, Zendesk
-packages/cli              missura exec / token / tail
+packages/cli              missura init / run / exec / entity / approvals
 examples/compat           live compatibility suite against real vendor APIs
 ```
 
@@ -81,6 +82,47 @@ the repository check runs on the inner call before anything leaves, and a
 repository outside the mission answers the same not-found a foreign read
 answers — zero vendor calls. `pnpm demo:m8` runs it for real against a
 repository you own (read its header first: it writes one comment).
+
+**The operator sees what an entity can run, and what closes each gap.**
+`missura entity show customer:acme` lists the entity's links with their status,
+the operations a mission on it can run, and for each one it cannot, the one
+cause and the command that fixes it: `missura entity confirm` for a link a scan
+proposed and nobody signed off, `missura entity link` for a system with no link
+at all, `missura init` for a vendor this deployment is not connected to. A
+`--allow` grant the entity cannot honour is refused with that same gap, before a
+token exists. `missura entity link` on an id a human already rejected refuses
+too and points at `entity confirm`: overriding a no has to be said out loud.
+
+**Every operation says what it does to the world, and two classes wait for a
+human.** An operation's effect is one of `read`, `append`, `mutate`, `destroy`,
+`egress`. `destroy` is irreversible: `github.issue.comment.delete` removes a
+comment for good. `egress` leaves the boundary: `zendesk.ticket.reply` posts a
+public comment on a ticket and Zendesk emails it to the requester, so the write
+is inside the mission and the destination is not. Both are granted like the
+append, by exact name, and neither runs on request. The proxy proves the call
+the way it proves any write (grant, scope, target, zero vendor calls). Instead
+of running it, it writes it down on the mission as the exact vendor request
+that would go and answers `202` with an approval id. `missura approvals` lists what is waiting,
+that request spelled out; `missura approve <id>` and `missura deny <id>` record
+your decision in your name (the operator plane serves the same under
+`/v1/approvals`). The agent polls `GET /missura/approvals/<id>` with its mission
+token and, once it reads `approved`, sends the same request again with
+`approval: <id>` in the body. It runs once. A second try with the same id is
+refused, a denied or still-pending one too, and another mission's id gets the
+not-found an id that never existed gets. The mission's TTL bounds all of it:
+there is no queue and no workflow engine, because a proxy has nowhere to park a
+wait and the approval is a record the agent comes back for.
+
+**Approving never executes.** Deciding writes a name and a time on the record,
+nothing else. The operator plane holds the operator key and no vendor
+credential, no pipeline and no `fetch`, so there is no path from it to a
+vendor, and adding one for approvals would turn the plane that mints missions
+into the plane that acts on them. The run happens when the agent comes back, on
+the data plane, under the agent's own token, through the same catalog,
+narrowing and log as every other call. An approved request can still be refused
+there if the mission no longer covers its target. `pnpm demo:m10` runs the whole
+flow for real against a repository you own; read its header first, it deletes
+a real comment.
 
 ## What `exec` does and does not protect
 
