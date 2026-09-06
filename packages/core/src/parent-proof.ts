@@ -21,6 +21,8 @@
  * cannot.
  */
 
+import type { FilterRule } from "./filter-plan";
+
 /** The probe request, in the same three fields every request is described by. */
 export interface ParentProofProbe {
   method: string;
@@ -55,6 +57,16 @@ export interface ParentProof {
    * nothing — which is FOREIGN, never a pass.
    */
   ownerPath: readonly string[];
+  /**
+   * How the resolved owner is compared, with exactly the two rules a
+   * `FilterRule` admits and for the same reasons: `exact` for an opaque id
+   * (a Zendesk organization), `ascii-case-insensitive` where the vendor
+   * itself names the object case-insensitively but answers with the casing
+   * it stored (a GitHub `owner/repo` inside a comment's `url`). Stated by
+   * the connector, never defaulted: widening what counts as the mission's
+   * identifier is how a proof starts passing foreign objects.
+   */
+  ownerMatch: FilterRule["ownerMatch"];
 }
 
 /** Proofs one proxy keeps at once, across every mission. Oldest go first. */

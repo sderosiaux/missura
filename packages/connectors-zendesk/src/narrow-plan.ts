@@ -12,6 +12,8 @@ export function ticketProof(id: string): ParentProof {
     key: `ticket:${id}`,
     probe: { method: "GET", path: `/api/v2/tickets/${id}`, body: "" },
     ownerPath: ["ticket", "organization_id"],
+    // A Zendesk id is an integer: one spelling, compared as such.
+    ownerMatch: "exact",
   };
 }
 

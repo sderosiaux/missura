@@ -103,13 +103,9 @@ export interface ParentProofCall {
 
 /**
  * True when the probe's owner resolves into the mission's set. Reuses `isOwned`
- * so there is ONE place in this proxy where an object is proven ours.
- *
- * `exact` matching, with no way for a connector to ask for anything else: a
- * proof is about an identifier a vendor returned, and widening the set of
- * strings that count as a mission identifier is how a filter starts keeping
- * foreign objects. A vendor with two spellings of one id must be normalized by
- * its connector before the ids reach here.
+ * so there is ONE place in this proxy where an object is proven ours, under
+ * the match rule the connector stated on the proof — the same two rules,
+ * with the same argument, as a `FilterRule`.
  */
 function ownedParent(parsed: unknown, call: ParentProofCall): boolean {
   return isOwned(parsed, {
@@ -117,7 +113,7 @@ function ownedParent(parsed: unknown, call: ParentProofCall): boolean {
     type: "parent",
     ownerPath: call.proof.ownerPath,
     expectedOwnerIds: call.ownerIds,
-    ownerMatch: "exact",
+    ownerMatch: call.proof.ownerMatch,
     injected: [],
     nullable: false,
   });

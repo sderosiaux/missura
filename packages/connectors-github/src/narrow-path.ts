@@ -4,6 +4,14 @@ export const DUMMY_BASE = "https://vendor.invalid";
 /** Enough to see through `%252f`; a bound, so a crafted path cannot spin here. */
 const MAX_DECODE_PASSES = 3;
 
+/**
+ * How GitHub names objects in its own answers: `repository_url` on a search
+ * item, `url` on a comment. The origin is github.com's: a GitHub Enterprise
+ * host would answer with its own, nothing would match, and the mission would
+ * see nothing — the fail-closed direction; GHES is not in this connector's scope.
+ */
+export const REPOS_URL_PREFIX = "https://api.github.com/repos/";
+
 /** GitHub's own owner/repo charset. */
 const VENDOR_NAME = /^[A-Za-z0-9._-]+$/;
 

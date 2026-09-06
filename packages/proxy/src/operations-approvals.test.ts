@@ -27,14 +27,15 @@ function unclocked(body: string): string {
 }
 
 describe("a destroy waits for a human — github.issue.comment.delete through the executor", () => {
-  it("answers 202 with the approval id and its state, reaches no vendor, and logs pending", async () => {
+  it("answers 202 with the approval id and its state, writes nothing at the vendor, and logs pending", async () => {
     const rig = approvalRig("github");
     const res = await requestOp(rig, DELETE_OP, DELETE_PARAMS);
 
     expect(res.status).toBe(202);
     const body = JSON.parse(bodyText(res.body)) as { id: string; state: string };
     expect(body).toEqual({ id: expect.stringMatching(/^apr_[0-9a-f]{16}$/) as string, state: "pending" });
-    expect(rig.connector.fetchCount()).toBe(0);
+    // The proof of the comment (L8) is the one call: a read, never a write.
+    expect(rig.connector.calls.map((c) => c.init.method ?? "GET")).toEqual(["GET"]);
     // Written down on the mission: what was asked, and the exact call that would go.
     expect(rig.store.pendingApprovals()).toEqual([
       expect.objectContaining({
@@ -54,8 +55,58 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
         missionId: rig.claims.id,
       }),
     ]);
-    // The connector proved the target and ran nothing: no event of its own.
-    expect(rig.connector.events).toEqual([]);
+    // The connector proved the target — its one event is the probe's read.
+    expect(rig.connector.events).toEqual([
+      expect.objectContaining({ operation: "repos.issues.comments.get", decision: "allow" }),
+    ]);
+  });
+
+  /**
+   * L8: a GitHub comment id is global, and the path's repository proves
+   * nothing about where the comment lives. The comment is fetched through
+   * the pipeline and its own `url` checked against the repository in the
+   * path — before the approval exists, and again right before the DELETE.
+   * A comment that lives elsewhere is the not-found shape, with no record.
+   */
+  it("refuses a comment that lives in another repository, not-found shaped, with no approval and no DELETE", async () => {
+    const elsewhere = (url: string, init: RequestInit): Promise<Response> => {
+      if ((init.method ?? "GET") === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ id: 9001, url: "https://api.github.com/repos/globex/secret/issues/comments/9001" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    };
+    const rig = approvalRig("github", { vendor: elsewhere });
+    const res = await requestOp(rig, DELETE_OP, DELETE_PARAMS);
+
+    expect(res.status).toBe(404);
+    expect(JSON.parse(bodyText(res.body))).toMatchObject({ message: "Not Found" });
+    expect(restDenial(res.body).code).toBe("missura_out_of_mission_scope");
+    expect(rig.connector.calls.map((c) => c.init.method ?? "GET")).toEqual(["GET"]);
+    expect(rig.store.pendingApprovals()).toEqual([]);
+  });
+
+  it("re-proves the comment right before the DELETE, and refuses one that moved since approval", async () => {
+    let repo = "acme-corp/product";
+    const vendor = (url: string, init: RequestInit): Promise<Response> => {
+      if ((init.method ?? "GET") === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ id: 9001, url: `https://api.github.com/repos/${repo}/issues/comments/9001` }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    };
+    const rig = approvalRig("github", { vendor });
+    const id = await opened(rig, DELETE_OP, DELETE_PARAMS);
+    rig.store.decideApproval(id, "approved", "ops@acme.io");
+    repo = "globex/secret";
+    const res = await requestOp(rig, DELETE_OP, { ...DELETE_PARAMS, approval: id });
+
+    expect(res.status).toBe(404);
+    expect(rig.connector.calls.map((c) => c.init.method ?? "GET")).toEqual(["GET", "GET"]);
   });
 
   it("polls pending then approved, runs exactly once on the re-request, and never again", async () => {
@@ -65,13 +116,15 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
 
     rig.store.decideApproval(id, "approved", "ops@acme.io");
     expect(JSON.parse((await poll(rig, id)).body)).toEqual({ id, state: "approved" });
-    expect(rig.connector.fetchCount()).toBe(0);
+    // Nothing but the proof's read has reached the vendor.
+    expect(rig.connector.calls.filter((c) => c.init.method === "DELETE")).toHaveLength(0);
 
     const res = await requestOp(rig, DELETE_OP, { ...DELETE_PARAMS, approval: id });
     expect(res.status).toBe(200);
     expect(result(res)).toMatchObject({ operation: DELETE_OP, effect: "destroy" });
-    expect(rig.connector.calls).toHaveLength(1);
-    const [call] = rig.connector.calls;
+    // Proven when opened, proven again before the DELETE (L8), then the DELETE.
+    expect(rig.connector.calls.map((c) => c.init.method ?? "GET")).toEqual(["GET", "GET", "DELETE"]);
+    const call = rig.connector.calls[2];
     expect(call?.url).toBe(`https://api.github.com${COMMENT_PATH}`);
     expect(call?.init.method).toBe("DELETE");
     const headers = new Headers(call?.init.headers);
@@ -99,7 +152,7 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
     // In the listener's own envelope (M7): the agent aimed at the linear port.
     expect(graphqlDenial(again.body).code).toBe("missura_approval_refused");
     expect(graphqlDenial(again.body).reason).toContain("consumed");
-    expect(rig.connector.calls).toHaveLength(1);
+    expect(rig.connector.calls.filter((c) => c.init.method === "DELETE")).toHaveLength(1);
   });
 
   it("runs nothing on a denied approval, and nothing on one still pending", async () => {
@@ -115,7 +168,7 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
     expect(res.status).toBe(403);
     expect(graphqlDenial(res.body).code).toBe("missura_approval_refused");
     expect(graphqlDenial(res.body).reason).toContain("denied");
-    expect(rig.connector.fetchCount()).toBe(0);
+    expect(rig.connector.calls.filter((c) => c.init.method === "DELETE")).toHaveLength(0);
   });
 
   it("refuses an approved id on other parameters or another operation, and spends nothing", async () => {
@@ -138,7 +191,7 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
     const wrong = await requestOp(rig, DELETE_OP, { ...DELETE_PARAMS, approval: foreign.id });
     expect(wrong.status).toBe(403);
 
-    expect(rig.connector.fetchCount()).toBe(0);
+    expect(rig.connector.calls.filter((c) => c.init.method === "DELETE")).toHaveLength(0);
     for (const spent of [id, foreign.id]) {
       const record = rig.store.approvalFor(rig.claims.id, spent);
       expect(record === undefined ? undefined : approvalState(record)).toBe("approved");

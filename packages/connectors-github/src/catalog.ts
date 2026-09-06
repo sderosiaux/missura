@@ -37,6 +37,15 @@ const ROUTES: readonly Route[] = [
     operation: "repos.issues.comments.list",
     action: "read",
   },
+  // One comment by id: the read a `destroy` proves itself against (L8), so
+  // it must be cataloged for the probe — and NARROW proves the answer on
+  // the comment's own `url`, since the id is global and the path is not proof.
+  {
+    method: "GET",
+    segments: ["repos", PARAM, PARAM, "issues", "comments", PARAM],
+    operation: "repos.issues.comments.get",
+    action: "read",
+  },
   {
     method: "GET",
     segments: ["repos", PARAM, PARAM, "pulls"],

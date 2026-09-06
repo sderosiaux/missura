@@ -86,6 +86,53 @@ describe("narrowGithub — POST issue comments", () => {
     ).toBe("deny");
   });
 
+  /**
+   * L8: a comment id is GLOBAL on GitHub, and the path's repository says
+   * nothing about where the comment lives. A `destroy` proves it before the
+   * DELETE: fetch the comment through the same pipeline and check its own
+   * `url` names the repository in the path — re-proven at execution, never
+   * from the memo (`parent-proof.ts`). And the read of a comment by id, which
+   * the probe needs cataloged, is filtered on the same field.
+   */
+  it("attaches a proof of the comment to the DELETE: its own url, in the path's repository", () => {
+    const DELETE = { method: "DELETE", via: { operation: "github.issue.comment.delete" } };
+    const ours = narrowGithub("/repos/acme-corp/product/issues/comments/9001", SCOPE, DELETE);
+    expect(ours.decision).toBe("allow");
+    expect(ours.parentProof).toEqual({
+      key: "comment:acme-corp/product:9001",
+      probe: { method: "GET", path: "/repos/acme-corp/product/issues/comments/9001", body: "" },
+      ownerPath: ["url"],
+      ownerMatch: "ascii-case-insensitive",
+    });
+    expect(ours.missionOwnerIds).toEqual([
+      "https://api.github.com/repos/acme-corp/product/issues/comments/9001",
+    ]);
+    expect(ours.filterPlan).toBeUndefined();
+  });
+
+  it("proves a comment read by id on its own url, and refuses one outside the mission", () => {
+    const read = narrowGithub("/repos/acme-corp/product/issues/comments/9001", SCOPE);
+    expect(read.decision).toBe("allow");
+    expect(read.denyShape).toBe("github404");
+    expect(read.filterPlan).toEqual({
+      rules: [
+        {
+          path: [],
+          type: "issue-comment",
+          ownerPath: ["url"],
+          expectedOwnerIds: ["https://api.github.com/repos/acme-corp/product/issues/comments/9001"],
+          ownerMatch: "ascii-case-insensitive",
+          injected: [],
+          nullable: false,
+        },
+      ],
+      strip: [],
+    });
+    expect(narrowGithub("/repos/globex/secret/issues/comments/9001", SCOPE)).toEqual(
+      narrowGithub("/repos/globex/secret/issues/7", SCOPE),
+    );
+  });
+
   it("refuses the POST with no operation behind it, whatever the repo", () => {
     const result = narrowGithub("/repos/acme-corp/product/issues/7/comments", SCOPE, {
       method: "POST",

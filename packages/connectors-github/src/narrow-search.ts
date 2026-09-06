@@ -1,6 +1,6 @@
 import type { FilterPlan, GithubRepoScope, PaginationRule } from "@missura/core";
 import { pathScopedDeny } from "./narrow-contents";
-import { isVendorName, type CanonicalRequest } from "./narrow-path";
+import { isVendorName, REPOS_URL_PREFIX, type CanonicalRequest } from "./narrow-path";
 import {
   deny,
   REPO_NOT_IN_MISSION,
@@ -24,15 +24,9 @@ const PATH_SCOPED_SEARCH =
 
 const QUALIFIER_PREFIXES = ["repo:", "org:", "user:"];
 
-/**
- * How a search item names its repository, VERIFIED against the live API:
- * `GET /search/issues` returns ISSUES, and an issue carries `repository_url`
- * — `https://api.github.com/repos/{owner}/{repo}` — not a `repository` object.
- * The origin is github.com's: a GitHub Enterprise host would answer with its
- * own, no item would match, and the mission would see an empty result set.
- * That is the fail-closed direction, and GHES is not in this connector's scope.
- */
-const REPOS_URL_PREFIX = "https://api.github.com/repos/";
+// How a search item names its repository, VERIFIED against the live API:
+// `GET /search/issues` returns ISSUES, and an issue carries `repository_url`
+// — `${REPOS_URL_PREFIX}{owner}/{repo}` — not a `repository` object.
 
 /** True when `term` is an agent-supplied repo/org/user qualifier (case-insensitive). */
 function isStrippedQualifier(term: string): boolean {

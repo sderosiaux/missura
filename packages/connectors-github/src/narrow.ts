@@ -1,5 +1,6 @@
 import type { GithubRepoScope, ViaOperation } from "@missura/core";
 import { decideGithub } from "./catalog";
+import { isCommentById, narrowComment } from "./narrow-comment";
 import { canonicalize, isVendorName, type CanonicalRequest } from "./narrow-path";
 import { narrowPathScoped } from "./narrow-contents";
 import {
@@ -84,6 +85,11 @@ function narrowRepoPath(
   const entries = entriesFor(owner, repo, githubRepos);
   if (entries.length === 0) return deny(REPO_NOT_IN_MISSION);
   if (entries.some((entry) => entry.pathPrefix === undefined)) {
+    // A comment by id is the one route the repository in the path does not
+    // decide (L8): its id is global, so the comment itself is the proof.
+    if (isCommentById(canonical)) {
+      return narrowComment(canonical, origin.method, allowCanonical(canonical, origin));
+    }
     return allowCanonical(canonical, origin);
   }
   return narrowPathScoped(canonical, entries, () => allowCanonical(canonical, origin));

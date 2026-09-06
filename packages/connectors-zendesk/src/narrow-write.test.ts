@@ -25,6 +25,7 @@ describe("narrowZendesk — PUT on a ticket", () => {
       key: "ticket:35436",
       probe: { method: "GET", path: "/api/v2/tickets/35436", body: "" },
       ownerPath: ["ticket", "organization_id"],
+      ownerMatch: "exact",
     });
     expect(result.missionOwnerIds).toEqual(SCOPE.zendeskOrganizationIds);
     expect(result.missionScopeSize).toBe(2);

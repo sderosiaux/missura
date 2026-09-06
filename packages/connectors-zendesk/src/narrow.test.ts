@@ -133,6 +133,7 @@ describe("narrowZendesk — a ticket's comments", () => {
       key: "ticket:35436",
       probe: { method: "GET", path: "/api/v2/tickets/35436", body: "" },
       ownerPath: ["ticket", "organization_id"],
+      ownerMatch: "exact",
     });
   });
 

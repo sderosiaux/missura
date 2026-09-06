@@ -90,9 +90,14 @@ export function stubFetch(calls: Call[]): typeof fetch {
     // A ticket by id answers as Zendesk does — the ticket, owned by acme's
     // organization: it is what the egress proves itself against (M2).
     const ticket = /\/api\/v2\/tickets\/(\d+)$/.exec(url)?.[1];
+    // A comment by id answers as GitHub does — the comment, with its own
+    // `url` where the path says it lives: what the destroy proves (L8).
+    const comment = /\/repos\/([^/]+\/[^/]+)\/issues\/comments\/(\d+)$/.exec(url);
     // A posted comment answers as GitHub does — the created object.
     const body = ticket !== undefined
       ? JSON.stringify({ ticket: { id: Number(ticket), organization_id: 4200 } })
+      : comment !== null && method === "GET"
+      ? JSON.stringify({ id: Number(comment[2]), url: `https://api.github.com/repos/${comment[1] ?? ""}/issues/comments/${comment[2] ?? ""}` })
       : url.includes("/api/v2/")
       ? '{"tickets":[]}'
       : method === "POST" && url.includes("/comments")

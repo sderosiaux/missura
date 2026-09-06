@@ -19,9 +19,10 @@ describe("parent proof — the requirement a connector publishes", () => {
       key: "ticket:35436",
       probe: { method: "GET", path: "/api/v2/tickets/35436", body: "" },
       ownerPath: ["ticket", "organization_id"],
+      ownerMatch: "exact",
     };
 
-    expect(Object.keys(proof).sort()).toEqual(["key", "ownerPath", "probe"]);
+    expect(Object.keys(proof).sort()).toEqual(["key", "ownerMatch", "ownerPath", "probe"]);
     expect(JSON.parse(JSON.stringify(proof))).toEqual(proof);
   });
 });

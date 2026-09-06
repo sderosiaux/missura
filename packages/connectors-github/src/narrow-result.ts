@@ -1,4 +1,4 @@
-import type { DenialCode, FilterPlan } from "@missura/core";
+import type { DenialCode, FilterPlan, ParentProof } from "@missura/core";
 
 /**
  * Structurally identical to the proxy's `NarrowResult`/`denyShape` — declared
@@ -25,6 +25,13 @@ export interface GithubNarrowResult {
    * fields to take back. This is how a query we let run is made safe.
    */
   filterPlan?: FilterPlan;
+  /**
+   * A parent to prove before the request may run (see the proxy's
+   * `NarrowResult`): the comment itself, for a destroy of it (L8).
+   */
+  parentProof?: ParentProof;
+  /** The mission's owner ids in this connector's terms, for that proof. */
+  missionOwnerIds?: readonly string[];
 }
 
 export const REPO_NOT_IN_MISSION = "repo not in mission";

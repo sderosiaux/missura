@@ -61,6 +61,7 @@ export function narrowed(over: Partial<NarrowResult> = {}): NarrowResult {
       key: "ticket:35436",
       probe: { method: "GET", path: TICKET, body: "" },
       ownerPath: ["ticket", "organization_id"],
+      ownerMatch: "exact",
     },
     filterPlan: { rules: [], strip: [] },
     ...over,

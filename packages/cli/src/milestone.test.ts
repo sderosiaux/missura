@@ -190,12 +190,14 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
     try {
       const running = run(execArgv(servers, "customer:acme", childM10(), ALLOW), h.io);
 
-      // 2. The operator approves the first request, in their own name.
+      // 2. The operator approves the first request, in their own name. The
+      // double has seen one READ — the comment's proof (L8) — and no write;
+      // approving moves nothing.
       const first = await handedOver(h, "approval-1");
-      expect(calls).toEqual([]);
+      expect(calls.map((c) => c.method)).toEqual(["GET"]);
       const approve = await run(["approve", first, "--actor", "ops@acme.example"], h.io);
       expect(approve.code, h.err.join("\n")).toBe(0);
-      expect(calls).toEqual([]);
+      expect(calls.map((c) => c.method)).toEqual(["GET"]);
 
       // 3. And denies the second.
       const second = await handedOver(h, "approval-2");
@@ -222,25 +224,25 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
       );
 
       // 2. Approved: exactly one DELETE at the double, the vault's credential.
-      // The whole run costs the double two calls: this DELETE, and the GET
-      // the egress proves its ticket with (point 4) — never a PUT.
+      // Every other call the run costs the double is a READ that proves a
+      // target — the comment before it is written down and again before it
+      // is deleted (L8), the ticket the egress names (M2) — never a PUT.
       expect(JSON.parse(p.approved.body)).toEqual({ id: p.ids.first, state: "approved" });
       expect(p.run.status).toBe(200);
-      expect(calls).toEqual([
-        {
-          method: "DELETE",
-          url: expect.stringMatching(new RegExp(`${M10_COMMENT_PATH}$`)) as string,
-          body: "",
-          authorization: `Bearer ${GITHUB_TOKEN}`,
-        },
-        {
-          method: "GET",
-          url: "https://acme.zendesk.com/api/v2/tickets/35",
-          body: "",
-          authorization: expect.stringMatching(/^Basic /) as string,
-        },
-      ]);
-      expect(calls[0]?.authorization).not.toMatch(/msr_/);
+      expect(calls.map((c) => c.method)).toEqual(["GET", "GET", "DELETE", "GET", "GET"]);
+      expect(calls[2]).toEqual({
+        method: "DELETE",
+        url: expect.stringMatching(new RegExp(`${M10_COMMENT_PATH}$`)) as string,
+        body: "",
+        authorization: `Bearer ${GITHUB_TOKEN}`,
+      });
+      expect(calls.at(-1)).toEqual({
+        method: "GET",
+        url: "https://acme.zendesk.com/api/v2/tickets/35",
+        body: "",
+        authorization: expect.stringMatching(/^Basic /) as string,
+      });
+      expect(calls.every((c) => !c.authorization.includes("msr_"))).toBe(true);
       expect(events(h)).toContainEqual(
         expect.objectContaining({
           provider: "github",
@@ -279,7 +281,7 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
       // 7. The raw DELETE is not in the catalog.
       expect(p.raw.status).toBe(403);
       expect(p.raw.body).toContain("missura_operation_not_in_catalog");
-      expect(calls).toHaveLength(2);
+      expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
 
       // The operator's record: who decided what, and the one consumption.
       expect(approvals(h).map((a) => [a.id, a.decision?.decision, a.decision?.actor, a.consumedAt !== undefined])).toEqual([
@@ -335,7 +337,9 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
       expect(p.polled.body).not.toContain(id);
       expect(p.run.status).toBe(404);
       expect(p.run.body).toContain("missura_approval_unknown");
-      expect(calls).toEqual([]);
+      // The double saw acme's own proof of the comment when it opened (L8),
+      // and nothing from zoetis: no read, no DELETE.
+      expect(calls.map((c) => c.method)).toEqual(["GET"]);
       // Still acme's, still approved, never spent.
       expect(approvals(h).find((a) => a.id === id)).toMatchObject({
         decision: { decision: "approved" },

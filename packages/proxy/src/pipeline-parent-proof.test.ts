@@ -174,6 +174,7 @@ describe("parent proof — the refusals, and their indistinguishability", () => 
           key: "ticket:35436",
           probe: { method: "GET", path: "/api/v2/incremental/tickets", body: "" },
           ownerPath: ["ticket", "organization_id"],
+          ownerMatch: "exact",
         },
       }),
     });
@@ -190,6 +191,7 @@ describe("parent proof — the refusals, and their indistinguishability", () => 
           key: "ticket:35436",
           probe: { method: "GET", path: "https://evil.example/tickets", body: "" },
           ownerPath: ["ticket", "organization_id"],
+          ownerMatch: "exact",
         },
       }),
     });

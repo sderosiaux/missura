@@ -27,6 +27,14 @@ describe("github rest catalog", () => {
     expect(d.operation).toBe("repos.issues.comments.list");
   });
 
+  /** The read the destroy proves itself against (L8): one comment, by id. */
+  it("allows GET /repos/{owner}/{repo}/issues/comments/{id}", () => {
+    const d = decideGithub("GET", "/repos/octocat/hello-world/issues/comments/9001");
+    expect(d.decision).toBe("allow");
+    expect(d.operation).toBe("repos.issues.comments.get");
+    expect(d.action).toBe("read");
+  });
+
   it("allows GET /repos/{owner}/{repo}/pulls", () => {
     const d = decideGithub("GET", "/repos/octocat/hello-world/pulls");
     expect(d.decision).toBe("allow");

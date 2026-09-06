@@ -79,6 +79,30 @@ export interface RigOptions {
   vendor?: (url: string, init: RequestInit) => Promise<Response>;
 }
 
+/**
+ * The GitHub double: a comment read by id answers the comment where the
+ * path says it lives — its `url` is what the destroy proves itself against
+ * (L8) — and a DELETE answers as GitHub does, nothing, 204.
+ */
+function github(url: string, init: RequestInit): Promise<Response> {
+  if ((init.method ?? "GET") === "DELETE") {
+    return Promise.resolve(new Response(null, { status: 204 }));
+  }
+  const path = url.replace("https://api.github.com", "");
+  const comment = /^\/repos\/([^/]+\/[^/]+)\/issues\/comments\/(\d+)$/.exec(path);
+  const body =
+    comment === null
+      ? "{}"
+      : JSON.stringify({
+          id: Number(comment[2]),
+          url: `https://api.github.com/repos/${comment[1] ?? ""}/issues/comments/${comment[2] ?? ""}`,
+          body: "a comment",
+        });
+  return Promise.resolve(
+    new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+  );
+}
+
 function noContent(): Promise<Response> {
   return Promise.resolve(new Response(null, { status: 204 }));
 }
@@ -102,7 +126,7 @@ function connectorHarness(
             { method: req.method, ...(req.via === undefined ? {} : { via: req.via }) },
           ),
       },
-      vendor ?? noContent,
+      vendor ?? github,
     );
   }
   return harness(
