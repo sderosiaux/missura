@@ -7,10 +7,10 @@ import type { CatalogDecision, ViaOperation } from "@missura/core";
  * mirrors the matched shape, dot-joined, e.g. `repos.issues.list`.
  */
 interface Route {
-  readonly method: "GET" | "POST";
+  readonly method: "GET" | "POST" | "DELETE";
   readonly segments: readonly string[];
   readonly operation: string;
-  readonly action: "read" | "append";
+  readonly action: "read" | "append" | "destroy";
 }
 
 const PARAM = ":param";
@@ -70,7 +70,9 @@ const ROUTES: readonly Route[] = [
  * never does, so a raw request — whatever it sends — is decided against
  * `ROUTES` alone and a POST stays refused exactly as it always was. One route
  * per write operation: the write an operation plans is the only write that
- * exists, and nothing here widens with the method.
+ * exists, and nothing here widens with the method. The action names what the
+ * route costs — `destroy` is the one a human must approve (M10) — and the
+ * pipeline refuses an inner call whose operation is of a weaker effect.
  */
 const WRITE_ROUTES: readonly Route[] = [
   {
@@ -78,6 +80,12 @@ const WRITE_ROUTES: readonly Route[] = [
     segments: ["repos", PARAM, PARAM, "issues", PARAM, "comments"],
     operation: "repos.issues.comments.create",
     action: "append",
+  },
+  {
+    method: "DELETE",
+    segments: ["repos", PARAM, PARAM, "issues", "comments", PARAM],
+    operation: "repos.issues.comments.delete",
+    action: "destroy",
   },
 ];
 

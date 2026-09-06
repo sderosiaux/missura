@@ -86,7 +86,43 @@ export const issueCommentCreate: Operation = {
   },
 };
 
+function commentParam(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new OperationParameterError("comment", "must be a positive integer comment id");
+  }
+  return value;
+}
+
+/**
+ * THE DESTROY (M10): one comment, deleted, `effect: "destroy"` — irreversible,
+ * so the executor writes it down and waits for a human instead of running
+ * it. Same discipline as the append: the repository comes from the agent and
+ * is NARROW's to refuse, and a comment id is digits, so the path spells no
+ * other route.
+ */
+export const issueCommentDelete: Operation = {
+  name: "github.issue.comment.delete",
+  connector: "github",
+  effect: "destroy",
+  needs: "github.repo",
+  plan(
+    _scope: ResolvedScope,
+    params: Readonly<Record<string, unknown>>,
+  ): readonly OperationStep[] {
+    const repo = repoParam(params.repo);
+    const comment = commentParam(params.comment);
+    return [
+      {
+        method: "DELETE",
+        path: `/repos/${repo}/issues/comments/${String(comment)}`,
+        body: "",
+      },
+    ];
+  },
+};
+
 export const GITHUB_OPERATIONS: readonly Operation[] = [
   issuesForEntity,
   issueCommentCreate,
+  issueCommentDelete,
 ];

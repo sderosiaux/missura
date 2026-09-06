@@ -68,6 +68,24 @@ describe("narrowGithub — POST issue comments", () => {
     expect(read.path).toBe("/repos/acme-corp/product/issues");
   });
 
+  /**
+   * The destroy (M10) is the same decision on the same path: a comment id
+   * says nothing about a repository, so the repository in the path is the one
+   * check, and a foreign one wears the read's not-found.
+   */
+  it("decides DELETE of a comment by its repository, like the reads and the append", () => {
+    const DELETE = { method: "DELETE", via: { operation: "github.issue.comment.delete" } };
+    const ours = narrowGithub("/repos/acme-corp/product/issues/comments/9001", SCOPE, DELETE);
+    expect(ours.decision).toBe("allow");
+    expect(ours.path).toBe("/repos/acme-corp/product/issues/comments/9001");
+    const foreign = narrowGithub("/repos/globex/secret/issues/comments/9001", SCOPE, DELETE);
+    expect(foreign).toEqual(narrowGithub("/repos/globex/secret/issues/7", SCOPE));
+    expect(
+      narrowGithub("/repos/acme-corp/product/issues/comments/9001", SCOPE, { method: "DELETE" })
+        .decision,
+    ).toBe("deny");
+  });
+
   it("refuses the POST with no operation behind it, whatever the repo", () => {
     const result = narrowGithub("/repos/acme-corp/product/issues/7/comments", SCOPE, {
       method: "POST",

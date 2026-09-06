@@ -1,4 +1,19 @@
-import type { FilterPlan, FilterRule, PaginationRule } from "@missura/core";
+import type { FilterPlan, FilterRule, PaginationRule, ParentProof } from "@missura/core";
+
+/**
+ * The proof of a ticket, for the two routes whose decision rests on it: its
+ * comments (a read) and its update (the write). One key per ticket, so
+ * paging through one ticket's comments — or replying after reading them —
+ * costs one probe and no more. The doc on WHY a proof is needed at all is
+ * on `comments` in `narrow.ts`.
+ */
+export function ticketProof(id: string): ParentProof {
+  return {
+    key: `ticket:${id}`,
+    probe: { method: "GET", path: `/api/v2/tickets/${id}`, body: "" },
+    ownerPath: ["ticket", "organization_id"],
+  };
+}
 
 /**
  * The ownership proof, and the pagination the proxy is allowed to walk.

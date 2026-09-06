@@ -2,7 +2,12 @@ import { OperationParameterError, type ResolvedScope } from "@missura/core";
 import { describe, expect, it } from "vitest";
 import { decideGithub } from "./catalog";
 import { narrowGithub } from "./narrow";
-import { GITHUB_OPERATIONS, issueCommentCreate, issuesForEntity } from "./operations";
+import {
+  GITHUB_OPERATIONS,
+  issueCommentCreate,
+  issueCommentDelete,
+  issuesForEntity,
+} from "./operations";
 
 /**
  * Same proof as the other connectors: every step is a raw request the
@@ -18,6 +23,7 @@ describe("github.issues.for_entity", () => {
     expect(GITHUB_OPERATIONS.map((op) => op.name)).toEqual([
       "github.issues.for_entity",
       "github.issue.comment.create",
+      "github.issue.comment.delete",
     ]);
     expect(issuesForEntity).toMatchObject({
       connector: "github",
@@ -146,6 +152,78 @@ describe("github.issue.comment.create", () => {
       expect((thrown as OperationParameterError).parameter).toBe(parameter);
       // The reason names the parameter and its shape — never the value.
       expect((thrown as Error).message).not.toContain("globex");
+    }
+  });
+});
+
+/**
+ * THE DESTROY (M10): one comment, gone for good, `effect: "destroy"`. The
+ * plan is the same shape as the append's — the agent's own parameters,
+ * checked for shape, into a path that cannot spell another route — and
+ * decides nothing. That it waits on a human is the executor's rule, read off
+ * the effect; nothing here knows about approvals.
+ */
+describe("github.issue.comment.delete", () => {
+  const VIA = { operation: "github.issue.comment.delete" };
+  const PARAMS = { repo: "acme-corp/product", comment: 9001 };
+
+  it("is a destroy that needs a repository in the mission", () => {
+    expect(issueCommentDelete).toMatchObject({
+      name: "github.issue.comment.delete",
+      connector: "github",
+      effect: "destroy",
+      needs: "github.repo",
+    });
+  });
+
+  it("plans exactly one DELETE of the comment, with no body", () => {
+    expect(issueCommentDelete.plan(SCOPE, PARAMS)).toEqual([
+      { method: "DELETE", path: "/repos/acme-corp/product/issues/comments/9001", body: "" },
+    ]);
+  });
+
+  it("plans a step the catalog and NARROW allow AS AN INNER CALL, and refuse off the wire", () => {
+    const [step] = issueCommentDelete.plan(SCOPE, PARAMS);
+    if (step === undefined) throw new Error("no step planned");
+    expect(decideGithub(step.method, step.path, VIA)).toMatchObject({
+      decision: "allow",
+      operation: "repos.issues.comments.delete",
+      action: "destroy",
+    });
+    const narrowed = narrowGithub(step.path, SCOPE, { method: step.method, via: VIA });
+    expect(narrowed.decision).toBe("allow");
+    expect(narrowed.path).toBe(step.path);
+    expect(decideGithub(step.method, step.path).decision).toBe("deny");
+  });
+
+  it("plans the step for a foreign repo too, and NARROW refuses it not-found shaped", () => {
+    const [step] = issueCommentDelete.plan(SCOPE, { ...PARAMS, repo: "globex/secret" });
+    if (step === undefined) throw new Error("no step planned");
+    expect(narrowGithub(step.path, SCOPE, { method: step.method, via: VIA })).toMatchObject({
+      decision: "deny",
+      denyShape: "github404",
+      denialCode: "missura_out_of_mission_scope",
+    });
+  });
+
+  it("refuses a parameter it cannot build a vendor request from, naming the parameter", () => {
+    const bad: [Record<string, unknown>, string][] = [
+      [{ ...PARAMS, repo: "acme-corp" }, "repo"],
+      [{ comment: 9001 }, "repo"],
+      [{ ...PARAMS, comment: "9001" }, "comment"],
+      [{ ...PARAMS, comment: 0 }, "comment"],
+      [{ ...PARAMS, comment: 9001.5 }, "comment"],
+      [{ repo: "acme-corp/product" }, "comment"],
+    ];
+    for (const [params, parameter] of bad) {
+      let thrown: unknown;
+      try {
+        issueCommentDelete.plan(SCOPE, params);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(OperationParameterError);
+      expect((thrown as OperationParameterError).parameter).toBe(parameter);
     }
   });
 });

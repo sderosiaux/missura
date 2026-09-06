@@ -255,7 +255,9 @@ describe("M9 — the gap is specific and actionable, and it names the next conne
     expect(shown.operations.filter((op) => op.possible).map((op) => op.name)).toEqual([
       "github.issues.for_entity",
       "github.issue.comment.create",
+      "github.issue.comment.delete",
       "zendesk.tickets.for_entity",
+      "zendesk.ticket.reply",
     ]);
     expect(operation(shown, "linear.issues.for_entity")).toMatchObject({
       possible: false,

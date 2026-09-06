@@ -69,7 +69,9 @@ describe("missura entity show", () => {
     expect(s.operations.filter((o) => o.possible).map((o) => o.name)).toEqual([
       "github.issues.for_entity",
       "github.issue.comment.create",
+      "github.issue.comment.delete",
       "zendesk.tickets.for_entity",
+      "zendesk.ticket.reply",
     ]);
     expect(op(s, "linear.issues.for_entity")).toMatchObject({
       cause: "link_not_confirmed",

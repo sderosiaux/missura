@@ -1,4 +1,4 @@
-import type { CatalogDecision } from "@missura/core";
+import type { CatalogDecision, ViaOperation } from "@missura/core";
 import { refusalFor } from "./catalog-refusals";
 import { canonicalize, isVendorId } from "./narrow-path";
 
@@ -42,6 +42,28 @@ const ROUTES: readonly Route[] = [
   { segments: ["api", "v2", "search"], operation: "search.list" },
 ];
 
+/**
+ * THE WRITE ROUTE (M10), reachable ONLY as the inner call of an operation:
+ * a ticket update, which is how a reply is posted. `egress` because a
+ * public comment emails the requester — the write stays in the mission's
+ * organization, its destination does not, so a human approves it. `via` is
+ * set in-process by the executor and never by the listener, so off the wire
+ * this catalog is GET only, exactly as before.
+ */
+interface WriteRoute extends Route {
+  readonly method: "PUT";
+  readonly action: "egress";
+}
+
+const WRITE_ROUTES: readonly WriteRoute[] = [
+  {
+    method: "PUT",
+    segments: ["api", "v2", "tickets", ID],
+    operation: "tickets.update",
+    action: "egress",
+  },
+];
+
 function matches(route: Route, segments: readonly string[]): boolean {
   if (segments.length !== route.segments.length) return false;
   return route.segments.every((expected, i) => {
@@ -65,10 +87,15 @@ function deny(reason: string, operation = "unknown"): CatalogDecision {
  * catalog" would hide that they were refused on purpose, and the decision log
  * is where that difference has to survive.
  */
-export function decideZendesk(method: string, path: string): CatalogDecision {
-  if (method !== "GET") {
+export function decideZendesk(
+  method: string,
+  path: string,
+  via?: ViaOperation,
+): CatalogDecision {
+  const write = via === undefined ? undefined : WRITE_ROUTES.find((r) => r.method === method);
+  if (method !== "GET" && write === undefined) {
     return deny(
-      `method ${method} is not allowed — the Zendesk catalog is read-only (GET only)`,
+      `method ${method} is not allowed — the Zendesk catalog is read-only (GET only); writes run only as operations`,
     );
   }
 
@@ -78,8 +105,22 @@ export function decideZendesk(method: string, path: string): CatalogDecision {
   }
   const { segments } = canonical;
 
+  // The refused families are refused under an operation too: a write on
+  // `update_many` is a bulk endpoint before it is a write.
   const refusal = refusalFor(segments);
   if (refusal !== undefined) return deny(refusal.reason, refusal.operation);
+
+  if (write !== undefined) {
+    if (!matches(write, segments)) {
+      return deny(`${method} /${segments.join("/")} is not in the Zendesk catalog`);
+    }
+    return {
+      decision: "allow",
+      operation: write.operation,
+      action: write.action,
+      reason: `${write.action} request matching allowlisted route: ${write.operation}`,
+    };
+  }
 
   const route = ROUTES.find((candidate) => matches(candidate, segments));
   if (route === undefined) {

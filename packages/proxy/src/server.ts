@@ -253,7 +253,9 @@ export async function createServers(
                 "zendesk",
                 config,
                 zendeskConfig,
-                (req): CatalogDecision => decideZendesk(req.method, req.path),
+                // The origin travels here too: the one Zendesk write opens
+                // only under `via` (M10), which the listener never sets.
+                (req): CatalogDecision => decideZendesk(req.method, req.path, req.via),
                 zendeskConfig.upstreamBase,
                 operations,
               ),

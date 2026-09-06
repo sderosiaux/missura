@@ -101,8 +101,12 @@ export function zendeskNarrow(resolve: Resolver): NarrowFn {
     if (scope === undefined) {
       return { decision: "deny", denyShape: "zendesk404", reason: UNRESOLVED };
     }
-    return narrowZendeskPath(req.path, {
-      zendeskOrganizationIds: [...(scope.zendeskOrganizationIds ?? [])],
-    });
+    // The origin travels, as for GitHub: the write (M10) is decided on the
+    // request's own method and operation, and a raw PUT stays a refusal.
+    return narrowZendeskPath(
+      req.path,
+      { zendeskOrganizationIds: [...(scope.zendeskOrganizationIds ?? [])] },
+      { method: req.method, ...(req.via === undefined ? {} : { via: req.via }) },
+    );
   };
 }

@@ -125,16 +125,39 @@ describe("github rest catalog — the write route, inner calls only", () => {
     expect(raw).toEqual(decideGithub("POST", "/repos/octocat/hello-world/issues"));
   });
 
-  it("opens no other write under an operation: one route, one method", () => {
+  /**
+   * THE DESTROY ROUTE (M10): one comment, deleted, `action: destroy`. Which
+   * operation stands behind the inner call is the pipeline's question — it
+   * refuses a write whose effect is not the operation's — so the catalog
+   * answers for any `via` and names the effect the route costs.
+   */
+  it("allows DELETE of an issue comment under an operation, as a destroy", () => {
+    const d = decideGithub("DELETE", "/repos/octocat/hello-world/issues/comments/9001", {
+      operation: "github.issue.comment.delete",
+    });
+    expect(d).toEqual({
+      decision: "allow",
+      operation: "repos.issues.comments.delete",
+      action: "destroy",
+      reason: "destroy request matching allowlisted route: repos.issues.comments.delete",
+    });
+    expect(decideGithub("DELETE", "/repos/octocat/hello-world/issues/comments/9001").decision).toBe(
+      "deny",
+    );
+  });
+
+  it("opens no other write under an operation: one route per write, one method each", () => {
     for (const [method, path] of [
       ["POST", "/repos/octocat/hello-world/issues"],
       ["POST", "/repos/octocat/hello-world/issues/42"],
       ["POST", "/repos/octocat/hello-world/pulls/7/comments"],
       ["PATCH", COMMENTS],
-      ["DELETE", "/repos/octocat/hello-world/issues/comments/1"],
+      ["DELETE", COMMENTS],
+      ["DELETE", "/repos/octocat/hello-world/issues/42"],
+      ["DELETE", "/repos/octocat/hello-world"],
       ["PUT", COMMENTS],
     ] as const) {
-      expect(decideGithub(method, path, VIA).decision).toBe("deny");
+      expect(decideGithub(method, path, VIA).decision, `${method} ${path}`).toBe("deny");
     }
   });
 

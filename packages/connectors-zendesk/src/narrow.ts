@@ -1,4 +1,4 @@
-import type { FilterPlan, ParentProof } from "@missura/core";
+import type { FilterPlan } from "@missura/core";
 import { decideZendesk } from "./catalog";
 import { canonicalize, isVendorId, type CanonicalRequest } from "./narrow-path";
 import {
@@ -7,8 +7,10 @@ import {
   offsetPagination,
   organizationPlan,
   singlePlan,
+  ticketProof,
   usesCursorPagination,
 } from "./narrow-plan";
+import { narrowWrite, RAW_GET, type ZendeskRequestOrigin } from "./narrow-write";
 import {
   CURSOR_PAGINATION,
   deny,
@@ -21,6 +23,7 @@ import {
 import { narrowSearch } from "./narrow-search";
 
 export type { ZendeskNarrowResult } from "./narrow-result";
+export type { ZendeskRequestOrigin } from "./narrow-write";
 
 /**
  * The mission's Zendesk targets, resolved. Organization ids as Zendesk spells
@@ -166,17 +169,9 @@ function organizations(
  * ticket that never existed and a probe that failed all refuse identically, so
  * the id in the path is not an oracle.
  *
- * The proof key names the TICKET alone, so paging through one ticket's comments
- * costs one probe and no more.
+ * The proof key names the TICKET alone (`ticketProof`), so paging through one
+ * ticket's comments costs one probe and no more.
  */
-function ticketProof(id: string): ParentProof {
-  return {
-    key: `ticket:${id}`,
-    probe: { method: "GET", path: `/api/v2/tickets/${id}`, body: "" },
-    ownerPath: ["ticket", "organization_id"],
-  };
-}
-
 function comments(
   canonical: CanonicalRequest,
   id: string,
@@ -231,6 +226,7 @@ function search(
 function decide(
   path: string,
   organizationIds: readonly string[],
+  origin: ZendeskRequestOrigin,
 ): ZendeskNarrowResult {
   // A mission that resolves to no organization reaches nothing here. Not an
   // empty result set — a refusal, because "everything" is what an unscoped
@@ -241,6 +237,9 @@ function decide(
   if (canonical === undefined) {
     return deny(UNDECODABLE_PATH, "missura_invalid_target");
   }
+  // A write is one decision, apart from the reads (M10): the branches below
+  // are read shapes, and a PUT falling into one would be let through as one.
+  if (origin.method !== "GET") return narrowWrite(canonical, organizationIds, origin);
   const [api, version, resource] = canonical.segments;
   if (api !== "api" || version !== "v2") {
     return deny(NOT_IN_CATALOG_SCOPE, "missura_operation_not_in_catalog");
@@ -267,13 +266,18 @@ function decide(
  * `.json` stripped — and that same canonical request is what travels. Deciding
  * on one spelling and forwarding another is how a mission for one organization
  * becomes a credentialed call to a different one.
+ *
+ * `origin` is the request's method and, for an inner call, the operation it
+ * serves: a write (M10) is decided on it, and a caller that says nothing
+ * gets the read-only decision.
  */
 export function narrowZendesk(
   path: string,
   scope: ZendeskScope,
+  origin: ZendeskRequestOrigin = RAW_GET,
 ): ZendeskNarrowResult {
   return withScopeSize(
-    decide(path, scope.zendeskOrganizationIds),
+    decide(path, scope.zendeskOrganizationIds, origin),
     scope.zendeskOrganizationIds.length,
   );
 }

@@ -195,3 +195,50 @@ describe("decideZendesk — everything else", () => {
     expect(verdict.reason).toContain("Zendesk read catalog");
   });
 });
+
+/**
+ * THE EGRESS ROUTE (M10): a ticket update, reachable only as the inner call
+ * of an operation — `via` is set in-process by the executor and never by
+ * the listener, so off the wire the catalog is what it always was: GET only.
+ * The refused families stay refused under an operation too.
+ */
+describe("decideZendesk — the write route, inner calls only", () => {
+  const VIA = { operation: "zendesk.ticket.reply" };
+
+  it("allows PUT on a ticket under an operation, as an egress", () => {
+    expect(decideZendesk("PUT", "/api/v2/tickets/35436", VIA)).toEqual({
+      decision: "allow",
+      operation: "tickets.update",
+      action: "egress",
+      reason: "egress request matching allowlisted route: tickets.update",
+    });
+    expect(decideZendesk("PUT", "/api/v2/tickets/35436.json", VIA).decision).toBe("allow");
+  });
+
+  it("refuses the same PUT with no operation behind it — the raw path never writes", () => {
+    const raw = decideZendesk("PUT", "/api/v2/tickets/35436");
+    expect(raw.decision).toBe("deny");
+    expect(raw.reason).toContain("read-only");
+  });
+
+  it("opens no other write under an operation, and no refused family", () => {
+    for (const [method, path] of [
+      ["POST", "/api/v2/tickets"],
+      ["PUT", "/api/v2/tickets/35436/comments"],
+      ["PUT", "/api/v2/organizations/22989442"],
+      ["PUT", "/api/v2/users/35436"],
+      ["DELETE", "/api/v2/tickets/35436"],
+      ["PATCH", "/api/v2/tickets/35436"],
+      ["PUT", "/api/v2/tickets/update_many"],
+      ["PUT", "/api/v2/tickets/me"],
+    ] as const) {
+      expect(decideZendesk(method, path, VIA).decision, `${method} ${path}`).toBe("deny");
+    }
+  });
+
+  it("decides a GET under an operation exactly as it does off the wire", () => {
+    for (const path of ["/api/v2/tickets/35436", "/api/v2/incremental/tickets?start_time=0"]) {
+      expect(decideZendesk("GET", path, VIA)).toEqual(decideZendesk("GET", path));
+    }
+  });
+});
