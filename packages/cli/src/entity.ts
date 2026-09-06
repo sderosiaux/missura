@@ -137,8 +137,9 @@ function confirm(io: CliIo, args: readonly string[], options: EntityOptions): nu
  * holds, `propose` leaves the existing link alone and the confirmation
  * applies to it — so `link` on a proposed id is `confirm`, spelled longer.
  *
- * Not on a REJECTED one. A human said no to that id; overriding a decision
- * must be a decision, so `link` refuses and names the command that is one.
+ * Not on a REJECTED or BROKEN one. A human said no to that id, or verification
+ * found it no longer holds; overriding a decision must be a decision, so
+ * `link` refuses and names the command that is one.
  */
 function link(io: CliIo, args: readonly string[], options: EntityOptions): number {
   const key = requireKey(args[0]);
@@ -148,9 +149,11 @@ function link(io: CliIo, args: readonly string[], options: EntityOptions): numbe
   const held = graph
     .entity(key)
     ?.links.find((l) => l.system === system && linkKey(system, l.id) === linkKey(system, id));
-  if (held?.status === "rejected") {
+  // Rejected by a human, or broken by verification: either way something
+  // decided this id does not hold. Overriding that must be a decision too.
+  if (held?.status === "rejected" || held?.status === "broken") {
     throw new Error(
-      `${key} ${system} ${id} is rejected — to override that explicitly: missura entity confirm ${key} ${system} ${id}`,
+      `${key} ${system} ${id} is ${held.status} — to override that explicitly: missura entity confirm ${key} ${system} ${id}`,
     );
   }
   graph.propose(key, { system, id, evidence: `linked by ${options.actor}`, method: "manual" });

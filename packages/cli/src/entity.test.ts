@@ -252,4 +252,34 @@ describe("missura entity link — the command the no_link gap names", () => {
     );
     expect(readFileSync(resolveHome(h.io.env).entitiesPath, "utf8")).toBe(before);
   });
+
+  /**
+   * A BROKEN link is the same smell: something decided this id no longer
+   * holds. `link` must not quietly resurrect it either.
+   */
+  it("refuses an id whose link is broken, the same way it refuses a rejected one", async () => {
+    const h = await inited();
+    const graph = graphFile(h);
+    graph.entities["customer:initech"]?.links.push({
+      system: "github",
+      id: "initech-inc/product",
+      status: "broken",
+      method: "inferred",
+      evidence: "name matches",
+    });
+    writeEntityGraph(h, graph);
+    const before = readFileSync(resolveHome(h.io.env).entitiesPath, "utf8");
+
+    const result = await run(
+      ["entity", "link", "customer:initech", "github", "initech-inc/product"],
+      h.io,
+    );
+
+    expect(result.code).toBe(1);
+    expect(h.err[0] ?? "").toContain("broken");
+    expect(h.err[0] ?? "").toContain(
+      "missura entity confirm customer:initech github initech-inc/product",
+    );
+    expect(readFileSync(resolveHome(h.io.env).entitiesPath, "utf8")).toBe(before);
+  });
 });
