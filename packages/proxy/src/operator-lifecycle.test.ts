@@ -67,6 +67,7 @@ describe("operator API — POST /v1/revoke", () => {
         scope: {},
         connections: [],
         allow: ["read"],
+        degraded: [],
       },
       { key: SIGNING_KEY, ttlSeconds: 300 },
     );

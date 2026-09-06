@@ -16,6 +16,7 @@ const CLAIMS: MissionClaims = {
   scope: { entity: "customer:acme" },
   connections: ["linear"],
   allow: ["read", "search"],
+  degraded: [],
   jti: "jti-1",
   iat: 1_000,
   exp: 2_000,

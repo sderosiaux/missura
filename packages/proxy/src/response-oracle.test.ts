@@ -90,6 +90,7 @@ const GITHUB_CLAIMS: MissionClaims = {
   ...CLAIMS,
   connections: ["github"],
   allow: ["read", "search"],
+  degraded: [],
 };
 const LINEAR_CLAIMS: MissionClaims = { ...CLAIMS, connections: ["linear"] };
 

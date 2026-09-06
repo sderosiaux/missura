@@ -71,6 +71,7 @@ function client(apiUrl: string): LinearClient {
         scope: { entity: "customer:acme" },
         connections: ["linear"],
         allow: ["read", "search"],
+        degraded: [],
       },
       { key: SIGNING_KEY, ttlSeconds: 60 },
     ),

@@ -40,6 +40,7 @@ function token(): string {
       scope: {},
       connections: ["linear", "github", "zendesk"],
       allow: ["read", "search"],
+      degraded: [],
     },
     { key: SIGNING_KEY, ttlSeconds: 60 },
   );

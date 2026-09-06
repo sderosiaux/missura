@@ -56,6 +56,7 @@ describe("what a mission scope asks the graph", () => {
         scope: { native: { system: "zendesk", id: "360000123456" } },
         connections: ["zendesk"],
         allow: ["read"],
+        degraded: [],
       },
       { key, ttlSeconds: 600 },
     );

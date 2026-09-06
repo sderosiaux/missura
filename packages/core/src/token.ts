@@ -1,5 +1,20 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { LinkSystem } from "./entity-graph";
+import type { DegradeReason } from "./entity-resolve";
+
+/**
+ * A system the graph declined to put in the mission, and the class of reason.
+ * The mission RECORD keeps the native id behind that decision (`c_77`, the
+ * proposed Linear customer); the token does not carry it, so nothing derived
+ * from the token — an introspection answer, a denial — can hand it to the
+ * agent. Being told "Linear is out because its link is only proposed" is what
+ * keeps an agent from concluding a customer has no Linear issues; being told
+ * WHICH id was proposed would be somebody's guess about another system's data.
+ */
+export interface MissionDegradation {
+  system: LinkSystem;
+  reason: DegradeReason;
+}
 
 export interface MissionScope {
   /**
@@ -33,6 +48,13 @@ export interface MissionInput {
   scope: MissionScope;
   connections: string[];
   allow: readonly string[];
+  /**
+   * Required rather than defaulted, and `[]` when nothing was declined: a mint
+   * path that forgot to say what it left out would hand the agent a mission
+   * that reads as whole, which is the confidently-wrong agent this claim exists
+   * to prevent.
+   */
+  degraded: readonly MissionDegradation[];
 }
 
 export interface MissionClaims extends MissionInput {
@@ -95,6 +117,26 @@ function isStringArray(value: unknown): boolean {
   );
 }
 
+/**
+ * A degradation claim is valid only as a list of `{system, reason}` records —
+ * the id the mission record holds must not have been minted in, and an entry
+ * that is not even a record is a token nobody here signed.
+ */
+function isDegradationList(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry: unknown) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        !Array.isArray(entry) &&
+        typeof (entry as Record<string, unknown>).system === "string" &&
+        typeof (entry as Record<string, unknown>).reason === "string" &&
+        !("id" in entry),
+    )
+  );
+}
+
 /** Fails closed: a missing or mistyped claim rejects the token, never defaults. */
 function validateClaims(value: unknown): MissionClaims {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -116,6 +158,7 @@ function validateClaims(value: unknown): MissionClaims {
     ],
     ["connections", isStringArray(c.connections)],
     ["allow", isStringArray(c.allow)],
+    ["degraded", isDegradationList(c.degraded)],
   ];
   for (const [field, ok] of checks) {
     if (!ok) throw new Error(`invalid claims: ${field}`);
@@ -196,6 +239,7 @@ export function signDevToken(opts: {
       scope: {},
       connections: ["linear", "github"],
       allow: ["read", "search"],
+      degraded: [],
     },
     opts,
   );

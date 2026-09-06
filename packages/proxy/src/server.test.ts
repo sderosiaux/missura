@@ -152,6 +152,7 @@ describe("proxy server — github listener", () => {
         scope: {},
         connections: ["linear"],
         allow: ["read", "search"],
+        degraded: [],
       },
       { key: SIGNING_KEY, ttlSeconds: 60 },
     );

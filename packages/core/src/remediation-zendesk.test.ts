@@ -21,6 +21,7 @@ const CLAIMS: MissionClaims = {
   scope: { entity: "customer:acme" },
   connections: ["zendesk"],
   allow: ["read", "search"],
+  degraded: [],
   jti: "j1",
   iat: 0,
   exp: 3600,

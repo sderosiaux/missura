@@ -96,6 +96,40 @@ describe("mission store — create", () => {
     expect(verifyMissionToken(token, { key: KEY }).connections).toEqual([]);
   });
 
+  /**
+   * The agent must be able to learn it runs narrow, so the token says which
+   * systems the graph declined and why. It does NOT say which id was proposed:
+   * that id is somebody's inference about another system's data, and a token
+   * is the one thing the agent holds in full.
+   */
+  it("carries what the graph declined by system and reason — never by id", () => {
+    const store = new MissionStore(statePath(), KEY);
+    const { token } = store.create(
+      { ...INPUT, scope: { entity: "customer:zoetis" } },
+      { githubRepos: [{ repo: "acme-corp/zoetis" }] },
+      {
+        via: "entity",
+        entityKey: "customer:zoetis",
+        scope: { githubRepos: [{ repo: "acme-corp/zoetis" }] },
+        systems: ["github"],
+        used: [{ system: "github", id: "acme-corp/zoetis", status: "confirmed" }],
+        degraded: [{ system: "linear", reason: "link_proposed", id: "c_77" }],
+      },
+    );
+    const claims = verifyMissionToken(token, { key: KEY });
+
+    expect(claims.degraded).toEqual([
+      { system: "linear", reason: "link_proposed" },
+    ]);
+    expect(JSON.stringify(claims)).not.toContain("c_77");
+  });
+
+  it("carries an empty degradation list when no graph was involved", () => {
+    const store = new MissionStore(statePath(), KEY);
+    const { token } = store.create(INPUT, RESOLVED);
+    expect(verifyMissionToken(token, { key: KEY }).degraded).toEqual([]);
+  });
+
   it("rejects an empty or blank purpose", () => {
     const store = new MissionStore(statePath(), KEY);
     expect(() =>

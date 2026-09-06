@@ -127,6 +127,7 @@ export function mintMission(
       },
       connections: connectionsOf(credentials),
       allow: ["read", "search"],
+      degraded: [],
     },
     { key: signingKey, ttlSeconds: TTL_SECONDS },
   );

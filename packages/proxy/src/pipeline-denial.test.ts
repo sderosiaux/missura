@@ -21,6 +21,7 @@ const SCOPED: MissionClaims = {
   scope: { entity: "customer:acme" },
   connections: ["linear", "github"],
   allow: ["read", "search"],
+  degraded: [],
   exp: Math.floor(Date.now() / 1000) + 600,
 };
 

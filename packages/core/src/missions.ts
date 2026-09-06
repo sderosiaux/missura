@@ -176,6 +176,12 @@ export class MissionStore {
         scope: input.scope,
         connections: connectionsFor(resolved),
         allow: ALLOW,
+        // Field by field, and the id stays behind on the record: the token is
+        // the one artefact the agent holds in full (`MissionDegradation`).
+        degraded: (resolution?.degraded ?? []).map((d) => ({
+          system: d.system,
+          reason: d.reason,
+        })),
       },
       { key: this.signingKey, ttlSeconds: input.ttlSeconds },
     );

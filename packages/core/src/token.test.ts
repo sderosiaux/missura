@@ -34,6 +34,7 @@ const MISSION = {
   scope: { entity: "customer:acme", repos: ["acme-corp/product"] },
   connections: ["linear", "github"],
   allow: ["search", "read"] as const,
+  degraded: [],
 };
 
 describe("mission token", () => {
@@ -199,6 +200,7 @@ describe("mission token", () => {
     const token = forge({
       ...MISSION,
       allow: ["read", { admin: true }],
+      degraded: [],
       jti: "11111111-1111-4111-8111-111111111111",
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 600,
@@ -218,6 +220,34 @@ describe("mission token", () => {
     });
     expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
       /invalid claims: allow/i,
+    );
+  });
+
+  it("rejects a token that says nothing about what was declined", () => {
+    const without: Record<string, unknown> = { ...MISSION };
+    delete without.degraded;
+    const token = forge({
+      ...without,
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
+      /invalid claims: degraded/i,
+    );
+  });
+
+  /** The id lives on the record; a token minted with it was not minted here. */
+  it("rejects a degradation that carries the native id", () => {
+    const token = forge({
+      ...MISSION,
+      degraded: [{ system: "linear", reason: "link_proposed", id: "c_77" }],
+      jti: "11111111-1111-4111-8111-111111111111",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 600,
+    });
+    expect(() => verifyMissionToken(token, { key: KEY })).toThrow(
+      /invalid claims: degraded/i,
     );
   });
 });

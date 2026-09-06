@@ -22,6 +22,7 @@ export const CLAIMS: MissionClaims = {
   scope: {},
   connections: ["linear", "github"],
   allow: ["read"],
+  degraded: [],
   jti: "jti-1",
   iat: 0,
   exp: 9_999_999_999,
