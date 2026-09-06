@@ -1,5 +1,7 @@
 import {
+  ApprovalRefusedError,
   approvalState,
+  type ApprovalRecord,
   type CatalogDecision,
   type MissionClaims,
   type Operation,
@@ -28,6 +30,7 @@ import { JSON_HEADERS, type ResponseShape } from "./transport";
  */
 export const APPROVAL_REQUIRED_REASON = "approval required";
 const REFUSED_CODE = "missura_approval_refused";
+const NOT_OPENED_CODE = "missura_approval_not_opened";
 
 /** The two effects a human must approve: irreversible, or leaving the boundary. */
 export function requiresApproval(op: Operation): boolean {
@@ -74,14 +77,32 @@ export interface Gated {
   verdict: CatalogDecision;
 }
 
-/** Writes the approval down and answers `202`: the id and its state, nothing else. */
+/**
+ * Writes the approval down and answers `202`: the id and its state, nothing
+ * else. Or refuses to (H1): a target already waiting on a human, or a
+ * mission at its cap, gets a `409` naming the one already pending — the
+ * store's own words, which name nothing beyond this mission's own ids.
+ */
 export function openApproval(gate: Gated): ResponseShape {
   const { deps, ctx, claims, op, params, steps, verdict } = gate;
-  const approval = deps.operations.approvals.requestApproval(
-    claims.id,
-    { operation: op.name, params, planned: steps },
-    ctx.startedAt,
-  );
+  let approval: ApprovalRecord;
+  try {
+    approval = deps.operations.approvals.requestApproval(
+      claims.id,
+      { operation: op.name, params, planned: steps },
+      ctx.startedAt,
+    );
+  } catch (err) {
+    if (!(err instanceof ApprovalRefusedError)) throw err;
+    emitEvent(deps, ctx, claimsDenial(verdict, err.message));
+    return denialResponse(deps.provider, {
+      status: 409,
+      code: NOT_OPENED_CODE,
+      reason: err.message,
+      claims,
+      now: ctx.startedAt,
+    });
+  }
   emitEvent(
     deps,
     { ...ctx, approvalId: approval.id },

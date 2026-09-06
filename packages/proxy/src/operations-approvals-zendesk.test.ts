@@ -1,7 +1,8 @@
+import { MAX_PENDING_APPROVALS_PER_MISSION } from "@missura/core";
 import { describe, expect, it } from "vitest";
 import { approvalRig, opened, REPLY_OP, REPLY_PARAMS, requestOp } from "./approvals.fixtures";
 import { handle } from "./pipeline";
-import { bodyText, request, restDenial } from "./pipeline.fixtures";
+import { bodyText, graphqlDenial, request, restDenial } from "./pipeline.fixtures";
 
 /**
  * THE EGRESS (M10): `zendesk.ticket.reply` inside scope, granted, still
@@ -74,6 +75,36 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
     expect(res.status).toBe(404);
     expect(JSON.parse(bodyText(res.body))).toMatchObject({ error: "RecordNotFound" });
     expect(rig.connector.calls.map((c) => c.init.method ?? "GET")).toEqual(["GET"]);
+  });
+
+  /**
+   * H1: one pending approval per target. A second request on the same
+   * ticket with another wording is refused, naming the one already waiting —
+   * it is not recorded, and the human never sees two rows for one target.
+   */
+  it("refuses a second pending approval on the same ticket, naming the first, and records nothing", async () => {
+    const rig = approvalRig("zendesk", { vendor: zendesk });
+    const id = await opened(rig, REPLY_OP, REPLY_PARAMS);
+    const res = await requestOp(rig, REPLY_OP, { ...REPLY_PARAMS, body: "another wording" });
+
+    expect(res.status).toBe(409);
+    const denial = graphqlDenial(res.body);
+    expect(denial.code).toBe("missura_approval_not_opened");
+    expect(denial.reason).toContain(id);
+    expect(rig.store.pendingApprovals().map((a) => a.id)).toEqual([id]);
+    expect(rig.outer.events.at(-1)).toMatchObject({ decision: "deny", viaOperation: REPLY_OP });
+  });
+
+  it("caps the pending approvals one mission may hold", async () => {
+    const rig = approvalRig("zendesk", { vendor: zendesk });
+    for (let ticket = 1; ticket <= MAX_PENDING_APPROVALS_PER_MISSION; ticket += 1) {
+      await opened(rig, REPLY_OP, { ...REPLY_PARAMS, ticket });
+    }
+    const res = await requestOp(rig, REPLY_OP, { ...REPLY_PARAMS, ticket: 999 });
+
+    expect(res.status).toBe(409);
+    expect(graphqlDenial(res.body).code).toBe("missura_approval_not_opened");
+    expect(rig.store.pendingApprovals()).toHaveLength(MAX_PENDING_APPROVALS_PER_MISSION);
   });
 
   it("never writes on the raw path: the agent's own PUT is not in the catalog", async () => {

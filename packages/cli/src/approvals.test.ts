@@ -1,4 +1,4 @@
-import { approvalState, type ApprovalRecord } from "@missura/core";
+import { approvalState, type ApprovalRecord, type ApprovalRequest } from "@missura/core";
 import { operationCatalogue } from "@missura/proxy";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupHomes, initedHarness, type Harness } from "./harness.fixtures";
@@ -22,19 +22,34 @@ const REQUEST = {
   ],
 };
 
-function pending(h: Harness): ApprovalRecord {
-  const store = openStore(resolveHome(h.io.env), operationCatalogue({ zendesk: false }));
+/** The egress: the reply text is what leaves, and what the human must read. */
+const REPLY_TEXT =
+  "Hi Dana, we have refunded the March invoice in full; it lands within 5 business days. Sorry again.";
+const REPLY = {
+  operation: "zendesk.ticket.reply",
+  params: { ticket: 35, body: REPLY_TEXT },
+  planned: [
+    {
+      method: "PUT",
+      path: "/api/v2/tickets/35",
+      body: JSON.stringify({ ticket: { comment: { body: REPLY_TEXT, public: true } } }),
+    },
+  ],
+};
+
+function pending(h: Harness, request: ApprovalRequest = REQUEST): ApprovalRecord {
+  const store = openStore(resolveHome(h.io.env), operationCatalogue({ zendesk: true }));
   const { record } = store.create(
     {
       purpose: "m10 spec",
       actor: "sam@acme.io",
       scope: { repos: ["acme-corp/product"] },
       ttlSeconds: 900,
-      allow: [REQUEST.operation],
+      allow: [request.operation],
     },
-    { githubRepos: [{ repo: "acme-corp/product" }] },
+    { githubRepos: [{ repo: "acme-corp/product" }], zendeskOrganizationIds: ["4200"] },
   );
-  return store.requestApproval(record.id, REQUEST);
+  return store.requestApproval(record.id, request);
 }
 
 function recorded(h: Harness, id: string): ApprovalRecord | undefined {
@@ -71,6 +86,39 @@ describe("missura approvals", () => {
     expect(text).toContain(approval.id);
     expect(text).toContain(approval.missionId);
     expect(text).toContain(REQUEST.operation);
+    expect(text).toContain("DELETE /repos/acme-corp/product/issues/comments/9001");
+  });
+
+  /**
+   * H1: an egress is approved by a human who has read what leaves. The
+   * default table carries the body of every non-read call — cut to the
+   * column, never dropped — and `--full` prints it whole.
+   */
+  it("shows the body an egress will send, in the default table", async () => {
+    const h = await initedHarness();
+    pending(h, REPLY);
+    h.out.length = 0;
+    const result = await run(["approvals"], h.io);
+    const text = h.out.join("\n");
+
+    expect(result.code).toBe(0);
+    expect(h.out[0]).toMatch(/^ID\s+MISSION\s+OPERATION\s+CALL\s+BODY\s+AGE/);
+    expect(text).toContain("PUT /api/v2/tickets/35");
+    expect(text).toContain("Hi Dana, we have refunded");
+  });
+
+  it("prints the whole body with --full, and the destroy's empty one as such", async () => {
+    const h = await initedHarness();
+    const reply = pending(h, REPLY);
+    const destroy = pending(h);
+    h.out.length = 0;
+    const result = await run(["approvals", "--full"], h.io);
+    const text = h.out.join("\n");
+
+    expect(result.code).toBe(0);
+    expect(text).toContain(reply.id);
+    expect(text).toContain(destroy.id);
+    expect(text).toContain(REPLY.planned[0]?.body ?? "");
     expect(text).toContain("DELETE /repos/acme-corp/product/issues/comments/9001");
   });
 

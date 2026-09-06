@@ -6,7 +6,7 @@ import {
   type EntityScopeResolution,
 } from "./entity-resolve";
 import { gapRemediation } from "./feasibility-text";
-import { connectionsFor } from "./missions";
+import { connectionsFor } from "./mission-record";
 import {
   operationAllowed,
   OperationGrantError,

@@ -31,6 +31,7 @@ const LINEAR_ERROR_TYPE: Record<DenialCode, string> = {
   missura_internal: "InternalError",
   missura_approval_unknown: "Forbidden",
   missura_approval_refused: "Forbidden",
+  missura_approval_not_opened: "Forbidden",
 };
 
 /**

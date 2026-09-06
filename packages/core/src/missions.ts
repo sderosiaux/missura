@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
+  ApprovalRefusedError,
   approvalState,
+  approvalTarget,
+  MAX_PENDING_APPROVALS_PER_MISSION,
   mergeApprovals,
   type ApprovalDecision,
   type ApprovalRecord,
@@ -13,57 +16,17 @@ import {
   writeState,
   type StateFile,
 } from "./mission-state";
-import { grantableOperations, scopeSatisfies, type Operation } from "./operation";
+import { connectionsFor, requireText, type CreateMission, type MissionRecord } from "./mission-record";
+import { grantableOperations, type Operation } from "./operation";
 import type { ResolvedScope } from "./resolved-scope";
 import type { ScopeResolution } from "./entity-resolve";
-import { scopeProvenance, type ScopeProvenance } from "./scope-provenance";
-import {
-  signMissionToken,
-  verifyMissionToken,
-  type MissionScope,
-} from "./token";
+import { scopeProvenance } from "./scope-provenance";
+import { signMissionToken, verifyMissionToken } from "./token";
 
-export interface CreateMission {
-  purpose: string;
-  actor: string;
-  scope: MissionScope;
-  ttlSeconds: number;
-  /**
-   * Operation NAMES granted beyond the read verbs — the only way a mission
-   * reaches a write (`operationAllowed`). Absent means the default grant,
-   * which is read-only; present, every name is checked against the catalogue
-   * this store was built with before a token exists.
-   */
-  allow?: readonly string[];
-}
-
-export interface MissionRecord extends CreateMission {
-  id: string;
-  jti: string;
-  /** Epoch seconds, aligned with the token's `iat`/`exp`. */
-  createdAt: number;
-  expiresAt: number;
-  revokedAt?: number;
-  /**
-   * What the entity graph was asked, and what it answered — the confirmed links
-   * this scope was built from, and the ones it declined to use. Absent when the
-   * mint did not go through the graph at all.
-   *
-   * Description of a grant, like every other field here: it names ids the
-   * operator already wrote down, never a token and never a credential.
-   */
-  resolution?: ScopeProvenance;
-}
+export type { CreateMission, MissionRecord } from "./mission-record";
 
 /** The verbs every mission grants — the raw read path, and nothing that writes. */
 const ALLOW = ["read", "search"] as const;
-
-function requireText(field: string, value: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${field} is required and must not be empty`);
-  }
-  return value;
-}
 
 /**
  * Missions and their revocations, persisted as plain JSON (mode 0600). The file
@@ -325,6 +288,11 @@ export class MissionStore {
   /**
    * Writes an approval down, pending, on a live mission: what was asked and
    * the exact inner call(s) that would go (M10). Nothing runs here.
+   *
+   * One pending approval per target, and few per mission (H1): the second
+   * request on a target a human has not decided yet is refused naming the
+   * first, so the human reads one row per target and the agent cannot get
+   * one wording approved and replay another.
    */
   requestApproval(
     missionId: string,
@@ -333,6 +301,23 @@ export class MissionStore {
   ): ApprovalRecord {
     this.refresh();
     this.liveMission(missionId, now);
+    const pending = this.approvals.filter(
+      (a) => a.missionId === missionId && approvalState(a) === "pending",
+    );
+    const target = approvalTarget(request.operation, request.planned);
+    const twin = pending.find((a) => approvalTarget(a.operation, a.planned) === target);
+    if (twin !== undefined) {
+      throw new ApprovalRefusedError(
+        "duplicate",
+        `an approval for this operation and target is already pending: ${twin.id}`,
+      );
+    }
+    if (pending.length >= MAX_PENDING_APPROVALS_PER_MISSION) {
+      throw new ApprovalRefusedError(
+        "limit",
+        `this mission already holds ${String(MAX_PENDING_APPROVALS_PER_MISSION)} pending approvals`,
+      );
+    }
     const approval: ApprovalRecord = {
       operation: request.operation,
       params: { ...request.params },
@@ -453,22 +438,4 @@ export class MissionStore {
     // Our own write is not a change to react to; anyone else's still is.
     this.stamp = fileStamp(this.stateFile);
   }
-}
-
-/**
- * A connection is granted only if the RESOLVED scope proves a target for it.
- *
- * Read off the business scope instead, a mission scoped
- * `{entity: "customer:acme"}` would carry whichever connections the KEY looked
- * like it implied, which is none of them: an entity name says nothing about
- * which systems a human has confirmed for it. The mirror case is an entity
- * whose Linear link is only proposed — it carries no linear connection, because
- * there is no customer id to narrow to and so nothing to grant.
- */
-export function connectionsFor(scope: ResolvedScope): string[] {
-  const connections: string[] = [];
-  if (scopeSatisfies(scope, "linear.customer")) connections.push("linear");
-  if (scopeSatisfies(scope, "github.repo")) connections.push("github");
-  if (scopeSatisfies(scope, "zendesk.organization")) connections.push("zendesk");
-  return connections;
 }

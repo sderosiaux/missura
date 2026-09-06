@@ -29,7 +29,9 @@ export type DenialCode =
   /** No approval by that id on THIS mission — another mission's and none at all read alike. */
   | "missura_approval_unknown"
   /** The approval exists on this mission and cannot run this request: not approved, spent, or for something else. */
-  | "missura_approval_refused";
+  | "missura_approval_refused"
+  /** No new approval was written down: one is pending on this target already, or the mission is at its cap. */
+  | "missura_approval_not_opened";
 
 /** The mission as the agent may be told about it — its own grant, nothing else. */
 export interface MissionSummary {

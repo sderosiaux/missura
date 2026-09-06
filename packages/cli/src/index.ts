@@ -69,8 +69,13 @@ const USAGE = [
   "                                   (SYSTEM is linear, github or zendesk)",
   "  missura missions                 active missions (no token material)",
   "  missura revoke <mission_id>      revoke a mission — effective on the next request",
-  "  missura approvals [--json]       what agents are waiting on you for: the",
+  "  missura approvals [--full|--json]",
+  "                                   what agents are waiting on you for: the",
   "                                   operation, the exact vendor call it would make",
+  "                                   and the body it would send — read it before",
+  "                                   you approve; --full prints each body whole",
+  "                                   (one pending approval per target, a few per",
+  "                                   mission; a second ask on a target is refused)",
   "  missura approve <id> [--actor WHO]",
   "  missura deny <id> [--actor WHO]  record your decision, in your name. Nothing",
   "                                   runs here: the agent re-requests the operation",
@@ -90,6 +95,7 @@ const OPTIONS = {
   allow: { type: "string", multiple: true },
   entities: { type: "string" },
   json: { type: "boolean" },
+  full: { type: "boolean" },
   dev: { type: "boolean" },
   "linear-port": { type: "string" },
   "github-port": { type: "string" },
@@ -192,7 +198,9 @@ async function dispatch(
     case "revoke":
       return { code: revokeCommand(io, positionals[1]) };
     case "approvals":
-      return { code: approvalsCommand(io, values.json === true) };
+      return {
+        code: approvalsCommand(io, { json: values.json === true, full: values.full === true }),
+      };
     case "approve":
       return { code: decideCommand(io, "approved", positionals[1], actorOf(values, io)) };
     case "deny":

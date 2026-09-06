@@ -45,6 +45,42 @@ export function approvalState(record: ApprovalRecord): ApprovalState {
 }
 
 /**
+ * How many approvals one mission may have waiting at once. Small on purpose:
+ * a human reads every one of them, and an agent that could queue hundreds
+ * would be writing hundreds of bodies into the state file on one token.
+ */
+export const MAX_PENDING_APPROVALS_PER_MISSION = 5;
+
+/**
+ * A request the store will not write down: the target already has a pending
+ * approval, or the mission is at its cap. The executor answers it as a
+ * refusal, in the message's own words — nothing here names a vendor object
+ * the agent did not name itself.
+ */
+export class ApprovalRefusedError extends Error {
+  readonly kind: "duplicate" | "limit";
+  constructor(kind: "duplicate" | "limit", message: string) {
+    super(message);
+    this.name = "ApprovalRefusedError";
+    this.kind = kind;
+  }
+}
+
+/**
+ * What an approval is ABOUT, body aside: the operation and the exact vendor
+ * calls it would make. Two requests with the same targets and two bodies are
+ * one row to the human reading them, so they are one approval here — the
+ * second is refused by name rather than written beside the first, where an
+ * agent could get one approved and replay the other.
+ */
+export function approvalTarget(operation: string, planned: readonly OperationStep[]): string {
+  return JSON.stringify([
+    operation,
+    planned.map((step) => `${step.method.toUpperCase()} ${step.path}`),
+  ]);
+}
+
+/**
  * How far along a record is. Records only ever move forward — pending,
  * decided, consumed — so two copies of one approval are ordered by this, and
  * the later one is the truth whatever file it came from.

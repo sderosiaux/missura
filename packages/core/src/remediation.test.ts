@@ -63,6 +63,7 @@ describe("buildDenial", () => {
       "missura_internal",
       "missura_approval_unknown",
       "missura_approval_refused",
+      "missura_approval_not_opened",
     ] as const;
     for (const code of codes) {
       const denial = buildDenial({
@@ -87,7 +88,7 @@ describe("buildDenial", () => {
    * be what the agent was trying to do.
    */
   it("points an approval refusal at the approval route, with no vendor shape", () => {
-    for (const code of ["missura_approval_unknown", "missura_approval_refused"] as const) {
+    for (const code of ["missura_approval_unknown", "missura_approval_refused", "missura_approval_not_opened"] as const) {
       const denial = buildDenial({ code, reason: "r", provider: "github", claims: CLAIMS, now: NOW });
       expect(denial.remediation, code).toContain("/missura/approvals/");
       expect(denial.try_instead, code).toEqual([]);

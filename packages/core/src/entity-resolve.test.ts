@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectionsFor } from "./missions";
+import { connectionsFor } from "./mission-record";
 import { openEntityGraph } from "./entity-graph-store";
 import {
   ADEO_JSON,

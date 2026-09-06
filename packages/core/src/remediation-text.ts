@@ -165,6 +165,9 @@ export function remediationFor(code: DenialCode, ctx: Ctx): string {
       return `no approval by that id is on this mission. An approval is opened by requesting the operation without one — the \`202\` answer carries its id — and its state is read at \`GET /missura/approvals/<id>\` with the same bearer.`;
     case "missura_approval_refused":
       return `this approval cannot run this request — \`reason\` says why: it is not approved yet, it was denied, it has already run, or it was opened for a different operation or parameters. Poll \`GET /missura/approvals/<id>\` and re-request the SAME operation with the SAME parameters plus \`approval: <id>\` once it reads \`approved\`; anything else needs a new approval.`;
+    // The id it names is this mission's own: the agent opened it.
+    case "missura_approval_not_opened":
+      return `no new approval was opened and nothing was sent — \`reason\` says why: an approval on this very operation and target is already waiting for a human (its id is in \`reason\`: poll \`GET /missura/approvals/<id>\` and re-request with it once it reads \`approved\`, or wait for it to be denied before asking with other parameters), or this mission already holds as many pending approvals as it may. A human decides them on the operator plane; nothing in the request speeds that up.`;
   }
 }
 
@@ -205,6 +208,7 @@ export function tryInsteadFor(code: DenialCode, ctx: Ctx): readonly string[] {
     // read shape would send the agent off the write it was waiting on.
     case "missura_approval_unknown":
     case "missura_approval_refused":
+    case "missura_approval_not_opened":
       return [];
     case "missura_request_too_large":
     case "missura_response_too_large":

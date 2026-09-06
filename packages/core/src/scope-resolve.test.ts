@@ -5,7 +5,7 @@ import {
   oneLink,
   writeGraphFile as write,
 } from "./entity-graph.fixtures";
-import { connectionsFor } from "./missions";
+import { connectionsFor } from "./mission-record";
 import { resolveMissionScope } from "./scope-resolve";
 
 const GITHUB_LINK = {

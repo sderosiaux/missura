@@ -8,14 +8,23 @@ import { resolveHome } from "./paths";
  * of an approval (M10), on the same state file `missura run` records them
  * in, so a decision typed here lands on the proxy's very next request.
  *
- * Listing shows the planned call in full. This is the operator's terminal:
- * unlike everything an agent is answered, nothing here is redacted.
+ * Listing shows the planned call in full — and its BODY. An egress is a
+ * reply the customer will receive by email: a human who approves a `PUT`
+ * without the text in front of them has approved nothing. The default table
+ * carries every body cut to its column, never dropped; `--full` prints each
+ * one whole. This is the operator's terminal: unlike everything an agent is
+ * answered, nothing here is redacted.
+ *
  * Deciding writes a name and a time; nothing in this process can run the
  * call, and that is the point of the design — the run is the agent's, on
  * the data plane, under its own token.
  */
 
-const HEADERS = ["ID", "MISSION", "OPERATION", "CALL", "AGE"];
+const HEADERS = ["ID", "MISSION", "OPERATION", "CALL", "BODY", "AGE"];
+
+/** Columns past this many characters are cut, with a mark that says so. */
+const BODY_COLUMN = 72;
+const NO_BODY = "(no body)";
 
 /** The one planned call, or the count when a plan has several. */
 function callOf(approval: ApprovalRecord): string {
@@ -25,12 +34,24 @@ function callOf(approval: ApprovalRecord): string {
   return rest.length === 0 ? call : `${call} (+${String(rest.length)} more)`;
 }
 
+/** Every planned body, one line: what will leave, as bytes. */
+function bodyOf(approval: ApprovalRecord): string {
+  const bodies = approval.planned.map((step) => step.body).filter((body) => body.length > 0);
+  if (bodies.length === 0) return NO_BODY;
+  return bodies.join(" | ").replace(/\s+/g, " ");
+}
+
+function cut(text: string): string {
+  return text.length <= BODY_COLUMN ? text : `${text.slice(0, BODY_COLUMN - 1)}…`;
+}
+
 function row(approval: ApprovalRecord, nowSeconds: number): string[] {
   return [
     approval.id,
     approval.missionId,
     approval.operation,
     callOf(approval),
+    cut(bodyOf(approval)),
     formatTtl(nowSeconds - approval.requestedAt),
   ];
 }
@@ -47,9 +68,26 @@ function table(rows: string[][]): string[] {
   return [line(HEADERS), ...rows.map(line)];
 }
 
-export function approvalsCommand(io: CliIo, json: boolean): number {
+/** One block per approval: the header line, then each call and its whole body. */
+function block(approval: ApprovalRecord, nowSeconds: number): string[] {
+  const lines = [
+    `${approval.id}  ${approval.missionId}  ${approval.operation}  ${formatTtl(nowSeconds - approval.requestedAt)}`,
+  ];
+  for (const step of approval.planned) {
+    lines.push(`  ${step.method} ${step.path}`);
+    lines.push(`  ${step.body.length === 0 ? NO_BODY : step.body}`);
+  }
+  return lines;
+}
+
+export interface ApprovalsOptions {
+  json: boolean;
+  full: boolean;
+}
+
+export function approvalsCommand(io: CliIo, options: ApprovalsOptions): number {
   const pending = openStore(resolveHome(io.env)).pendingApprovals();
-  if (json) {
+  if (options.json) {
     io.stdout(JSON.stringify({ approvals: pending }));
     return 0;
   }
@@ -58,7 +96,10 @@ export function approvalsCommand(io: CliIo, json: boolean): number {
     return 0;
   }
   const nowSeconds = Math.floor(Date.now() / 1000);
-  for (const line of table(pending.map((a) => row(a, nowSeconds)))) io.stdout(line);
+  const lines = options.full
+    ? pending.flatMap((a) => block(a, nowSeconds))
+    : table(pending.map((a) => row(a, nowSeconds)));
+  for (const line of lines) io.stdout(line);
   return 0;
 }
 

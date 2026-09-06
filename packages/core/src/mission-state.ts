@@ -10,7 +10,7 @@ import {
 import { dirname } from "node:path";
 import { parseApprovals, type ApprovalRecord } from "./approvals";
 import { SECRET_FILE_MODE } from "./keys";
-import type { MissionRecord } from "./missions";
+import type { MissionRecord } from "./mission-record";
 
 /**
  * A revocation that outlives its record. Revoking by token has to work on a

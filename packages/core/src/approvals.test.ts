@@ -2,7 +2,13 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { approvalState, mergeApprovals, type ApprovalRecord } from "./approvals";
+import {
+  ApprovalRefusedError,
+  approvalState,
+  MAX_PENDING_APPROVALS_PER_MISSION,
+  mergeApprovals,
+  type ApprovalRecord,
+} from "./approvals";
 import { MissionStore, type CreateMission } from "./missions";
 import { parseState } from "./mission-state";
 import type { ResolvedScope } from "./resolved-scope";
@@ -77,6 +83,68 @@ describe("mission store — requesting an approval", () => {
   });
 });
 
+/**
+ * H1: an agent that could open N approvals on one target with N bodies would
+ * hand the human N identical rows and replay whichever one was approved. A
+ * pending approval on a target blocks a second one, by name; and a mission
+ * holds a small, fixed number of pending approvals at once.
+ */
+describe("mission store — one pending approval per target, few per mission", () => {
+  const REPLY = {
+    operation: "zendesk.ticket.reply",
+    params: { ticket: 35, body: "first wording" },
+    planned: [{ method: "PUT", path: "/api/v2/tickets/35", body: '{"a":1}' }],
+  };
+
+  it("refuses a second pending approval on the same operation and target, naming the first", () => {
+    const { store, missionId } = minted();
+    const first = store.requestApproval(missionId, REPLY);
+    const reworded = {
+      ...REPLY,
+      params: { ticket: 35, body: "second wording" },
+      planned: [{ ...REPLY.planned[0], method: "PUT", path: "/api/v2/tickets/35", body: '{"b":2}' }],
+    };
+    expect(() => store.requestApproval(missionId, reworded)).toThrow(ApprovalRefusedError);
+    expect(() => store.requestApproval(missionId, reworded)).toThrow(first.id);
+    expect(store.pendingApprovals().map((a) => a.id)).toEqual([first.id]);
+  });
+
+  it("lets a decided target be asked about again, and another target beside it", () => {
+    const { store, missionId } = minted();
+    const first = store.requestApproval(missionId, REPLY);
+    const other = store.requestApproval(missionId, {
+      ...REPLY,
+      params: { ticket: 36, body: "first wording" },
+      planned: [{ method: "PUT", path: "/api/v2/tickets/36", body: '{"a":1}' }],
+    });
+    expect(other.id).not.toBe(first.id);
+    store.decideApproval(first.id, "denied", "ops@acme.io");
+    expect(store.requestApproval(missionId, REPLY).id).not.toBe(first.id);
+  });
+
+  it("caps the pending approvals a mission holds, at the exported number", () => {
+    const { store, missionId } = minted();
+    expect(MAX_PENDING_APPROVALS_PER_MISSION).toBeGreaterThan(1);
+    expect(MAX_PENDING_APPROVALS_PER_MISSION).toBeLessThan(20);
+    for (let i = 1; i <= MAX_PENDING_APPROVALS_PER_MISSION; i += 1) {
+      store.requestApproval(missionId, {
+        ...REPLY,
+        planned: [{ method: "PUT", path: `/api/v2/tickets/${String(i)}`, body: "" }],
+      });
+    }
+    const overflow = {
+      ...REPLY,
+      planned: [{ method: "PUT", path: "/api/v2/tickets/999", body: "" }],
+    };
+    expect(() => store.requestApproval(missionId, overflow)).toThrow(ApprovalRefusedError);
+    expect(() => store.requestApproval(missionId, overflow)).toThrow(/pending approvals/);
+    expect(store.pendingApprovals()).toHaveLength(MAX_PENDING_APPROVALS_PER_MISSION);
+    // Another mission is not counted against this one.
+    const other = store.create(INPUT, RESOLVED).record.id;
+    expect(store.requestApproval(other, overflow).missionId).toBe(other);
+  });
+});
+
 describe("mission store — deciding an approval executes nothing", () => {
   it("records who approved and when, and the record says approved", () => {
     const { store, missionId } = minted();
@@ -136,7 +204,11 @@ describe("mission store — consuming an approval", () => {
     const { store, missionId } = minted();
     const pending = store.requestApproval(missionId, REQUEST);
     expect(() => store.consumeApproval(pending.id)).toThrow(/pending/);
-    const denied = store.requestApproval(missionId, REQUEST);
+    // Another target: the first one is still pending, and one per target holds.
+    const denied = store.requestApproval(missionId, {
+      ...REQUEST,
+      planned: [{ ...REQUEST.planned[0], method: "DELETE", path: "/repos/acme-corp/product/issues/comments/9002", body: "" }],
+    });
     store.decideApproval(denied.id, "denied", "ops@acme.io");
     expect(() => store.consumeApproval(denied.id)).toThrow(/denied/);
     expect(() => store.consumeApproval("apr_nope")).toThrow(/unknown approval/);

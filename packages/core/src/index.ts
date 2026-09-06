@@ -12,6 +12,8 @@ export * from "./filter-plan";
 export * from "./github-scope";
 export * from "./introspection";
 export * from "./keys";
+export * from "./mission-record";
+export { connectionsFor, requireText } from "./mission-record";
 export * from "./missions";
 export * from "./operation";
 export * from "./parent-proof";
