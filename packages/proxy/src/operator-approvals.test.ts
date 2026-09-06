@@ -1,4 +1,4 @@
-import { approvalState, type ApprovalRecord } from "@missura/core";
+import { approvalState, type ApprovalRecord, type ApprovalView } from "@missura/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { boot, closeAll, mint, OPERATOR_BEARER, post, type Operator } from "./operator.fixtures";
 
@@ -26,10 +26,10 @@ async function pending(op: Operator): Promise<ApprovalRecord> {
   return op.store.requestApproval(mission_id, REQUEST);
 }
 
-async function list(base: string): Promise<{ approvals: ApprovalRecord[] }> {
+async function list(base: string): Promise<{ approvals: ApprovalView[] }> {
   const res = await fetch(`${base}/v1/approvals`, { headers: { authorization: OPERATOR_BEARER } });
   expect(res.status).toBe(200);
-  return (await res.json()) as { approvals: ApprovalRecord[] };
+  return (await res.json()) as { approvals: ApprovalView[] };
 }
 
 describe("operator API — GET /v1/approvals", () => {
@@ -39,9 +39,12 @@ describe("operator API — GET /v1/approvals", () => {
     const second = await pending(op);
     op.store.decideApproval(second.id, "denied", "ops@local");
 
+    // Opened for the operator: the request in the clear, the seal left behind.
     const { approvals } = await list(op.base);
-    expect(approvals).toEqual([first]);
-    expect(approvals[0]?.planned).toEqual(REQUEST.planned);
+    expect(approvals).toEqual([
+      { ...first, sealed: undefined, params: REQUEST.params, planned: REQUEST.planned },
+    ]);
+    expect(approvals[0]).not.toHaveProperty("sealed");
   });
 
   it("checks the operator key first", async () => {

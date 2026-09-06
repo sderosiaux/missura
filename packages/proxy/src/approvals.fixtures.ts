@@ -29,6 +29,7 @@ import { handle } from "./pipeline";
  */
 
 const KEY = Buffer.alloc(32, 7);
+const KEYS = { signing: KEY, seal: Buffer.alloc(32, 8) };
 
 export const DELETE_OP = "github.issue.comment.delete";
 export const DELETE_PARAMS = { repo: "acme-corp/product", comment: 9001 };
@@ -46,7 +47,7 @@ const CATALOGUE: readonly Operation[] = [...GITHUB_OPERATIONS, ...ZENDESK_OPERAT
 
 export function approvalStore(): MissionStore {
   const dir = mkdtempSync(join(tmpdir(), "missura-proxy-approvals-"));
-  return new MissionStore(join(dir, "missions.json"), KEY, CATALOGUE);
+  return new MissionStore(join(dir, "missions.json"), KEYS, CATALOGUE);
 }
 
 /** A mission minted on the store, as the pipeline will see it: verified claims. */

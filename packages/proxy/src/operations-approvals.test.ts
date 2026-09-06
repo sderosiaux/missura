@@ -36,11 +36,14 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
     expect(body).toEqual({ id: expect.stringMatching(/^apr_[0-9a-f]{16}$/) as string, state: "pending" });
     expect(rig.connector.fetchCount()).toBe(0);
     // Written down on the mission: what was asked, and the exact call that would go.
-    expect(rig.store.approvalFor(rig.claims.id, body.id)).toMatchObject({
-      operation: DELETE_OP,
-      params: DELETE_PARAMS,
-      planned: [{ method: "DELETE", path: COMMENT_PATH, body: "" }],
-    });
+    expect(rig.store.pendingApprovals()).toEqual([
+      expect.objectContaining({
+        id: body.id,
+        operation: DELETE_OP,
+        params: DELETE_PARAMS,
+        planned: [{ method: "DELETE", path: COMMENT_PATH, body: "" }],
+      }),
+    ]);
     expect(rig.outer.events).toEqual([
       expect.objectContaining({
         operation: "missura.op",

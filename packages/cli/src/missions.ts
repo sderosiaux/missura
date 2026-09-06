@@ -21,12 +21,17 @@ export function openStore(
   paths: MissuraPaths,
   catalogue: readonly Operation[] = [],
 ): MissionStore {
-  if (!existsSync(paths.signingKeyPath)) {
-    throw new Error("no signing key found — run missura init");
+  if (!existsSync(paths.signingKeyPath) || !existsSync(paths.vaultKeyPath)) {
+    throw new Error("no signing key or vault key found — run missura init");
   }
+  // The vault key seals approval bodies at rest (M3): the state file is
+  // exactly as private as the credentials, under the one key.
   return new MissionStore(
     paths.missionsPath,
-    loadOrCreateKey(paths.signingKeyPath),
+    {
+      signing: loadOrCreateKey(paths.signingKeyPath),
+      seal: loadOrCreateKey(paths.vaultKeyPath),
+    },
     catalogue,
   );
 }

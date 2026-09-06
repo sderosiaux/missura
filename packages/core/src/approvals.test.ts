@@ -2,9 +2,11 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { purgedApproval } from "./approval-seal";
 import {
   ApprovalRefusedError,
   approvalState,
+  hashApprovalRequest,
   MAX_PENDING_APPROVALS_PER_MISSION,
   mergeApprovals,
   type ApprovalRecord,
@@ -22,6 +24,7 @@ import type { ResolvedScope } from "./resolved-scope";
  */
 
 const KEY = Buffer.alloc(32, 3);
+const KEYS = { signing: KEY, seal: Buffer.alloc(32, 4) };
 
 function statePath(): string {
   return join(mkdtempSync(join(tmpdir(), "missura-approvals-")), "state.json");
@@ -45,7 +48,7 @@ const REQUEST = {
 };
 
 function minted(path = statePath()): { store: MissionStore; missionId: string; path: string } {
-  const store = new MissionStore(path, KEY);
+  const store = new MissionStore(path, KEYS);
   const { record } = store.create(INPUT, RESOLVED);
   return { store, missionId: record.id, path };
 }
@@ -56,11 +59,15 @@ describe("mission store — requesting an approval", () => {
     const approval = store.requestApproval(missionId, REQUEST);
 
     expect(approval.id).toMatch(/^apr_[0-9a-f]{16}$/);
-    expect(approval).toMatchObject({ missionId, ...REQUEST });
+    expect(approval).toMatchObject({ missionId, operation: REQUEST.operation });
+    expect(approval.requestHash).toBe(hashApprovalRequest(REQUEST));
     expect(approval.requestedAt).toBeGreaterThan(0);
     expect(approvalState(approval)).toBe("pending");
     expect(store.approvalFor(missionId, approval.id)).toEqual(approval);
-    expect(store.pendingApprovals().map((a) => a.id)).toEqual([approval.id]);
+    // The request itself is sealed on the record and opened for the listing.
+    expect(store.pendingApprovals()).toEqual([
+      { ...purgedApproval(approval), params: REQUEST.params, planned: REQUEST.planned },
+    ]);
   });
 
   it("refuses a mission it does not know, and one that was revoked", () => {
@@ -79,7 +86,7 @@ describe("mission store — requesting an approval", () => {
 
     expect(raw).not.toContain(token);
     expect(parseState(raw).approvals).toEqual([approval]);
-    expect(new MissionStore(path, KEY).approvalFor(missionId, approval.id)).toEqual(approval);
+    expect(new MissionStore(path, KEYS).approvalFor(missionId, approval.id)).toEqual(approval);
   });
 });
 
@@ -155,9 +162,10 @@ describe("mission store — deciding an approval executes nothing", () => {
     expect(decided.decision?.at).toBeGreaterThan(0);
     expect(approvalState(decided)).toBe("approved");
     expect(store.pendingApprovals()).toEqual([]);
-    // The planned call is still exactly what was requested: deciding is a
-    // record, never a run, and the store holds nothing that could run one.
-    expect(decided.planned).toEqual(REQUEST.planned);
+    // The request is still exactly what was asked: deciding is a record,
+    // never a run, and the store holds nothing that could run one.
+    expect(decided.requestHash).toBe(hashApprovalRequest(REQUEST));
+    expect(decided.sealed).toBeDefined();
   });
 
   it("records a denial the same way", () => {
@@ -182,7 +190,7 @@ describe("mission store — deciding an approval executes nothing", () => {
   it("is seen by a fresh store — the proxy and `missura approve` are two processes", () => {
     const { store, missionId, path } = minted();
     const { id } = store.requestApproval(missionId, REQUEST);
-    new MissionStore(path, KEY).decideApproval(id, "approved", "ops@acme.io");
+    new MissionStore(path, KEYS).decideApproval(id, "approved", "ops@acme.io");
     const seen = store.approvalFor(missionId, id);
     expect(seen === undefined ? undefined : approvalState(seen)).toBe("approved");
   });
@@ -252,7 +260,8 @@ describe("mergeApprovals — the further-along record wins", () => {
     id: "apr_1",
     missionId: "msn_1",
     requestedAt: 1,
-    ...REQUEST,
+    operation: REQUEST.operation,
+    requestHash: hashApprovalRequest(REQUEST),
   };
   const approved: ApprovalRecord = {
     ...base,

@@ -26,6 +26,7 @@ import { ALL_OPERATIONS, operationCatalogue } from "./server";
  * cannot colour another.
  */
 export const SIGNING_KEY = randomBytes(32);
+export const SEAL_KEY = randomBytes(32);
 export const OPERATOR_KEY = randomBytes(32);
 export const OPERATOR_HEX = OPERATOR_KEY.toString("hex");
 export const OPERATOR_BEARER = `Bearer ${OPERATOR_HEX}`;
@@ -101,7 +102,7 @@ export async function boot(): Promise<Operator> {
   // may name (M8).
   const store = new MissionStore(
     join(dir, "missions.json"),
-    SIGNING_KEY,
+    { signing: SIGNING_KEY, seal: SEAL_KEY },
     operationCatalogue({ zendesk: false }),
   );
   const deps: OperatorDeps = {

@@ -147,7 +147,7 @@ describe("decision events carry the provenance", () => {
 });
 
 describe("a mission records what its scope was built from", () => {
-  const key = randomBytes(32);
+  const key = { signing: randomBytes(32), seal: randomBytes(32) };
 
   function store(): MissionStore {
     return new MissionStore(join(tmpDir(), "missions.json"), key);

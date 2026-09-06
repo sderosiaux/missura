@@ -122,13 +122,15 @@ describe("missura approvals", () => {
     expect(text).toContain("DELETE /repos/acme-corp/product/issues/comments/9001");
   });
 
-  it("prints the whole record as JSON, parameters and body included", async () => {
+  it("prints the whole record as JSON, parameters and body included, opened", async () => {
     const h = await initedHarness();
     const approval = pending(h);
     h.out.length = 0;
     const result = await run(["approvals", "--json"], h.io);
     expect(result.code).toBe(0);
-    expect(JSON.parse(h.out.join("\n"))).toEqual({ approvals: [approval] });
+    expect(JSON.parse(h.out.join("\n"))).toEqual({
+      approvals: [{ ...approval, sealed: undefined, ...REQUEST }],
+    });
   });
 });
 

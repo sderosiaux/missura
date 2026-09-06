@@ -17,6 +17,7 @@ import {
 } from "./missions";
 
 const KEY = Buffer.alloc(32, 3);
+const KEYS = { signing: KEY, seal: Buffer.alloc(32, 4) };
 
 function statePath(): string {
   return join(mkdtempSync(join(tmpdir(), "missura-persist-")), "state.json");
@@ -57,13 +58,13 @@ function twin(record: MissionRecord, purpose: string): MissionRecord {
 describe("mission store — a write must not erase another writer's record", () => {
   it("keeps a record that appeared on disk since the last read", () => {
     const path = statePath();
-    const mine = new MissionStore(path, KEY).create(INPUT, RESOLVED).record;
+    const mine = new MissionStore(path, KEYS).create(INPUT, RESOLVED).record;
     // Whole milliseconds, so the test can put the file's clock back exactly
     // where the store under test last saw it.
     const pinned = new Date(Math.floor(statSync(path).mtimeMs));
     utimesSync(path, pinned, pinned);
 
-    const store = new MissionStore(path, KEY);
+    const store = new MissionStore(path, KEYS);
     const before = statSync(path);
     writeFileSync(
       path,
@@ -78,7 +79,7 @@ describe("mission store — a write must not erase another writer's record", () 
 
     store.create({ ...INPUT, purpose: "bbbbb" }, RESOLVED);
 
-    const purposes = new MissionStore(path, KEY)
+    const purposes = new MissionStore(path, KEYS)
       .active()
       .map((m) => m.purpose)
       .sort();
@@ -96,30 +97,30 @@ describe("mission store — a write must not erase another writer's record", () 
 describe("mission store — revoking a jti with no record", () => {
   it("records the revocation anyway, and it survives a fresh store", () => {
     const path = statePath();
-    const store = new MissionStore(path, KEY);
+    const store = new MissionStore(path, KEYS);
     const jti = "11111111-1111-4111-8111-111111111111";
 
     store.revokeJti(jti);
 
     expect(store.isRevoked(jti)).toBe(true);
-    expect(new MissionStore(path, KEY).isRevoked(jti)).toBe(true);
+    expect(new MissionStore(path, KEYS).isRevoked(jti)).toBe(true);
   });
 
   it("revokes the matching record too when there is one", () => {
     const path = statePath();
-    const store = new MissionStore(path, KEY);
+    const store = new MissionStore(path, KEYS);
     const { record } = store.create(INPUT, RESOLVED);
 
     store.revokeJti(record.jti);
 
     expect(store.isRevoked(record.jti)).toBe(true);
     expect(store.active()).toHaveLength(0);
-    expect(new MissionStore(path, KEY).active()).toHaveLength(0);
+    expect(new MissionStore(path, KEYS).active()).toHaveLength(0);
   });
 
   it("is idempotent — a second revoke does not move the clock", () => {
     const path = statePath();
-    const store = new MissionStore(path, KEY);
+    const store = new MissionStore(path, KEYS);
     const jti = "22222222-2222-4222-8222-222222222222";
     store.revokeJti(jti);
     const first = readFileSync(path, "utf8");
@@ -131,7 +132,7 @@ describe("mission store — revoking a jti with no record", () => {
 describe("mission store — state file permissions", () => {
   it("tightens a state file that already exists with looser permissions", () => {
     const path = statePath();
-    const store = new MissionStore(path, KEY);
+    const store = new MissionStore(path, KEYS);
     store.create(INPUT, RESOLVED);
     // `mode` on writeFileSync is honoured on creation only, so a file that got
     // loose permissions any other way would stay loose forever.

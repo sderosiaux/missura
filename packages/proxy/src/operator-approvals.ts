@@ -1,4 +1,4 @@
-import type { ApprovalRecord, MissionStore } from "@missura/core";
+import type { ApprovalRecord, ApprovalView, MissionStore } from "@missura/core";
 import { FieldError } from "./operator-request";
 
 /**
@@ -20,7 +20,7 @@ export function approvalIdOf(path: string): string | undefined {
   return id.length === 0 || id.includes("/") ? undefined : id;
 }
 
-export function listApprovals(store: MissionStore): { approvals: ApprovalRecord[] } {
+export function listApprovals(store: MissionStore): { approvals: ApprovalView[] } {
   return { approvals: store.pendingApprovals() };
 }
 

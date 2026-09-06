@@ -1,4 +1,5 @@
-import { MAX_PENDING_APPROVALS_PER_MISSION } from "@missura/core";
+import { readFileSync, statSync } from "node:fs";
+import { MAX_APPROVAL_BYTES, MAX_PENDING_APPROVALS_PER_MISSION } from "@missura/core";
 import { describe, expect, it } from "vitest";
 import { approvalRig, opened, REPLY_OP, REPLY_PARAMS, requestOp } from "./approvals.fixtures";
 import { handle } from "./pipeline";
@@ -153,6 +154,31 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
     expect(res.status).toBe(409);
     expect(graphqlDenial(res.body).code).toBe("missura_approval_not_opened");
     expect(rig.store.pendingApprovals()).toHaveLength(MAX_PENDING_APPROVALS_PER_MISSION);
+  });
+
+  /**
+   * PoC B (M3): 20 approvals of 512 KiB made a 20 MiB state file that
+   * survived a revoke — a DoS on both planes from one valid token, and a
+   * body at rest. Now an oversize body is refused unrecorded, and what is
+   * recorded is sealed: the file never holds the reply in the clear.
+   */
+  it("refuses a body over MAX_APPROVAL_BYTES unrecorded, and seals the ones it records", async () => {
+    const rig = approvalRig("zendesk", { vendor: zendesk });
+    const file = (rig.store as unknown as { stateFile: string }).stateFile;
+    const blob = "x".repeat(512 * 1024);
+    for (let i = 0; i < 3; i += 1) {
+      const res = await requestOp(rig, REPLY_OP, { ticket: 35, body: `${blob}${String(i)}` });
+      expect(res.status).toBe(413);
+      expect(graphqlDenial(res.body).code).toBe("missura_approval_not_opened");
+    }
+    expect(rig.store.pendingApprovals()).toEqual([]);
+    expect(statSync(file).size).toBeLessThan(MAX_APPROVAL_BYTES);
+
+    const id = await opened(rig, REPLY_OP, REPLY_PARAMS);
+    const raw = readFileSync(file, "utf8");
+    expect(raw).toContain(id);
+    expect(raw).not.toContain("Thanks");
+    expect(raw).not.toContain("xxxx");
   });
 
   /**

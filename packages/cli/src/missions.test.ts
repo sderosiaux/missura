@@ -6,10 +6,10 @@ import { resolveHome } from "./paths";
 
 function seed(h: Harness): { id: string; token: string } {
   const paths = resolveHome(h.io.env);
-  const store = new MissionStore(
-    paths.missionsPath,
-    loadOrCreateKey(paths.signingKeyPath),
-  );
+  const store = new MissionStore(paths.missionsPath, {
+    signing: loadOrCreateKey(paths.signingKeyPath),
+    seal: loadOrCreateKey(paths.vaultKeyPath),
+  });
   const created = store.create(
     {
       purpose: "support case 42",

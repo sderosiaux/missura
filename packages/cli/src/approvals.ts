@@ -1,4 +1,4 @@
-import type { ApprovalDecision, ApprovalRecord } from "@missura/core";
+import type { ApprovalDecision, ApprovalView } from "@missura/core";
 import type { CliIo } from "./io";
 import { formatTtl, openStore } from "./missions";
 import { resolveHome } from "./paths";
@@ -27,7 +27,7 @@ const BODY_COLUMN = 72;
 const NO_BODY = "(no body)";
 
 /** The one planned call, or the count when a plan has several. */
-function callOf(approval: ApprovalRecord): string {
+function callOf(approval: ApprovalView): string {
   const [first, ...rest] = approval.planned;
   if (first === undefined) return "(nothing planned)";
   const call = `${first.method} ${first.path}`;
@@ -35,7 +35,7 @@ function callOf(approval: ApprovalRecord): string {
 }
 
 /** Every planned body, one line: what will leave, as bytes. */
-function bodyOf(approval: ApprovalRecord): string {
+function bodyOf(approval: ApprovalView): string {
   const bodies = approval.planned.map((step) => step.body).filter((body) => body.length > 0);
   if (bodies.length === 0) return NO_BODY;
   return bodies.join(" | ").replace(/\s+/g, " ");
@@ -45,7 +45,7 @@ function cut(text: string): string {
   return text.length <= BODY_COLUMN ? text : `${text.slice(0, BODY_COLUMN - 1)}…`;
 }
 
-function row(approval: ApprovalRecord, nowSeconds: number): string[] {
+function row(approval: ApprovalView, nowSeconds: number): string[] {
   return [
     approval.id,
     approval.missionId,
@@ -69,7 +69,7 @@ function table(rows: string[][]): string[] {
 }
 
 /** One block per approval: the header line, then each call and its whole body. */
-function block(approval: ApprovalRecord, nowSeconds: number): string[] {
+function block(approval: ApprovalView, nowSeconds: number): string[] {
   const lines = [
     `${approval.id}  ${approval.missionId}  ${approval.operation}  ${formatTtl(nowSeconds - approval.requestedAt)}`,
   ];

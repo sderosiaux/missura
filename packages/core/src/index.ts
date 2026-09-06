@@ -1,3 +1,4 @@
+export * from "./approval-seal";
 export * from "./approvals";
 export * from "./catalog";
 export * from "./cursor";
@@ -23,5 +24,6 @@ export * from "./remediation-types";
 export * from "./resolved-scope";
 export * from "./scope-provenance";
 export * from "./scope-resolve";
+export * from "./seal";
 export * from "./token";
 export * from "./vault";

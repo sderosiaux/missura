@@ -8,6 +8,7 @@ import type { ResolvedScope } from "./resolved-scope";
 import { MissionStore, type CreateMission } from "./missions";
 
 const KEY = Buffer.alloc(32, 3);
+const KEYS = { signing: KEY, seal: Buffer.alloc(32, 4) };
 const SRC_DIR = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(SRC_DIR, "..");
 
@@ -58,12 +59,12 @@ function revokeInChildProcess(stateFile: string, missionId: string): void {
 describe("mission store — revocation across instances", () => {
   it("sees a revoke written by another instance, without being reconstructed", () => {
     const path = statePath();
-    const writer = new MissionStore(path, KEY);
+    const writer = new MissionStore(path, KEYS);
     const { record } = writer.create(INPUT, RESOLVED);
 
     // Constructed BEFORE the revoke: this is the proxy, booted and holding the
     // store it captured at startup.
-    const proxy = new MissionStore(path, KEY);
+    const proxy = new MissionStore(path, KEYS);
     expect(proxy.isRevoked(record.jti)).toBe(false);
 
     writer.revoke(record.id);
@@ -74,7 +75,7 @@ describe("mission store — revocation across instances", () => {
 
   it("sees a revoke written by a separate process", () => {
     const path = statePath();
-    const proxy = new MissionStore(path, KEY);
+    const proxy = new MissionStore(path, KEYS);
     const { record } = proxy.create(INPUT, RESOLVED);
     expect(proxy.isRevoked(record.jti)).toBe(false);
 
@@ -85,11 +86,11 @@ describe("mission store — revocation across instances", () => {
 
   it("keeps a mission it has never seen written by another process", () => {
     const path = statePath();
-    const first = new MissionStore(path, KEY);
+    const first = new MissionStore(path, KEYS);
     first.create(INPUT, RESOLVED);
-    const proxy = new MissionStore(path, KEY);
+    const proxy = new MissionStore(path, KEYS);
 
-    const second = new MissionStore(path, KEY);
+    const second = new MissionStore(path, KEYS);
     const { record } = second.create({ ...INPUT, purpose: "second" }, RESOLVED);
 
     expect(proxy.isRevoked(record.jti)).toBe(false);
@@ -101,9 +102,9 @@ describe("mission store — revocation across instances", () => {
 
   it("never downgrades a revocation it already knows about", () => {
     const path = statePath();
-    const proxy = new MissionStore(path, KEY);
+    const proxy = new MissionStore(path, KEYS);
     const { record } = proxy.create(INPUT, RESOLVED);
-    new MissionStore(path, KEY).revoke(record.id);
+    new MissionStore(path, KEYS).revoke(record.id);
     expect(proxy.isRevoked(record.jti)).toBe(true);
 
     // The state file is rolled back to a version that predates the revoke —
@@ -121,13 +122,13 @@ describe("mission store — revocation across instances", () => {
 
   it("keeps the last known-good view when the state file goes unreadable", () => {
     const path = statePath();
-    const proxy = new MissionStore(path, KEY);
+    const proxy = new MissionStore(path, KEYS);
     const revoked = proxy.create(INPUT, RESOLVED).record;
     const live = proxy.create(
       { ...INPUT, purpose: "still live" },
       RESOLVED,
     ).record;
-    new MissionStore(path, KEY).revoke(revoked.id);
+    new MissionStore(path, KEYS).revoke(revoked.id);
     expect(proxy.isRevoked(revoked.jti)).toBe(true);
 
     writeFileSync(path, "{ not json at all", "utf8");

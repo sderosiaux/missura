@@ -1,6 +1,7 @@
 import {
   ApprovalRefusedError,
   approvalState,
+  hashApprovalRequest,
   type ApprovalRecord,
   type CatalogDecision,
   type MissionClaims,
@@ -52,21 +53,6 @@ export function splitApproval(
   return { params, approval };
 }
 
-/** Key order is not a difference: the same parameters spelled twice are the same. */
-function canonical(value: unknown): string {
-  return JSON.stringify(sorted(value));
-}
-
-function sorted(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sorted);
-  if (typeof value !== "object" || value === null) return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, entry]) => [key, sorted(entry)]),
-  );
-}
-
 export interface Gated {
   deps: PipelineDeps;
   ctx: RequestContext;
@@ -79,9 +65,10 @@ export interface Gated {
 
 /**
  * Writes the approval down and answers `202`: the id and its state, nothing
- * else. Or refuses to (H1): a target already waiting on a human, or a
- * mission at its cap, gets a `409` naming the one already pending — the
- * store's own words, which name nothing beyond this mission's own ids.
+ * else. Or refuses to: a target already waiting on a human, or a mission at
+ * its cap, gets a `409` naming the one already pending (H1); a request over
+ * `MAX_APPROVAL_BYTES` gets a `413` (M3) — the store's own words, which
+ * name nothing beyond this mission's own ids.
  */
 export function openApproval(gate: Gated): ResponseShape {
   const { deps, ctx, claims, op, params, steps, verdict } = gate;
@@ -96,7 +83,7 @@ export function openApproval(gate: Gated): ResponseShape {
     if (!(err instanceof ApprovalRefusedError)) throw err;
     emitEvent(deps, ctx, claimsDenial(verdict, err.message));
     return denialResponse(deps.provider, {
-      status: 409,
+      status: err.kind === "too_large" ? 413 : 409,
       code: NOT_OPENED_CODE,
       reason: err.message,
       claims,
@@ -139,10 +126,11 @@ export function spendApproval(gate: Gated, id: string): { id: string } | { refus
   if (approval === undefined) {
     return { refusal: approvalUnknown(deps, ctx, claims, verdict) };
   }
+  // THIS operation, THESE parameters, THIS plan — matched by the hash the
+  // record keeps (M3): the data plane never opens the sealed request.
   if (
     approval.operation !== op.name ||
-    canonical(approval.params) !== canonical(params) ||
-    canonical(approval.planned) !== canonical(steps)
+    approval.requestHash !== hashApprovalRequest({ operation: op.name, params, planned: steps })
   ) {
     return refuse("approval was opened for a different operation or parameters");
   }

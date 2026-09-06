@@ -1,15 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
-  ApprovalRefusedError,
   approvalState,
-  approvalTarget,
-  MAX_PENDING_APPROVALS_PER_MISSION,
   mergeApprovals,
   type ApprovalDecision,
   type ApprovalRecord,
   type ApprovalRequest,
+  type ApprovalView,
 } from "./approvals";
+import { newApproval, pendingViews, purgeUnreadable } from "./mission-approvals";
 import {
   fileStamp,
   parseState,
@@ -27,6 +26,17 @@ export type { CreateMission, MissionRecord } from "./mission-record";
 
 /** The verbs every mission grants — the raw read path, and nothing that writes. */
 const ALLOW = ["read", "search"] as const;
+
+/**
+ * The two keys a store needs: the HMAC key mission tokens are signed with,
+ * and the vault key approval bodies are sealed under at rest (M3) — the
+ * same key that protects the vendor credentials, so the state file is
+ * exactly as private as the vault.
+ */
+export interface MissionKeys {
+  signing: Buffer;
+  seal: Buffer;
+}
 
 /**
  * Missions and their revocations, persisted as plain JSON (mode 0600). The file
@@ -54,6 +64,7 @@ const ALLOW = ["read", "search"] as const;
 export class MissionStore {
   private readonly stateFile: string;
   private readonly signingKey: Buffer;
+  private readonly sealKey: Buffer;
   /**
    * The operations a name-grant may name (`grantableOperations`). Defaulted
    * to none, which refuses every name: a store nobody told what exists cannot
@@ -70,11 +81,12 @@ export class MissionStore {
 
   constructor(
     stateFile: string,
-    signingKey: Buffer,
+    keys: MissionKeys,
     catalogue: readonly Operation[] = [],
   ) {
     this.stateFile = stateFile;
-    this.signingKey = signingKey;
+    this.signingKey = keys.signing;
+    this.sealKey = keys.seal;
     this.catalogue = catalogue;
     this.records = [];
     if (existsSync(stateFile)) {
@@ -217,6 +229,8 @@ export class MissionStore {
     if (record.revokedAt === undefined) {
       record.revokedAt = Math.floor(Date.now() / 1000);
       this.noteRevoked(record.jti, record.revokedAt);
+      // The bodies go with the grant: `persist` purges every approval of a
+      // mission that is no longer live, this one included.
       this.persist();
     }
     return record;
@@ -287,12 +301,9 @@ export class MissionStore {
 
   /**
    * Writes an approval down, pending, on a live mission: what was asked and
-   * the exact inner call(s) that would go (M10). Nothing runs here.
-   *
-   * One pending approval per target, and few per mission (H1): the second
-   * request on a target a human has not decided yet is refused naming the
-   * first, so the human reads one row per target and the agent cannot get
-   * one wording approved and replay another.
+   * the exact inner call(s) that would go (M10), sealed (M3). Nothing runs
+   * here. One pending approval per target, few per mission, none too large
+   * (`mission-approvals.ts`).
    */
   requestApproval(
     missionId: string,
@@ -301,33 +312,9 @@ export class MissionStore {
   ): ApprovalRecord {
     this.refresh();
     this.liveMission(missionId, now);
-    const pending = this.approvals.filter(
-      (a) => a.missionId === missionId && approvalState(a) === "pending",
-    );
-    const target = approvalTarget(request.operation, request.planned);
-    const twin = pending.find((a) => approvalTarget(a.operation, a.planned) === target);
-    if (twin !== undefined) {
-      throw new ApprovalRefusedError(
-        "duplicate",
-        `an approval for this operation and target is already pending: ${twin.id}`,
-      );
-    }
-    if (pending.length >= MAX_PENDING_APPROVALS_PER_MISSION) {
-      throw new ApprovalRefusedError(
-        "limit",
-        `this mission already holds ${String(MAX_PENDING_APPROVALS_PER_MISSION)} pending approvals`,
-      );
-    }
-    const approval: ApprovalRecord = {
-      operation: request.operation,
-      params: { ...request.params },
-      planned: request.planned.map((step) => ({ ...step })),
-      id: `apr_${randomBytes(8).toString("hex")}`,
-      missionId,
-      requestedAt: Math.floor(now / 1000),
-    };
+    const approval = newApproval(this.sealKey, this.approvals, missionId, request, now);
     this.approvals.push(approval);
-    this.persist();
+    this.persist(now);
     return approval;
   }
 
@@ -335,6 +322,8 @@ export class MissionStore {
    * THIS mission's approval by id, while the mission lives — `undefined` for
    * another mission's id, an id that never existed, and a mission that is
    * gone, all alike: the data plane must not be able to tell them apart.
+   * The record, sealed: the data plane matches a re-request against
+   * `requestHash` and never needs the body.
    */
   approvalFor(
     missionId: string,
@@ -352,18 +341,23 @@ export class MissionStore {
     return approval;
   }
 
-  /** What the operator has to decide: pending, on missions still live. */
-  pendingApprovals(now: number = Date.now()): ApprovalRecord[] {
+  /**
+   * What the operator has to decide: pending, on missions still live, with
+   * the request opened for them to read. A read path that writes, once:
+   * listing is where an expired mission's bodies are noticed, and they are
+   * purged from the file before anything is shown.
+   */
+  pendingApprovals(now: number = Date.now()): ApprovalView[] {
     this.refresh();
+    if (this.purge(now)) this.persist(now);
     const live = new Set(this.active(now).map((m) => m.id));
-    return this.approvals.filter(
-      (a) => approvalState(a) === "pending" && live.has(a.missionId),
-    );
+    return pendingViews(this.sealKey, this.approvals, live);
   }
 
   /**
    * Records a human's decision — and only records it. Once: a decision is
-   * not something a second operator gets to flip, in either direction.
+   * not something a second operator gets to flip, in either direction. A
+   * denial is the end of the body: nobody reads it again, so it is purged.
    */
   decideApproval(
     id: string,
@@ -378,7 +372,7 @@ export class MissionStore {
     const state = approvalState(approval);
     if (state !== "pending") throw new Error(`approval ${id} is already ${state}`);
     approval.decision = { decision, actor, at: Math.floor(now / 1000) };
-    this.persist();
+    this.persist(now);
     return approval;
   }
 
@@ -386,6 +380,7 @@ export class MissionStore {
    * Spends an approved approval, at most once. Called BEFORE the call leaves,
    * so a request racing this one finds it consumed rather than approved — a
    * failed vendor call then costs a new approval, which is the safe side.
+   * Spent is read no more: the body is purged with the same write.
    */
   consumeApproval(id: string, now: number = Date.now()): ApprovalRecord {
     this.refresh();
@@ -394,8 +389,20 @@ export class MissionStore {
     const state = approvalState(approval);
     if (state !== "approved") throw new Error(`approval ${id} is ${state}, not approved`);
     approval.consumedAt = Math.floor(now / 1000);
-    this.persist();
+    this.persist(now);
     return approval;
+  }
+
+  /** Takes the bodies off every approval nobody will read again. */
+  private purge(now: number): boolean {
+    const { approvals, purged } = purgeUnreadable(
+      this.approvals,
+      this.records,
+      new Set(this.revoked.keys()),
+      now,
+    );
+    if (purged) this.approvals = approvals;
+    return purged;
   }
 
   /**
@@ -411,7 +418,7 @@ export class MissionStore {
    * it. Two writers can still interleave inside it — a real fix is a lock file
    * or a single writer, and neither is M2.
    */
-  private persist(): void {
+  private persist(now: number = Date.now()): void {
     const disk = this.onDisk();
     for (const entry of disk.revoked) this.noteRevoked(entry.jti, entry.revokedAt);
     for (const record of disk.missions) {
@@ -429,6 +436,9 @@ export class MissionStore {
       revoked: [],
       approvals: mergeApprovals(disk.approvals, this.approvals),
     });
+    // Last, on the merged view: a body the file still held for a mission
+    // that is dead here leaves with this write, whichever side wrote it.
+    this.purge(now);
 
     writeState(this.stateFile, {
       missions: this.records,

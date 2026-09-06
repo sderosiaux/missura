@@ -8,6 +8,7 @@ import { MissionStore, type CreateMission } from "./missions";
 import { verifyMissionToken } from "./token";
 
 const KEY = Buffer.alloc(32, 3);
+const KEYS = { signing: KEY, seal: Buffer.alloc(32, 4) };
 
 function statePath(): string {
   return join(mkdtempSync(join(tmpdir(), "missura-missions-")), "state.json");
@@ -27,7 +28,7 @@ const RESOLVED: ResolvedScope = {
 
 describe("mission store — create", () => {
   it("mints a token carrying actor, purpose and scope", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { record, token } = store.create(INPUT, RESOLVED);
     const claims = verifyMissionToken(token, { key: KEY });
 
@@ -43,7 +44,7 @@ describe("mission store — create", () => {
   });
 
   it("derives both connections when the scope has an entity and repos", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(INPUT, RESOLVED);
     expect(verifyMissionToken(token, { key: KEY }).connections).toEqual([
       "linear",
@@ -52,7 +53,7 @@ describe("mission store — create", () => {
   });
 
   it("derives linear only when the scope resolves to a linear id and no repo", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(
       { ...INPUT, scope: { entity: "customer:acme" } },
       { linearCustomerId: "c_18", githubRepos: [] },
@@ -63,7 +64,7 @@ describe("mission store — create", () => {
   });
 
   it("derives github only when the scope resolves to repos and no linear id", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(
       { ...INPUT, scope: { repos: ["acme-corp/product"] } },
       { githubRepos: [{ repo: "acme-corp/product" }] },
@@ -77,7 +78,7 @@ describe("mission store — create", () => {
     // The business scope names no repo; the graph does. Derived from the
     // scope as typed, this mission would carry `linear` alone and refuse every
     // GitHub call on the connection check.
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(
       { ...INPUT, scope: { entity: "customer:acme" } },
       RESOLVED,
@@ -89,7 +90,7 @@ describe("mission store — create", () => {
   });
 
   it("derives no connection from a scope that resolves to nothing", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(
       { ...INPUT, scope: {} },
       { githubRepos: [] },
@@ -104,7 +105,7 @@ describe("mission store — create", () => {
    * is the one thing the agent holds in full.
    */
   it("carries what the graph declined by system and reason — never by id", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(
       { ...INPUT, scope: { entity: "customer:zoetis" } },
       { githubRepos: [{ repo: "acme-corp/zoetis" }] },
@@ -126,13 +127,13 @@ describe("mission store — create", () => {
   });
 
   it("carries an empty degradation list when no graph was involved", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { token } = store.create(INPUT, RESOLVED);
     expect(verifyMissionToken(token, { key: KEY }).degraded).toEqual([]);
   });
 
   it("rejects an empty or blank purpose", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     expect(() =>
       store.create({ ...INPUT, purpose: "" }, RESOLVED),
     ).toThrow(/purpose/i);
@@ -142,7 +143,7 @@ describe("mission store — create", () => {
   });
 
   it("rejects an empty or blank actor", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     expect(() =>
       store.create({ ...INPUT, actor: "" }, RESOLVED),
     ).toThrow(/actor/i);
@@ -152,7 +153,7 @@ describe("mission store — create", () => {
   });
 
   it("rejects a ttl above the 60 minute cap and stores nothing", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     expect(() =>
       store.create({ ...INPUT, ttlSeconds: 3601 }, RESOLVED),
     ).toThrow(/ttl/i);
@@ -161,7 +162,7 @@ describe("mission store — create", () => {
 
   it("never writes token material to the state file", () => {
     const path = statePath();
-    const store = new MissionStore(path, KEY);
+    const store = new MissionStore(path, KEYS);
     const { token } = store.create(INPUT, RESOLVED);
     expect(readFileSync(path, "utf8")).not.toContain(token);
   });
@@ -184,14 +185,14 @@ describe("mission store — name-level grants", () => {
   };
 
   it("grants read and search, and nothing else, by default", () => {
-    const store = new MissionStore(statePath(), KEY, [WRITE]);
+    const store = new MissionStore(statePath(), KEYS, [WRITE]);
     const { token, record } = store.create(INPUT, RESOLVED);
     expect(verifyMissionToken(token, { key: KEY }).allow).toEqual(["read", "search"]);
     expect(record.allow).toBeUndefined();
   });
 
   it("adds a catalogued write by name, on the token and on the record", () => {
-    const store = new MissionStore(statePath(), KEY, [WRITE]);
+    const store = new MissionStore(statePath(), KEYS, [WRITE]);
     const { token, record } = store.create(
       { ...INPUT, allow: ["github.issue.comment.create"] },
       RESOLVED,
@@ -205,7 +206,7 @@ describe("mission store — name-level grants", () => {
   });
 
   it("refuses a name the catalogue does not know, and mints nothing", () => {
-    const store = new MissionStore(statePath(), KEY, [WRITE]);
+    const store = new MissionStore(statePath(), KEYS, [WRITE]);
     expect(() =>
       store.create({ ...INPUT, allow: ["github.issue.comment.craete"] }, RESOLVED),
     ).toThrow("unknown operation: github.issue.comment.craete");
@@ -213,7 +214,7 @@ describe("mission store — name-level grants", () => {
   });
 
   it("refuses every name on a store built without a catalogue", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     expect(() =>
       store.create({ ...INPUT, allow: ["github.issue.comment.create"] }, RESOLVED),
     ).toThrow(/unknown operation/);
@@ -223,7 +224,7 @@ describe("mission store — name-level grants", () => {
 
 describe("mission store — revocation", () => {
   it("marks a mission revoked immediately, well under 100 ms", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { record } = store.create(INPUT, RESOLVED);
     const started = Date.now();
     store.revoke(record.id);
@@ -232,7 +233,7 @@ describe("mission store — revocation", () => {
   });
 
   it("revokes by jti as well as by id", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { record } = store.create(INPUT, RESOLVED);
     const revoked = store.revoke(record.jti);
     expect(revoked.revokedAt).toBeGreaterThan(0);
@@ -240,7 +241,7 @@ describe("mission store — revocation", () => {
   });
 
   it("is idempotent: revoking twice keeps the first revocation time", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const { record } = store.create(INPUT, RESOLVED);
     const first = store.revoke(record.id);
     const second = store.revoke(record.id);
@@ -248,32 +249,32 @@ describe("mission store — revocation", () => {
   });
 
   it("throws on an unknown mission id", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     expect(() => store.revoke("msn_nope")).toThrow(/unknown mission/i);
   });
 
   it("reports false for a jti it has never seen", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     expect(store.isRevoked("11111111-1111-4111-8111-111111111111")).toBe(false);
   });
 
   it("persists revocations to a fresh store instance (new process)", () => {
     const path = statePath();
-    const first = new MissionStore(path, KEY);
+    const first = new MissionStore(path, KEYS);
     const { record } = first.create(INPUT, RESOLVED);
     first.revoke(record.id);
 
-    const second = new MissionStore(path, KEY);
+    const second = new MissionStore(path, KEYS);
     expect(second.isRevoked(record.jti)).toBe(true);
     expect(second.active()).toHaveLength(0);
   });
 
   it("keeps unrevoked missions active across instances", () => {
     const path = statePath();
-    const first = new MissionStore(path, KEY);
+    const first = new MissionStore(path, KEYS);
     const { record } = first.create(INPUT, RESOLVED);
 
-    const second = new MissionStore(path, KEY);
+    const second = new MissionStore(path, KEYS);
     expect(second.active().map((m) => m.id)).toEqual([record.id]);
     expect(second.isRevoked(record.jti)).toBe(false);
   });
@@ -281,7 +282,7 @@ describe("mission store — revocation", () => {
 
 describe("mission store — active", () => {
   it("excludes expired and revoked missions", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     const live = store.create(INPUT, RESOLVED).record;
     const doomed = store.create({ ...INPUT, ttlSeconds: 60 }, RESOLVED).record;
     const short = store.create({ ...INPUT, ttlSeconds: 30 }, RESOLVED).record;
@@ -294,7 +295,7 @@ describe("mission store — active", () => {
   });
 
   it("carries actor, purpose and scope on the record", () => {
-    const store = new MissionStore(statePath(), KEY);
+    const store = new MissionStore(statePath(), KEYS);
     store.create(INPUT, RESOLVED);
     const [mission] = store.active();
     expect(mission?.actor).toBe("sam@acme.io");
