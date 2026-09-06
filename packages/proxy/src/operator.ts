@@ -37,7 +37,18 @@ export interface OperatorDeps {
   /** Compared against the presented bearer, never echoed anywhere. */
   operatorKey: Buffer;
   verifyToken(token: string): MissionClaims;
-  proxyOrigins?: { linear: string; github: string };
+  proxyOrigins?: ProxyOrigins;
+}
+
+/**
+ * Where the agent sends each connection. Zendesk is optional for the same
+ * reason its listener is: an origin advertised for a connection this proxy does
+ * not serve would point an agent at a closed port.
+ */
+export interface ProxyOrigins {
+  linear: string;
+  github: string;
+  zendesk?: string;
 }
 
 interface MissionListing {
@@ -48,7 +59,7 @@ interface MissionListing {
   expiresAt: number;
 }
 
-function defaultOrigins(): { linear: string; github: string } {
+function defaultOrigins(): ProxyOrigins {
   return {
     linear: `http://127.0.0.1:${String(DEFAULT_LINEAR_PORT)}`,
     github: `http://127.0.0.1:${String(DEFAULT_GITHUB_PORT)}`,

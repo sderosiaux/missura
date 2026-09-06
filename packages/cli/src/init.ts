@@ -1,5 +1,6 @@
 import { loadOrCreateKey, saveVault, type VaultData } from "@missura/core";
 import type { CliIo } from "./io";
+import { readZendesk, ZENDESK_BASE, ZENDESK_CREDENTIAL } from "./init-zendesk";
 import { resolveHome } from "./paths";
 
 interface CredentialSpec {
@@ -62,6 +63,11 @@ export async function initCommand(io: CliIo): Promise<number> {
   for (const spec of CREDENTIALS) {
     data[spec.connection] = await readCredential(io, spec);
   }
+  const zendesk = await readZendesk(io);
+  if (zendesk !== undefined) {
+    data[ZENDESK_CREDENTIAL] = zendesk.authorization;
+    data[ZENDESK_BASE] = zendesk.upstreamBase;
+  }
 
   const vaultKey = loadOrCreateKey(paths.vaultKeyPath);
   saveVault(paths.vaultPath, vaultKey, data);
@@ -75,6 +81,12 @@ export async function initCommand(io: CliIo): Promise<number> {
   io.stdout(`signing key ${paths.signingKeyPath}`);
   io.stdout(`operator key ${paths.operatorKeyPath}`);
   io.stdout(`events      ${paths.eventsDir}`);
+  // Said out loud either way: a connection an operator believes is configured
+  // and is not would fail as "not in your mission" at 3am, on the one call the
+  // agent was minted for.
+  io.stdout(
+    `zendesk     ${zendesk === undefined ? "not configured — this proxy serves no zendesk" : zendesk.upstreamBase}`,
+  );
   io.stdout("");
   io.stdout(
     "next: missura run   (then: missura exec --entity <type:name> --purpose <why> -- <cmd>)",

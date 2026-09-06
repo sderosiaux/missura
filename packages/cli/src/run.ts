@@ -13,14 +13,18 @@ import {
   createServers,
   DEFAULT_OPERATOR_PORT,
   startOperatorServer,
+  type NarrowFn,
   type ProxyServers,
+  type ZendeskConnectionConfig,
 } from "@missura/proxy";
+import { ZENDESK_BASE, ZENDESK_CREDENTIAL } from "./init-zendesk";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
 import {
   githubNarrow,
   linearNarrow,
   scopeResolver,
+  zendeskNarrow,
   type Resolver,
 } from "./narrow-wiring";
 import { resolveHome, type MissuraPaths } from "./paths";
@@ -28,6 +32,7 @@ import { resolveHome, type MissuraPaths } from "./paths";
 export interface RunOptions {
   linearPort?: number;
   githubPort?: number;
+  zendeskPort?: number;
   operatorPort?: number;
   entitiesPath?: string;
   /** Overridable so a test can drive an in-process vendor double. */
@@ -61,6 +66,44 @@ function origin(server: Server): string {
 }
 
 /**
+ * The third connection, or nothing at all. It needs BOTH halves — an origin
+ * and a credential — and `missura init` writes them together, so half of one
+ * here means a vault somebody edited by hand. Refused rather than defaulted:
+ * a guessed origin is a guess at another tenant, and the credential would go
+ * with it.
+ */
+function zendeskConnection(
+  vault: VaultData,
+  narrow: NarrowFn,
+  port: number | undefined,
+): ZendeskConnectionConfig | undefined {
+  const authorization = vault[ZENDESK_CREDENTIAL];
+  const upstreamBase = vault[ZENDESK_BASE];
+  if (
+    (authorization ?? "").length === 0 &&
+    (upstreamBase ?? "").length === 0
+  ) {
+    return undefined;
+  }
+  if (
+    authorization === undefined ||
+    authorization.length === 0 ||
+    upstreamBase === undefined ||
+    upstreamBase.length === 0
+  ) {
+    throw new Error(
+      "vault holds half a zendesk connection — run missura init again",
+    );
+  }
+  return {
+    vendorAuthHeader: authorization,
+    upstreamBase,
+    narrow,
+    ...(port === undefined ? {} : { port }),
+  };
+}
+
+/**
  * Boots the two connector listeners with the vendor credentials taken from the
  * vault once, here — they live in the proxy process only — and the operator
  * plane beside them, on its own port.
@@ -84,6 +127,11 @@ export async function runCommand(
     options.entitiesPath ?? paths.entitiesPath,
   );
 
+  const zendesk = zendeskConnection(
+    vault,
+    zendeskNarrow(resolve),
+    options.zendeskPort,
+  );
   const servers = await createServers({
     signingKey,
     isRevoked: (jti: string): boolean => store.isRevoked(jti),
@@ -101,6 +149,7 @@ export async function runCommand(
       narrow: githubNarrow(resolve),
       ...(options.githubPort === undefined ? {} : { port: options.githubPort }),
     },
+    ...(zendesk === undefined ? {} : { zendesk }),
     ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
   });
 
@@ -114,10 +163,15 @@ export async function runCommand(
         verifyToken: (token: string) =>
           verifyMissionToken(token, { key: signingKey }),
         // The ports actually bound, not the defaults: a `--linear-port 0` boot
-        // must still hand the agent an origin it can reach.
+        // must still hand the agent an origin it can reach. Zendesk appears
+        // exactly when a listener does — an origin for a connection that is not
+        // there would send the agent at a closed port.
         proxyOrigins: {
           linear: origin(servers.linear),
           github: origin(servers.github),
+          ...(servers.zendesk === undefined
+            ? {}
+            : { zendesk: origin(servers.zendesk) }),
         },
       },
       options.operatorPort ?? DEFAULT_OPERATOR_PORT,
@@ -129,12 +183,16 @@ export async function runCommand(
 
   io.stdout(`linear    ${origin(servers.linear)}`);
   io.stdout(`github    ${origin(servers.github)}`);
+  if (servers.zendesk !== undefined) {
+    io.stdout(`zendesk   ${origin(servers.zendesk)}`);
+  }
   io.stdout(`operator  ${origin(operator)}`);
   io.stdout(`events    ${paths.eventsDir}`);
 
   return {
     linear: servers.linear,
     github: servers.github,
+    ...(servers.zendesk === undefined ? {} : { zendesk: servers.zendesk }),
     operator,
     close: async (): Promise<void> => {
       await Promise.all([

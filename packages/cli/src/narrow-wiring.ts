@@ -1,5 +1,6 @@
 import { narrowGithub as narrowGithubPath } from "@missura/connectors-github";
 import { narrowLinear as narrowLinearBody } from "@missura/connectors-linear";
+import { narrowZendesk as narrowZendeskPath } from "@missura/connectors-zendesk";
 import {
   openEntityGraph,
   resolveMissionScope,
@@ -65,5 +66,25 @@ export function githubNarrow(resolve: Resolver): NarrowFn {
       return { decision: "deny", denyShape: "github404", reason: UNRESOLVED };
     }
     return narrowGithubPath(req.path, { githubRepos: scope.githubRepos });
+  };
+}
+
+/**
+ * The organization ids come from the graph and from nowhere else: a Zendesk
+ * organization is not something an operator can type on `missura exec`, so a
+ * mission reaches Zendesk exactly when a human confirmed the link.
+ *
+ * An empty set is a refusal inside the connector, not a pass — "everything" is
+ * what an unscoped Zendesk credential would otherwise return.
+ */
+export function zendeskNarrow(resolve: Resolver): NarrowFn {
+  return (req, claims): NarrowResult => {
+    const scope = resolved(resolve, claims.scope);
+    if (scope === undefined) {
+      return { decision: "deny", denyShape: "zendesk404", reason: UNRESOLVED };
+    }
+    return narrowZendeskPath(req.path, {
+      zendeskOrganizationIds: [...(scope.zendeskOrganizationIds ?? [])],
+    });
   };
 }

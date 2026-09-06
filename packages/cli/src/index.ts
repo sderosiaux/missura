@@ -22,8 +22,11 @@ const USAGE = [
   "missura — vendor credentials out of the agent",
   "",
   "  missura init                     store vendor credentials in the encrypted vault",
-  "  missura run [--linear-port N]    boot the two connector listeners + the operator plane",
-  "              [--github-port N] [--operator-port N] [--entities PATH]",
+  "                                   zendesk is optional: give a subdomain, an agent",
+  "                                   email and an API token, or none of the three",
+  "  missura run [--linear-port N]    boot the connector listeners + the operator plane",
+  "              [--github-port N] [--zendesk-port N] [--operator-port N]",
+  "              [--entities PATH]    zendesk listens only if the vault holds it",
   "  missura exec --purpose WHY       run a command under a scoped mission",
   "              [--entity KEY] [--repo REPO]... [--ttl 30m] [--actor WHO]",
   "              KEY is the entity's whole key — customer:adeo, employee:sam,",
@@ -57,6 +60,7 @@ const OPTIONS = {
   dev: { type: "boolean" },
   "linear-port": { type: "string" },
   "github-port": { type: "string" },
+  "zendesk-port": { type: "string" },
   "operator-port": { type: "string" },
   help: { type: "boolean", short: "h" },
 } as const;
@@ -124,6 +128,8 @@ function execOptions(
   if (linearPort !== undefined) options.linearPort = linearPort;
   const githubPort = portOf(values, "github-port");
   if (githubPort !== undefined) options.githubPort = githubPort;
+  const zendeskPort = portOf(values, "zendesk-port");
+  if (zendeskPort !== undefined) options.zendeskPort = zendeskPort;
   return options;
 }
 
@@ -157,6 +163,8 @@ async function dispatch(
       if (linearPort !== undefined) options.linearPort = linearPort;
       const githubPort = portOf(values, "github-port");
       if (githubPort !== undefined) options.githubPort = githubPort;
+      const zendeskPort = portOf(values, "zendesk-port");
+      if (zendeskPort !== undefined) options.zendeskPort = zendeskPort;
       const operatorPort = portOf(values, "operator-port");
       if (operatorPort !== undefined) options.operatorPort = operatorPort;
       const entities = text(values, "entities");

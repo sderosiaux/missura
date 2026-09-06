@@ -38,6 +38,7 @@ export const ENTITY_GRAPH = {
           evidence: "operator",
           ...CONFIRMED,
         },
+        { system: "zendesk", id: "4200", evidence: "operator", ...CONFIRMED },
       ],
     },
     "customer:zoetis": {
@@ -57,9 +58,21 @@ export const ENTITY_GRAPH = {
           evidence: "operator",
           ...CONFIRMED,
         },
+        { system: "zendesk", id: "4300", evidence: "operator", ...CONFIRMED },
       ],
     },
   },
+};
+
+export const ZENDESK_SUBDOMAIN = "acme";
+export const ZENDESK_EMAIL = "ops@acme.example";
+export const ZENDESK_TOKEN = "zd_test_token";
+
+/** The env a `missura init` needs to configure the third connection too. */
+export const ZENDESK_INIT_ENV: Record<string, string> = {
+  MISSURA_INIT_ZENDESK_SUBDOMAIN: ZENDESK_SUBDOMAIN,
+  MISSURA_INIT_ZENDESK_EMAIL: ZENDESK_EMAIL,
+  MISSURA_INIT_ZENDESK_TOKEN: ZENDESK_TOKEN,
 };
 
 /** Installs the graph into a harness's `MISSURA_HOME`. */

@@ -6,7 +6,11 @@ import {
   resolveMissionScope,
   type MissionScope,
 } from "@missura/core";
-import { DEFAULT_GITHUB_PORT, DEFAULT_LINEAR_PORT } from "@missura/proxy";
+import {
+  DEFAULT_GITHUB_PORT,
+  DEFAULT_LINEAR_PORT,
+  DEFAULT_ZENDESK_PORT,
+} from "@missura/proxy";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
 import { resolveHome } from "./paths";
@@ -23,6 +27,7 @@ export interface ExecOptions {
   entitiesPath?: string;
   linearPort?: number;
   githubPort?: number;
+  zendeskPort?: number;
 }
 
 /**
@@ -37,7 +42,12 @@ export interface ExecOptions {
  * environment removes the accident, not the capability; containment is a
  * container or a separate user (SPEC §3).
  */
-const STRIPPED: ReadonlySet<string> = new Set(["LINEAR_API_KEY", "GITHUB_TOKEN"]);
+const STRIPPED: ReadonlySet<string> = new Set([
+  "LINEAR_API_KEY",
+  "GITHUB_TOKEN",
+  "ZENDESK_API_TOKEN",
+  "ZENDESK_EMAIL",
+]);
 
 function origin(port: number): string {
   return `http://127.0.0.1:${String(port)}`;
@@ -55,6 +65,11 @@ function childEnv(
   env.MISSION_TOKEN = token;
   env.LINEAR_API_URL = `${linear}/graphql`;
   env.GITHUB_API_URL = origin(options.githubPort ?? DEFAULT_GITHUB_PORT);
+  // Handed over unconditionally, like the other two: whether this proxy serves
+  // Zendesk is a boot-time fact of `missura run`, not of the mission, and a
+  // child that cannot reach the port learns that from a connection refused
+  // rather than from an origin that was quietly never set.
+  env.ZENDESK_API_URL = origin(options.zendeskPort ?? DEFAULT_ZENDESK_PORT);
   return env;
 }
 

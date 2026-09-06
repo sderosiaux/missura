@@ -166,7 +166,7 @@ describe("missura exec", () => {
         "utf8",
       ),
     ) as { connections: string[] };
-    expect(payload.connections).toEqual(["github"]);
+    expect(payload.connections).toEqual(["github", "zendesk"]);
 
     const state = JSON.parse(
       readFileSync(join(h.home, "missions.json"), "utf8"),
@@ -174,7 +174,10 @@ describe("missura exec", () => {
     expect(state.missions[0]?.resolution).toEqual({
       via: "entity",
       entityKey: "customer:zoetis",
-      links: [{ system: "github", id: "acme-corp/zoetis", status: "confirmed" }],
+      links: [
+        { system: "github", id: "acme-corp/zoetis", status: "confirmed" },
+        { system: "zendesk", id: "4300", status: "confirmed" },
+      ],
       degraded: [{ system: "linear", reason: "link_proposed", id: "c_77" }],
     });
   }, 30_000);
