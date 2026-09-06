@@ -62,3 +62,28 @@ export function markReduced(
   }
   return { ...res, headers: { ...res.headers, [REDUCED_HEADER]: "true" } };
 }
+
+/** The GraphQL marker, read back out of `extensions`. */
+function extensionSet(body: string | Uint8Array): boolean {
+  const text = typeof body === "string" ? body : new TextDecoder().decode(body);
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!isRecord(parsed)) return false;
+    const extensions = parsed[EXTENSIONS];
+    if (!isRecord(extensions) || !isRecord(extensions.missura)) return false;
+    return extensions.missura.reduced === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The inverse of `markReduced`, for a response that came back through the
+ * pipeline and is about to be composed into an operation's answer. Kept in
+ * this file so the two spellings of the marker cannot drift apart: whatever
+ * `markReduced` writes, this reads, including the header fallback on GraphQL.
+ */
+export function wasReduced(provider: Provider, res: ResponseShape): boolean {
+  if (res.headers[REDUCED_HEADER] === "true") return true;
+  return provider === "linear" && extensionSet(res.body);
+}

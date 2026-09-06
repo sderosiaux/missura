@@ -109,7 +109,13 @@ export function harness(
     vendorAuthHeader: (): string => VENDOR_HEADER,
     upstreamBase: "https://api.github.com",
     fetchImpl,
-    operations: { catalogue: [] },
+    // No operations unless a spec installs some: nothing to list, nothing to
+    // run, and no other pipeline to run it on.
+    operations: {
+      catalogue: [],
+      resolveScope: () => undefined,
+      pipelineFor: () => undefined,
+    },
     emit: (ev: DecisionEvent): void => {
       events.push(ev);
     },

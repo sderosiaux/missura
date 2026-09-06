@@ -72,7 +72,11 @@ describe("introspection — GET /missura/mission", () => {
     const h = harness({
       verifyToken: (): MissionClaims => NARROW,
       now: () => NOW,
-      operations: { catalogue: CATALOGUE },
+      operations: {
+        catalogue: CATALOGUE,
+        resolveScope: () => undefined,
+        pipelineFor: () => undefined,
+      },
     });
     const res = await handle(h.deps, ask());
 

@@ -21,6 +21,8 @@ export interface RequestContext {
   actor?: string;
   purpose?: string;
   traceId?: string;
+  /** The missura operation this request serves, when it is an inner call of one. */
+  viaOperation?: string;
 }
 
 /** No token, or one whose signature this proxy cannot verify. */
@@ -78,6 +80,9 @@ export function emitEvent(
     ...(ctx.actor === undefined ? {} : { actor: ctx.actor }),
     ...(ctx.purpose === undefined ? {} : { purpose: ctx.purpose }),
     ...(ctx.traceId === undefined ? {} : { traceId: ctx.traceId }),
+    ...(ctx.viaOperation === undefined
+      ? {}
+      : { viaOperation: ctx.viaOperation }),
     ...(objectsRemoved === undefined ? {} : { objectsRemoved }),
   });
 }

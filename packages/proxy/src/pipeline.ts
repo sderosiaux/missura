@@ -17,7 +17,12 @@ import {
   type RequestContext,
 } from "./audit";
 import { withMissuraCursor, withVendorCursor } from "./cursor-swap";
-import { denialResponse, type DenialOptions } from "./deny";
+import {
+  actionDenial,
+  connectionDenial,
+  denialResponse,
+  type DenialOptions,
+} from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
 import {
@@ -26,7 +31,11 @@ import {
   isIntrospection,
 } from "./introspect";
 import { scopeDenial, type NarrowFn } from "./narrow";
-import type { OperationsDeps } from "./operations";
+import {
+  executeOperation,
+  operationName,
+  type OperationsDeps,
+} from "./operations";
 import { parentProofStage, type ParentProofDeps } from "./parent-proof";
 import { markReduced } from "./reduced";
 import { refill } from "./refill";
@@ -96,21 +105,31 @@ function verified(
  * Every refusal leaves through `denialResponse`, in the vendor's own envelope
  * with an actionable missura block attached (SPEC §4.8bis) — a refusal an SDK
  * cannot parse never reaches the agent that has to act on it.
+ *
+ * `via` is set on the inner calls of an operation (`operations.ts`) and does
+ * one thing: it names the operation on this request's audit records. Nothing
+ * else about the decision reads it — an inner call is decided exactly like the
+ * raw request it is.
  */
 export async function handle(
   deps: PipelineDeps,
   req: IncomingShape,
+  via?: { operation: string },
 ): Promise<ResponseShape> {
   const startedAt = deps.now?.() ?? Date.now();
   const traceId = traceIdOf(req.headers.traceparent);
   const deny = (options: DenialOptions): ResponseShape =>
     denialResponse(deps.provider, options);
+  const provenance = {
+    ...(traceId === undefined ? {} : { traceId }),
+    ...(via === undefined ? {} : { viaOperation: via.operation }),
+  };
   try {
     const { claims, expired } = verified(deps, bearerToken(req.headers));
     const anonymous: RequestContext = {
       missionId: expired?.id ?? "unknown",
       startedAt,
-      ...(traceId === undefined ? {} : { traceId }),
+      ...provenance,
     };
     if (claims === undefined) {
       const reason =
@@ -138,7 +157,7 @@ export async function handle(
       startedAt,
       actor: claims.actor,
       purpose: claims.purpose,
-      ...(traceId === undefined ? {} : { traceId }),
+      ...provenance,
     };
     const mission = { claims, now: startedAt };
 
@@ -172,17 +191,20 @@ export async function handle(
       );
     }
 
+    // OPERATIONS answer here too, before the connection check, for the same
+    // reason: the route is missura's, and the inner calls it plans re-enter
+    // this very function on the connector they belong to (`operations.ts`).
+    const operation = operationName(req);
+    if (operation !== undefined) {
+      return await executeOperation(deps, req, ctx, claims, operation, handle);
+    }
+
     // The mission decides which connections it may touch. Separate ports are a
     // convenience, not a boundary: a token minted for one connection must not
     // work against another listener just because the agent aimed at its port.
     if (!claims.connections.includes(deps.provider)) {
       emitEvent(deps, ctx, claimsDenial(UNKNOWN_VERDICT, CONNECTION_REASON));
-      return deny({
-        status: 403,
-        code: "missura_connection_not_in_mission",
-        reason: CONNECTION_REASON,
-        ...mission,
-      });
+      return deny(connectionDenial(mission));
     }
 
     const verdict = deps.decide({
@@ -204,13 +226,7 @@ export async function handle(
     // this agent may do with it. An ALLOW the mission does not cover is a deny.
     if (!claims.allow.includes(verdict.action)) {
       emitEvent(deps, ctx, claimsDenial(verdict, ACTION_REASON));
-      return deny({
-        status: 403,
-        code: "missura_action_not_allowed",
-        reason: ACTION_REASON,
-        requiredAction: verdict.action,
-        ...mission,
-      });
+      return deny(actionDenial(mission, verdict.action));
     }
 
     // NARROW runs last, on an already-cataloged request: it shrinks what the

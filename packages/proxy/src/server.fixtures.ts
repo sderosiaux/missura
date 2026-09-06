@@ -6,7 +6,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import type { AddressInfo } from "node:net";
-import { signDevToken, type DecisionEvent } from "@missura/core";
+import {
+  signDevToken,
+  type DecisionEvent,
+  type ResolvedScope,
+} from "@missura/core";
 import { passThroughNarrow } from "./narrow";
 import { createServers, type ProxyServers } from "./server";
 
@@ -82,6 +86,16 @@ export async function stopAll(): Promise<void> {
   live.upstream = undefined;
 }
 
+/**
+ * The scope every mission in these specs resolves to. Fixed rather than read
+ * from a graph: the transport specs are about the wire, and the one operation
+ * spec that plans from it says so.
+ */
+export const RESOLVED: ResolvedScope = {
+  linearCustomerId: "c_18",
+  githubRepos: [{ repo: "octocat/hello-world" }],
+};
+
 export async function boot(): Promise<{
   linearUrl: string;
   githubUrl: string;
@@ -97,6 +111,7 @@ export async function boot(): Promise<{
     emit: (ev: DecisionEvent): void => {
       events.push(ev);
     },
+    operations: { resolveScope: (): ResolvedScope => RESOLVED },
     linear: {
       vendorAuthHeader: `Bearer ${LINEAR_SECRET}`,
       port: 0,
