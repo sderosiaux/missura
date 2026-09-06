@@ -26,6 +26,7 @@ import {
   isIntrospection,
 } from "./introspect";
 import { scopeDenial, type NarrowFn } from "./narrow";
+import type { OperationsDeps } from "./operations";
 import { parentProofStage, type ParentProofDeps } from "./parent-proof";
 import { markReduced } from "./reduced";
 import { refill } from "./refill";
@@ -54,6 +55,12 @@ export interface PipelineDeps extends ForwardDeps, ParentProofDeps {
    * again, and the length of the walk they encode is a count of hidden objects.
    */
   cursors: CursorStore;
+  /**
+   * The operations this proxy serves (`operations.ts`). Required rather than
+   * defaulted to an empty catalogue: a listener wired without one would answer
+   * introspection with "no operations" for a proxy that has some.
+   */
+  operations: OperationsDeps;
 }
 
 /**
@@ -158,7 +165,11 @@ export async function handle(
     // one this listener is not in (`introspect.ts`).
     if (isIntrospection(req)) {
       emitEvent(deps, ctx, INTROSPECTION_VERDICT);
-      return introspectionResponse(claims, startedAt);
+      return introspectionResponse(
+        claims,
+        startedAt,
+        deps.operations.catalogue,
+      );
     }
 
     // The mission decides which connections it may touch. Separate ports are a

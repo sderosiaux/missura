@@ -125,6 +125,22 @@ describe("decision events", () => {
     expect(parsed.objectsRemoved).toBe(2);
   });
 
+  /**
+   * A vendor call made on behalf of an operation keeps its own catalog
+   * `operation` (the route it cost) AND names the operation it served, so the
+   * log can be read both ways: what the agent asked for, and what it cost.
+   */
+  it("serializes the operation a vendor call served", () => {
+    const dir = tmpDir();
+    appendEvent(dir, { ...EVENT, viaOperation: "zendesk.tickets.for_entity" });
+    const parsed = JSON.parse(
+      readFileSync(join(dir, "2026-08-14.jsonl"), "utf8").trimEnd(),
+    ) as DecisionEvent;
+
+    expect(parsed.operation).toBe("IssuesQuery");
+    expect(parsed.viaOperation).toBe("zendesk.tickets.for_entity");
+  });
+
   it("omits the removal count when no filter ran", () => {
     const dir = tmpDir();
     appendEvent(dir, EVENT);

@@ -10,6 +10,7 @@ export * from "./github-scope";
 export * from "./introspection";
 export * from "./keys";
 export * from "./missions";
+export * from "./operation";
 export * from "./parent-proof";
 export * from "./remediation";
 export * from "./remediation-envelope";

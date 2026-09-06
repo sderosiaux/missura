@@ -1,3 +1,8 @@
+import {
+  operationsFor,
+  type Operation,
+  type OperationListing,
+} from "./operation";
 import { missionSummary } from "./remediation";
 import type { MissionClaims, MissionDegradation } from "./token";
 
@@ -28,11 +33,17 @@ export interface MissionIntrospection {
    * nothing else was added through it.
    */
   degraded: readonly MissionDegradation[];
+  /**
+   * The operations this mission may run (`POST /missura/op/<name>`): connector
+   * in the mission, effect covered by `allow`. Nothing about the others.
+   */
+  operations: readonly OperationListing[];
 }
 
 export function missionIntrospection(
   claims: MissionClaims,
-  now: number = Date.now(),
+  now: number,
+  catalogue: readonly Operation[],
 ): MissionIntrospection {
   const entity = claims.scope.entity;
   return {
@@ -45,5 +56,6 @@ export function missionIntrospection(
     // Field by field: a claims object reaches this from a token, and nothing
     // that happened to ride on a degradation there rides out.
     degraded: claims.degraded.map((d) => ({ system: d.system, reason: d.reason })),
+    operations: operationsFor(claims, catalogue),
   };
 }

@@ -16,6 +16,8 @@ export type DenialCode =
   | "missura_connection_not_in_mission"
   | "missura_action_not_allowed"
   | "missura_operation_not_in_catalog"
+  | "missura_operation_unknown"
+  | "missura_invalid_parameters"
   | "missura_out_of_mission_scope"
   | "missura_out_of_path_scope"
   | "missura_invalid_target"

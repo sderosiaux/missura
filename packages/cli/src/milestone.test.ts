@@ -293,6 +293,7 @@ describe("M6 — the agent can ask what it is, and is told what it is not", () =
         "degraded",
         "entity",
         "expires_in",
+        "operations",
         "purpose",
         "systems",
       ]);

@@ -6,6 +6,7 @@ import {
   writeState,
   type StateFile,
 } from "./mission-state";
+import { scopeSatisfies } from "./operation";
 import type { ResolvedScope } from "./resolved-scope";
 import type { ScopeResolution } from "./entity-resolve";
 import { scopeProvenance, type ScopeProvenance } from "./scope-provenance";
@@ -308,12 +309,8 @@ export class MissionStore {
  */
 export function connectionsFor(scope: ResolvedScope): string[] {
   const connections: string[] = [];
-  if (scope.linearCustomerId !== undefined && scope.linearCustomerId !== "") {
-    connections.push("linear");
-  }
-  if (scope.githubRepos.length > 0) connections.push("github");
-  if ((scope.zendeskOrganizationIds ?? []).length > 0) {
-    connections.push("zendesk");
-  }
+  if (scopeSatisfies(scope, "linear.customer")) connections.push("linear");
+  if (scopeSatisfies(scope, "github.repo")) connections.push("github");
+  if (scopeSatisfies(scope, "zendesk.organization")) connections.push("zendesk");
   return connections;
 }

@@ -20,6 +20,8 @@ const LINEAR_ERROR_TYPE: Record<DenialCode, string> = {
   missura_connection_not_in_mission: "Forbidden",
   missura_action_not_allowed: "Forbidden",
   missura_operation_not_in_catalog: "Forbidden",
+  missura_operation_unknown: "Forbidden",
+  missura_invalid_parameters: "InvalidInput",
   missura_out_of_mission_scope: "Forbidden",
   missura_out_of_path_scope: "Forbidden",
   missura_invalid_target: "Forbidden",

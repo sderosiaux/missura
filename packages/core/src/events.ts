@@ -28,6 +28,13 @@ export interface DecisionEvent {
   /** `trace-id` of an inbound W3C `traceparent`, when the agent sent a valid one. */
   traceId?: string;
   /**
+   * The missura operation this vendor call served (`zendesk.tickets.for_entity`),
+   * when the agent asked for an operation rather than for this call. Beside
+   * `operation`, never instead of it: the route the call cost stays named, so
+   * the log reads both as what was asked and as what it cost.
+   */
+  viaOperation?: string;
+  /**
    * How many objects the response FILTER removed (dropped from a list or
    * nulled). Absent when no filter plan ran; `0` when one ran and found the
    * whole answer authorized — the difference is what makes the log auditable.
@@ -67,6 +74,7 @@ const SERIALIZED_FIELDS = [
   "actor",
   "purpose",
   "traceId",
+  "viaOperation",
   "objectsRemoved",
   "scopeVia",
   "scopeEntity",

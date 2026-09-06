@@ -237,6 +237,7 @@ function deps(
     emit: (ev): void => {
       config.emit(ev);
     },
+    operations: { catalogue: [] },
   };
 }
 

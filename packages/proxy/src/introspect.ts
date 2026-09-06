@@ -2,6 +2,7 @@ import {
   missionIntrospection,
   type CatalogDecision,
   type MissionClaims,
+  type Operation,
 } from "@missura/core";
 import { JSON_HEADERS, type IncomingShape, type ResponseShape } from "./transport";
 
@@ -49,13 +50,19 @@ export function isIntrospection(req: IncomingShape): boolean {
   return (req.path.split("?")[0] ?? "") === INTROSPECTION_PATH;
 }
 
+/**
+ * The catalogue is the proxy's whole one; the answer lists only what the
+ * mission reaches (`operationsFor`), so a degraded system is named once, in
+ * `degraded`, and never again as an operation the agent cannot run.
+ */
 export function introspectionResponse(
   claims: MissionClaims,
   now: number,
+  catalogue: readonly Operation[],
 ): ResponseShape {
   return {
     status: 200,
     headers: { ...JSON_HEADERS },
-    body: JSON.stringify(missionIntrospection(claims, now)),
+    body: JSON.stringify(missionIntrospection(claims, now, catalogue)),
   };
 }

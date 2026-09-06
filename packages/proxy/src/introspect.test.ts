@@ -1,4 +1,9 @@
-import { MissionExpiredError, type MissionClaims } from "@missura/core";
+import {
+  MissionExpiredError,
+  type MissionClaims,
+  type Operation,
+  type OperationStep,
+} from "@missura/core";
 import { describe, expect, it } from "vitest";
 import { INTROSPECTION_PATH } from "./introspect";
 import { handle } from "./pipeline";
@@ -35,9 +40,40 @@ function ask(path: string = INTROSPECTION_PATH): ReturnType<typeof request> {
   return request({ method: "GET", path });
 }
 
+const NONE: readonly OperationStep[] = [];
+
+/** One read per connector, so the listing has something to leave out. */
+const CATALOGUE: readonly Operation[] = [
+  {
+    name: "linear.issues.for_entity",
+    connector: "linear",
+    effect: "read",
+    needs: "linear.customer",
+    plan: (): readonly OperationStep[] => NONE,
+  },
+  {
+    name: "github.issues.for_entity",
+    connector: "github",
+    effect: "read",
+    needs: "github.repo",
+    plan: (): readonly OperationStep[] => NONE,
+  },
+  {
+    name: "zendesk.tickets.for_entity",
+    connector: "zendesk",
+    effect: "read",
+    needs: "zendesk.organization",
+    plan: (): readonly OperationStep[] => NONE,
+  },
+];
+
 describe("introspection — GET /missura/mission", () => {
   it("answers from the mission's own claims, and never calls the vendor", async () => {
-    const h = harness({ verifyToken: (): MissionClaims => NARROW, now: () => NOW });
+    const h = harness({
+      verifyToken: (): MissionClaims => NARROW,
+      now: () => NOW,
+      operations: { catalogue: CATALOGUE },
+    });
     const res = await handle(h.deps, ask());
 
     expect(res.status).toBe(200);
@@ -50,6 +86,12 @@ describe("introspection — GET /missura/mission", () => {
       allow: ["read"],
       systems: ["github", "zendesk"],
       degraded: [{ system: "linear", reason: "link_proposed" }],
+      // The operations THIS mission may run — the Linear one is absent, not
+      // marked unavailable.
+      operations: [
+        { name: "github.issues.for_entity", effect: "read" },
+        { name: "zendesk.tickets.for_entity", effect: "read" },
+      ],
     });
     expect(h.fetchCount()).toBe(0);
   });

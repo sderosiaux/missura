@@ -138,6 +138,13 @@ export function remediationFor(code: DenialCode, ctx: Ctx): string {
       return `your mission allows ${ctx.actions.join(", ")}${ctx.requiredAction === undefined ? "" : `, and this call needs \`${ctx.requiredAction}\``}. Re-issue it as one of the allowed actions, or ask the operator for a mission that grants the one you need.`;
     case "missura_operation_not_in_catalog":
       return `this endpoint is not in missura's ${ctx.provider} catalog, so no mission can reach it — a wider mission would not change that. Use a cataloged read or search route instead.`;
+    // Neither names the operation the agent asked for: it wrote the name, so
+    // quoting it back adds nothing, and a name that is NOT in the catalogue
+    // must read the same as one that is out of this mission's reach.
+    case "missura_operation_unknown":
+      return `no operation by that name is available to this mission. ${INTROSPECT} — its \`operations\` field lists, by name and effect, the ones you can run as \`POST /missura/op/<name>\`.`;
+    case "missura_invalid_parameters":
+      return `an operation takes its parameters as one JSON object in the request body — an empty body when it needs none. Re-issue the call with a body that parses as an object.`;
     case "missura_out_of_mission_scope":
       return outOfScope(ctx);
     case "missura_out_of_path_scope":
@@ -184,6 +191,10 @@ export function tryInsteadFor(code: DenialCode, ctx: Ctx): readonly string[] {
     case "missura_connection_not_in_mission":
     case "missura_upstream_error":
     case "missura_internal":
+    // The alternative is the introspection answer, already pointed at above;
+    // a vendor shape here would send the agent off the operation it wanted.
+    case "missura_operation_unknown":
+    case "missura_invalid_parameters":
       return [];
     case "missura_request_too_large":
     case "missura_response_too_large":

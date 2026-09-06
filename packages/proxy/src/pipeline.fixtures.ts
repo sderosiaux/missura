@@ -109,6 +109,7 @@ export function harness(
     vendorAuthHeader: (): string => VENDOR_HEADER,
     upstreamBase: "https://api.github.com",
     fetchImpl,
+    operations: { catalogue: [] },
     emit: (ev: DecisionEvent): void => {
       events.push(ev);
     },
