@@ -10,6 +10,7 @@ import {
   DEFAULT_GITHUB_PORT,
   DEFAULT_LINEAR_PORT,
   DEFAULT_ZENDESK_PORT,
+  INTROSPECTION_PATH,
 } from "@missura/proxy";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
@@ -62,9 +63,15 @@ function childEnv(
     Object.entries(io.env).filter(([name]) => !STRIPPED.has(name)),
   );
   const linear = origin(options.linearPort ?? DEFAULT_LINEAR_PORT);
+  const github = origin(options.githubPort ?? DEFAULT_GITHUB_PORT);
   env.MISSION_TOKEN = token;
   env.LINEAR_API_URL = `${linear}/graphql`;
-  env.GITHUB_API_URL = origin(options.githubPort ?? DEFAULT_GITHUB_PORT);
+  env.GITHUB_API_URL = github;
+  // Where the child asks what its mission is. Every data-plane listener serves
+  // the route; the GitHub one is advertised because a plain GET that fails
+  // there fails in a REST envelope, where the Linear listener would answer a
+  // GET with a GraphQL error document.
+  env.MISSURA_MISSION_URL = `${github}${INTROSPECTION_PATH}`;
   // Handed over unconditionally, like the other two: whether this proxy serves
   // Zendesk is a boot-time fact of `missura run`, not of the mission, and a
   // child that cannot reach the port learns that from a connection refused

@@ -240,7 +240,7 @@ describe("buildDenial", () => {
     expect(github.try_instead.join(" ")).toContain("per_page");
   });
 
-  it("does not promise an introspection surface that does not exist yet", () => {
+  it("points at the introspection route exactly as it is served", () => {
     const denial = buildDenial({
       code: "missura_internal",
       reason: "internal",
@@ -248,6 +248,7 @@ describe("buildDenial", () => {
       claims: CLAIMS,
       now: NOW,
     });
-    expect(denial.introspect.toLowerCase()).toContain("not available");
+    expect(denial.introspect).toContain("GET /missura/mission");
+    expect(denial.introspect).toContain("MISSURA_MISSION_URL");
   });
 });

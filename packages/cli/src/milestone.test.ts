@@ -60,6 +60,11 @@ const status = async (url, init) => (await fetch(url, init)).status;
         "/api/v2/organizations/${organization}/tickets.json",
       { headers: auth },
     ),
+    // What the mission says it is, asked the way an agent would: the URL
+    // from the environment, the token it already holds.
+    mission: await (
+      await fetch(process.env.MISSURA_MISSION_URL, { headers: auth })
+    ).json(),
   };
   fs.writeFileSync(process.env.MISSURA_HOME + "/proof.json", JSON.stringify(out));
 })();
@@ -128,6 +133,7 @@ interface Proof {
   linear: number;
   github: number;
   zendesk: number;
+  mission: Record<string, unknown>;
 }
 
 async function exec(
@@ -251,6 +257,46 @@ describe("M5 — one entity key, every confirmed system, through the graph", () 
       expect(record?.resolution?.degraded).toEqual([
         { system: "linear", reason: "link_proposed", id: "c_77" },
       ]);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+});
+
+/**
+ * THE M6 PROOF: the same narrow mission, asked by the agent itself. It learns
+ * that Linear is out and WHY — and not which Linear customer somebody proposed.
+ * The record above holds `c_77`; the agent's answer must not, whatever path it
+ * took to get there: token, proxy, or the bytes on the wire.
+ */
+describe("M6 — the agent can ask what it is, and is told what it is not", () => {
+  it("names the degraded system by reason class, and never by the proposed id", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const servers = await boot(h, []);
+
+    try {
+      const { mission } = await exec(h, servers, "customer:zoetis", {
+        repo: "acme-corp/zoetis",
+        organization: "4300",
+      });
+
+      expect(mission).toMatchObject({
+        entity: "customer:zoetis",
+        purpose: "m5 proof",
+        allow: ["read", "search"],
+        systems: ["github", "zendesk"],
+        degraded: [{ system: "linear", reason: "link_proposed" }],
+      });
+      expect(Object.keys(mission).sort()).toEqual([
+        "actor",
+        "allow",
+        "degraded",
+        "entity",
+        "expires_in",
+        "purpose",
+        "systems",
+      ]);
+      expect(JSON.stringify(mission)).not.toContain("c_77");
     } finally {
       await servers.close();
     }

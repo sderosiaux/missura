@@ -60,6 +60,10 @@ describe("missura exec", () => {
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.LINEAR_API_URL ?? "").toContain("/graphql");
     expect(env.GITHUB_API_URL ?? "").toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    // Where it asks what it is — found the same way it finds the vendors.
+    expect(env.MISSURA_MISSION_URL).toBe(
+      `${env.GITHUB_API_URL ?? ""}/missura/mission`,
+    );
   }, 30_000);
 
   it("forwards the child's exit code", async () => {

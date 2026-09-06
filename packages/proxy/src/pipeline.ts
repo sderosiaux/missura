@@ -20,6 +20,11 @@ import { withMissuraCursor, withVendorCursor } from "./cursor-swap";
 import { denialResponse, type DenialOptions } from "./deny";
 import { filterTask } from "./filter";
 import { forward, upstreamTarget, type ForwardDeps } from "./forward";
+import {
+  INTROSPECTION_VERDICT,
+  introspectionResponse,
+  isIntrospection,
+} from "./introspect";
 import { scopeDenial, type NarrowFn } from "./narrow";
 import { parentProofStage, type ParentProofDeps } from "./parent-proof";
 import { refill } from "./refill";
@@ -145,6 +150,14 @@ export async function handle(
         reason: REVOKED_REASON,
         ...mission,
       });
+    }
+
+    // INTROSPECTION answers here, after the token is known live and BEFORE the
+    // connection check: the mission that most needs to ask what it is, is the
+    // one this listener is not in (`introspect.ts`).
+    if (isIntrospection(req)) {
+      emitEvent(deps, ctx, INTROSPECTION_VERDICT);
+      return introspectionResponse(claims, startedAt);
     }
 
     // The mission decides which connections it may touch. Separate ports are a

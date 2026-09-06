@@ -7,6 +7,7 @@ export * from "./entity-resolve";
 export * from "./events";
 export * from "./filter-plan";
 export * from "./github-scope";
+export * from "./introspection";
 export * from "./keys";
 export * from "./missions";
 export * from "./parent-proof";

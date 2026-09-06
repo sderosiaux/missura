@@ -17,13 +17,13 @@ import type { DenialCode } from "./remediation-types";
  */
 
 /**
- * Honest by construction: §4.8 introspection is M5 work, so this field names
- * the plan and says it is not there yet. A remediation that told an agent to
- * call `get_mission` today would send it at a tool that does not exist — the
- * exact hallucinated-workaround failure actionable errors exist to prevent.
+ * Where the agent asks what it is (SPEC §4.8): the same bearer, on any
+ * connection of this proxy. Named here exactly as it is served — a remediation
+ * that pointed at a route that does not exist would send the agent at the very
+ * hallucinated workaround actionable errors exist to prevent.
  */
 export const INTROSPECT =
-  "not available yet (planned, SPEC §4.8: mcp get_mission / check_access) — this mission block is the whole boundary";
+  "GET /missura/mission with the same `Authorization: Bearer <token>`, on any connection of this proxy (the operator put its URL in `MISSURA_MISSION_URL`) — it lists the systems in your mission and the ones left out, with the reason";
 
 /** Runnable in-scope shapes. Each needs no identifier the agent has to guess. */
 const LINEAR_READ = "query { issues(first: 20) { nodes { id title } } }";
