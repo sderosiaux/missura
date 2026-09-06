@@ -1,11 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupHomes,
   GITHUB_TOKEN,
   initedHarness,
-  LINEAR_KEY,
   ZENDESK_EMAIL,
   ZENDESK_INIT_ENV,
   ZENDESK_TOKEN,
@@ -23,163 +22,28 @@ import {
   type ProofM8,
 } from "./milestone-m8.fixtures";
 import {
+  feasibility,
+  mint,
+  operation,
+  show,
+  systemsNamed,
+} from "./milestone-m9.fixtures";
+import {
   boot,
-  childM5,
   events,
   exec,
   missions,
   type Call,
 } from "./milestone.fixtures";
+import { run } from "./index";
 
 /**
- * THE M5 PROOF, end to end and through the CLI a human actually types.
- *
- *   missura exec --entity customer:acme --ttl 30m -- <cmd>
- *
- * resolves through the ENTITY GRAPH — not a flat map, not a `customer:` prefix
- * glued onto a name — and the child it spawns reaches every system a human
- * confirmed for that entity, on all three connectors, holding no vendor
- * credential of any kind.
- *
- * And the other half, which is the one the graph exists for: an entity whose
- * Linear link is only PROPOSED mints a mission WITHOUT Linear, that says so.
- * The mission is narrower, it is not refused, and the reason is on the record
- * by name — a bad inference costs reach, never somebody else's data.
+ * The proofs, one describe per milestone. M5 and M6 — the graph and the
+ * agent's introspection of it — live in `milestone-m5.test.ts`, on the same
+ * rig; from M7 on, the operations, the write and the gap are here.
  */
-
-interface Proof {
-  holdsToken: boolean;
-  holdsVendorKeys: string[];
-  linear: number;
-  github: number;
-  zendesk: number;
-  mission: Record<string, unknown>;
-}
 
 afterEach(cleanupHomes);
-
-describe("M5 — one entity key, every confirmed system, through the graph", () => {
-  it("reaches linear, github and zendesk under one --entity mission", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const calls: Call[] = [];
-    const servers = await boot(h, calls);
-
-    try {
-      const proof = await exec<Proof>(
-        h,
-        servers,
-        "customer:acme",
-        childM5("acme-corp/product", "4200"),
-      );
-
-      expect(proof.holdsToken).toBe(true);
-      // The red line: three vendors reached, no vendor credential in the child.
-      expect(proof.holdsVendorKeys).toEqual([]);
-      expect(proof.linear).toBe(200);
-      expect(proof.github).toBe(200);
-      expect(proof.zendesk).toBe(200);
-
-      // Every call carried the graph's confirmed id, none of them the agent's.
-      expect(calls).toHaveLength(3);
-      expect(calls[0]?.body).toContain("c_18");
-      expect(calls[1]?.url).toContain("/repos/acme-corp/product");
-      expect(calls[2]?.url).toContain("/api/v2/organizations/4200/tickets");
-
-      // And each one carried its OWN vendor's credential, taken from the vault
-      // `missura init` wrote — the Zendesk call in particular, whose whole
-      // credential path (subdomain, agent email, API token, Basic header) had
-      // no caller before this milestone.
-      expect(calls[2]?.authorization).toBe(
-        `Basic ${Buffer.from(`${ZENDESK_EMAIL}/token:${ZENDESK_TOKEN}`, "utf8").toString("base64")}`,
-      );
-      expect(calls[1]?.authorization).toBe(`Bearer ${GITHUB_TOKEN}`);
-      expect(calls[0]?.authorization).toBe(LINEAR_KEY);
-      // The mission token is the agent's, and it never travels to a vendor.
-      const missionToken = readFileSync(join(h.home, "proof.json"), "utf8");
-      expect(missionToken).not.toContain(ZENDESK_TOKEN);
-      for (const call of calls) expect(call.authorization).not.toMatch(/msr_/);
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-
-  it("mints without Linear when its link is only proposed, and records why", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const calls: Call[] = [];
-    const servers = await boot(h, calls);
-
-    try {
-      const proof = await exec<Proof>(
-        h,
-        servers,
-        "customer:zoetis",
-        childM5("acme-corp/zoetis", "4300"),
-      );
-
-      // The two confirmed systems are reached; Linear is refused on the
-      // connection check, before anything is asked of the vendor.
-      expect(proof.github).toBe(200);
-      expect(proof.zendesk).toBe(200);
-      expect(proof.linear).toBe(403);
-      expect(calls.map((c) => c.url).some((u) => u.includes("graphql"))).toBe(
-        false,
-      );
-
-      // And it says so, by name, on the mission the operator can read back.
-      const record = missions(h).at(-1);
-      expect(record?.scope.entity).toBe("customer:zoetis");
-      expect(record?.resolution?.entityKey).toBe("customer:zoetis");
-      expect(record?.resolution?.degraded).toEqual([
-        { system: "linear", reason: "link_proposed", id: "c_77" },
-      ]);
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-});
-
-/**
- * THE M6 PROOF: the same narrow mission, asked by the agent itself. It learns
- * that Linear is out and WHY — and not which Linear customer somebody proposed.
- * The record above holds `c_77`; the agent's answer must not, whatever path it
- * took to get there: token, proxy, or the bytes on the wire.
- */
-describe("M6 — the agent can ask what it is, and is told what it is not", () => {
-  it("names the degraded system by reason class, and never by the proposed id", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const servers = await boot(h, []);
-
-    try {
-      const { mission } = await exec<Proof>(
-        h,
-        servers,
-        "customer:zoetis",
-        childM5("acme-corp/zoetis", "4300"),
-      );
-
-      expect(mission).toMatchObject({
-        entity: "customer:zoetis",
-        purpose: "m5 proof",
-        allow: ["read", "search"],
-        systems: ["github", "zendesk"],
-        degraded: [{ system: "linear", reason: "link_proposed" }],
-      });
-      expect(Object.keys(mission).sort()).toEqual([
-        "actor",
-        "allow",
-        "degraded",
-        "entity",
-        "expires_in",
-        "operations",
-        "purpose",
-        "systems",
-      ]);
-      expect(JSON.stringify(mission)).not.toContain("c_77");
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-});
 
 /**
  * THE M7 PROOF: missura executing an operation is not missura bypassing
@@ -369,6 +233,120 @@ describe("M8 — the first write: proven before, operation-only, on the record",
       expect(calls).toEqual([]);
       expect(proof.mission.allow).toEqual(["read", "search"]);
       expect(JSON.stringify(proof.mission.operations)).not.toContain(M8_OPERATION);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+});
+
+/**
+ * THE M9 PROOF: when something is not possible, the answer is the GAP — the
+ * one cause, and the next connection that closes it — computed from the
+ * catalogue and the graph, deterministically, with no model anywhere. The
+ * operator sees everything: system, link status, the command. The agent sees
+ * only what its mission already told it: a reason class, and nothing that
+ * names a system outside the mission.
+ */
+describe("M9 — the gap is specific and actionable, and it names the next connection", () => {
+  it("entity show: three possible, and Linear as the one gap with its status and command", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const shown = await show(h, "customer:zoetis");
+
+    expect(shown.operations.filter((op) => op.possible).map((op) => op.name)).toEqual([
+      "github.issues.for_entity",
+      "github.issue.comment.create",
+      "zendesk.tickets.for_entity",
+    ]);
+    expect(operation(shown, "linear.issues.for_entity")).toMatchObject({
+      possible: false,
+      cause: "link_not_confirmed",
+      system: "linear",
+      status: "proposed",
+      remediation: expect.stringContaining("missura entity confirm customer:zoetis linear") as string,
+    });
+  });
+
+  it("no GitHub link: exec --allow fails as the no_link gap, and so does the operator mint", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const servers = await boot(h, []);
+
+    try {
+      const code = await run(
+        [
+          "exec", "--entity", "customer:initech", "--purpose", "m9 proof",
+          "--allow", M8_OPERATION, "--", process.execPath, "-e", "0",
+        ],
+        h.io,
+      );
+      expect(code.code).toBe(1);
+      const message = h.err[0] ?? "";
+      expect(message).toContain("no_link");
+      expect(message).toContain("github");
+      expect(message).toContain("missura entity link customer:initech github");
+      expect(message).not.toContain("unknown operation");
+
+      const refused = await mint(h, servers, "customer:initech", [M8_OPERATION]);
+      expect(refused.status).toBe(400);
+      expect(refused.error.field).toBe("allow");
+      expect(refused.error.gap).toMatchObject({ cause: "no_link", system: "github" });
+      expect(refused.error.reason).toContain("missura entity link customer:initech github");
+      // Nothing was minted by either surface: the store never wrote its file.
+      expect(existsSync(join(h.home, "missions.json"))).toBe(false);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("booted without Zendesk: its operation is system_not_connected for every entity, fixed by missura init", async () => {
+    const h = await initedHarness();
+    for (const key of ["customer:acme", "customer:zoetis", "customer:initech"]) {
+      expect(operation(await show(h, key), "zendesk.tickets.for_entity"), key).toMatchObject({
+        possible: false,
+        cause: "system_not_connected",
+        system: "zendesk",
+        remediation: expect.stringContaining("missura init") as string,
+      });
+    }
+    // The operator plane of that same boot answers the same.
+    const servers = await boot(h, []);
+    try {
+      expect(servers.zendesk).toBeUndefined();
+      const report = await feasibility(h, servers, "customer:acme");
+      expect(operation(report, "zendesk.tickets.for_entity")).toMatchObject({
+        cause: "system_not_connected",
+      });
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("the agent's refusal carries the reason class, and nothing beyond what its mission says", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const servers = await boot(h, []);
+
+    try {
+      const proof = await exec<ProofM7>(h, servers, "customer:zoetis", childM7("4300"));
+      const body = proof.linearOp.body;
+      const parsed = JSON.parse(body) as {
+        errors: { extensions: { missura: { code: string; cause?: string } } }[];
+      };
+      expect(parsed.errors[0]?.extensions.missura).toMatchObject({
+        code: "missura_connection_not_in_mission",
+        cause: "link_proposed",
+      });
+
+      // No link status word beyond the reason class, no native id.
+      const stripped = body.replace(/link_proposed/g, "");
+      for (const word of ["proposed", "confirmed", "rejected", "broken", "c_77", "4300", "acme-corp"]) {
+        expect(stripped, word).not.toContain(word);
+      }
+      // No system the mission did not already name: connections ∪ degraded.
+      const mission = proof.mission as unknown as {
+        systems: string[];
+        degraded: { system: string }[];
+      };
+      const known = new Set([...mission.systems, ...mission.degraded.map((d) => d.system)]);
+      for (const system of systemsNamed(body)) expect(known.has(system), system).toBe(true);
     } finally {
       await servers.close();
     }
