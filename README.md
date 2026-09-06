@@ -9,7 +9,8 @@ never sees more than the task needs.
 The problem it exists for: a support agent across Zendesk, Linear and GitHub is
 the easiest one to justify and the hardest one to ship, because it reads every
 customer's data on every run while holding one token that opens the whole
-workspace. Missura binds each run to a single customer entity instead.
+workspace. Missura binds each run to a single business entity instead — a
+customer, an employee, a project; whatever the operator's graph names.
 
 ## Status
 
@@ -18,8 +19,12 @@ v0, in progress. Not production-ready. Read-only everywhere.
 Working today: mission tokens minted by an operator (never by the agent), the
 vault that keeps vendor credentials out of the agent's environment, connectors
 for Linear, GitHub and Zendesk, type-driven request narrowing with response
-filtering, missura-owned pagination cursors, an entity graph where only a
-human-confirmed link widens a mission, and a hash-chained decision log.
+filtering, missura-owned pagination cursors, and a hash-chained decision log.
+
+Every mission resolves through an ENTITY GRAPH where only a human-confirmed
+link widens it, and records the links it declined to use. Zendesk is optional:
+`missura init` asks for a subdomain, an agent email and an API token, and a
+deployment that gives none of the three simply serves the other two vendors.
 
 ## Layout
 
@@ -46,8 +51,9 @@ to approve a mapping.
 
 ## What `exec` does and does not protect
 
-`missura exec` removes `LINEAR_API_KEY` and `GITHUB_TOKEN` from the child's
-environment and hands it a short-lived mission token instead, so an agent that
+`missura exec` removes `LINEAR_API_KEY`, `GITHUB_TOKEN`, `ZENDESK_API_TOKEN`
+and `ZENDESK_EMAIL` from the child's environment and hands it a short-lived
+mission token instead, so an agent that
 reaches for a vendor key by habit finds nothing and goes through the proxy —
 where the request is cataloged, narrowed, logged, and revocable.
 

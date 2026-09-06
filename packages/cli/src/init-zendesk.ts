@@ -64,11 +64,28 @@ function originFor(subdomain: string): string {
   return `https://${subdomain.toLowerCase()}.zendesk.com`;
 }
 
-async function ask(io: CliIo, field: Field): Promise<string> {
-  const fromEnv = io.env[field.envVar];
-  if (fromEnv !== undefined) return fromEnv.trim();
-  if (!io.isTTY) return "";
-  return (await io.prompt(`${field.label}: `)).trim();
+const FIELDS: readonly Field[] = [SUBDOMAIN, ...REST];
+
+/**
+ * The three answers, from the environment where it has them and from a real
+ * terminal otherwise. A blank subdomain on a terminal ends the questioning:
+ * there is no point asking for a credential to go with an origin nobody gave.
+ */
+async function collect(io: CliIo): Promise<string[]> {
+  const values: string[] = [];
+  for (const [index, field] of FIELDS.entries()) {
+    const fromEnv = io.env[field.envVar];
+    if (fromEnv !== undefined) {
+      values.push(fromEnv.trim());
+      continue;
+    }
+    if (!io.isTTY || (index > 0 && values[0] === "")) {
+      values.push("");
+      continue;
+    }
+    values.push((await io.prompt(`${field.label}: `)).trim());
+  }
+  return values;
 }
 
 /**
@@ -85,20 +102,17 @@ function basic(email: string, token: string): string {
 export async function readZendesk(
   io: CliIo,
 ): Promise<ZendeskConnection | undefined> {
-  const subdomain = await ask(io, SUBDOMAIN);
-  const rest: string[] = [];
-  for (const field of REST) rest.push(await ask(io, field));
-  const given = [subdomain, ...rest].filter((value) => value.length > 0);
-  if (given.length === 0) return undefined;
-  if (given.length < 3) {
-    const missing = [SUBDOMAIN, ...REST]
-      .filter((_, i) => [subdomain, ...rest][i] === "")
-      .map((field) => field.envVar);
+  const values = await collect(io);
+  if (values.every((value) => value === "")) return undefined;
+  const missing = FIELDS.filter((_, i) => values[i] === "").map(
+    (field) => field.envVar,
+  );
+  if (missing.length > 0) {
     throw new Error(
-      `zendesk is half configured — missing ${missing.join(", ")}. Give all three or none.`,
+      `zendesk is half configured — missing ${missing.join(", ")}. Give all three, or none of them for a proxy that serves no zendesk.`,
     );
   }
-  const [email, token] = rest as [string, string];
+  const [subdomain, email, token] = values as [string, string, string];
   return {
     authorization: basic(email, token),
     upstreamBase: originFor(subdomain),
