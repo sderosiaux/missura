@@ -6,7 +6,7 @@ import {
   writeState,
   type StateFile,
 } from "./mission-state";
-import { scopeSatisfies } from "./operation";
+import { grantableOperations, scopeSatisfies, type Operation } from "./operation";
 import type { ResolvedScope } from "./resolved-scope";
 import type { ScopeResolution } from "./entity-resolve";
 import { scopeProvenance, type ScopeProvenance } from "./scope-provenance";
@@ -21,6 +21,13 @@ export interface CreateMission {
   actor: string;
   scope: MissionScope;
   ttlSeconds: number;
+  /**
+   * Operation NAMES granted beyond the read verbs — the only way a mission
+   * reaches a write (`operationAllowed`). Absent means the default grant,
+   * which is read-only; present, every name is checked against the catalogue
+   * this store was built with before a token exists.
+   */
+  allow?: readonly string[];
 }
 
 export interface MissionRecord extends CreateMission {
@@ -41,7 +48,7 @@ export interface MissionRecord extends CreateMission {
   resolution?: ScopeProvenance;
 }
 
-/** Capabilities a mission grants in M2 — read-only, deliberately. */
+/** The verbs every mission grants — the raw read path, and nothing that writes. */
 const ALLOW = ["read", "search"] as const;
 
 function requireText(field: string, value: string): string {
@@ -77,15 +84,26 @@ function requireText(field: string, value: string): string {
 export class MissionStore {
   private readonly stateFile: string;
   private readonly signingKey: Buffer;
+  /**
+   * The operations a name-grant may name (`grantableOperations`). Defaulted
+   * to none, which refuses every name: a store nobody told what exists cannot
+   * be talked into granting it.
+   */
+  private readonly catalogue: readonly Operation[];
   private records: MissionRecord[];
   /** jti → revocation time. Entries are added, never removed. */
   private readonly revoked = new Map<string, number>();
   /** The file's stamp as of the last successful read or write. */
   private stamp: string | undefined;
 
-  constructor(stateFile: string, signingKey: Buffer) {
+  constructor(
+    stateFile: string,
+    signingKey: Buffer,
+    catalogue: readonly Operation[] = [],
+  ) {
     this.stateFile = stateFile;
     this.signingKey = signingKey;
+    this.catalogue = catalogue;
     this.records = [];
     if (existsSync(stateFile)) {
       // Stamped before the read: a write landing in between costs one redundant
@@ -168,6 +186,9 @@ export class MissionStore {
     this.refresh();
     requireText("purpose", input.purpose);
     requireText("actor", input.actor);
+    // Before the id and the token: a name the catalogue does not know is a
+    // refused mint, not a minted mission that refuses everything.
+    const granted = grantableOperations(input.allow ?? [], this.catalogue);
     const id = `msn_${randomBytes(8).toString("hex")}`;
     const token = signMissionToken(
       {
@@ -176,7 +197,7 @@ export class MissionStore {
         actor: input.actor,
         scope: input.scope,
         connections: connectionsFor(resolved),
-        allow: ALLOW,
+        allow: [...ALLOW, ...granted],
         // Field by field, and the id stays behind on the record: the token is
         // the one artefact the agent holds in full (`MissionDegradation`).
         degraded: (resolution?.degraded ?? []).map((d) => ({
@@ -188,7 +209,13 @@ export class MissionStore {
     );
     const claims = verifyMissionToken(token, { key: this.signingKey });
     const record: MissionRecord = {
-      ...input,
+      purpose: input.purpose,
+      actor: input.actor,
+      scope: input.scope,
+      ttlSeconds: input.ttlSeconds,
+      // As granted — checked and deduplicated — and only when something was:
+      // the record is the operator's read of what this mission may write.
+      ...(granted.length === 0 ? {} : { allow: granted }),
       id,
       jti: claims.jti,
       createdAt: claims.iat,

@@ -15,11 +15,23 @@ import type { MissionClaims } from "./token";
  */
 
 /**
- * What an operation does to the world. Only `read` exists in M7; the rest are
- * named now so a write cannot arrive later by widening `read`. A mission's
- * `allow` claim covers an operation when it lists its effect.
+ * What an operation does to the world. `read` and `append` exist (M7, M8);
+ * the rest are named now so a write cannot arrive later by widening one of
+ * them. How a mission's `allow` claim covers an effect is `operationAllowed`.
  */
 export type OperationEffect = "read" | "append" | "mutate" | "destroy" | "egress";
+
+const WRITE_EFFECTS: ReadonlySet<string> = new Set<OperationEffect>([
+  "append",
+  "mutate",
+  "destroy",
+  "egress",
+]);
+
+/** A catalog action that changes the vendor's world, as opposed to `read`/`search`. */
+export function isWriteEffect(action: string): boolean {
+  return WRITE_EFFECTS.has(action);
+}
 
 /**
  * What an operation needs from the mission to run at all, in the terms the
@@ -85,6 +97,61 @@ export function scopeSatisfies(
 }
 
 /**
+ * THE GRANT RULE (M8). `allow` lists VERBS for the raw read path — `read`,
+ * `search` — and operation NAMES for writes. A read operation runs under
+ * `read`; a write runs only under its own exact name. No verb grants a write:
+ * a token saying `append` grants exactly what one that does not says, so the
+ * only way to a write is an operator naming the one operation they meant.
+ */
+export function operationAllowed(claims: MissionClaims, op: Operation): boolean {
+  return op.effect === "read"
+    ? claims.allow.includes("read")
+    : claims.allow.includes(op.name);
+}
+
+/**
+ * The pipeline's own check, on ONE request's catalog verdict. A read/search
+ * action is covered by the verb, as always. A write action is covered only
+ * when the request is the inner call of an operation OF THAT EFFECT that the
+ * mission grants by name — never on its own, whatever the claim says, and
+ * never under an operation whose effect is weaker than the route it reached.
+ */
+export function actionCovered(
+  claims: MissionClaims,
+  action: string,
+  via: Operation | undefined,
+): boolean {
+  if (!isWriteEffect(action)) return claims.allow.includes(action);
+  if (via?.effect !== action) return false;
+  return operationAllowed(claims, via);
+}
+
+/**
+ * What a mint may add to `allow`: catalogued writes, by exact name, once each.
+ * A name the catalogue does not hold fails here — loudly, naming it — rather
+ * than minting a grant that matches nothing. A read's name is refused too:
+ * reads are granted by the verb, and a second spelling of the same grant is
+ * one more thing an operator can get wrong.
+ */
+export function grantableOperations(
+  names: readonly string[],
+  catalogue: readonly Operation[],
+): readonly string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    const op = catalogue.find((entry) => entry.name === name);
+    if (op === undefined) throw new Error(`unknown operation: ${name}`);
+    if (op.effect === "read") {
+      throw new Error(
+        `operation ${name} is a read — reads are granted by the read verb, not by name`,
+      );
+    }
+    if (!out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/**
  * The operations THIS mission may run, from the claims alone: connector in
  * the mission, effect covered by `allow`. Anything else is absent rather than
  * marked unavailable — a listing that named an operation on a degraded system
@@ -96,9 +163,7 @@ export function operationsFor(
 ): OperationListing[] {
   return catalogue
     .filter(
-      (op) =>
-        claims.connections.includes(op.connector) &&
-        claims.allow.includes(op.effect),
+      (op) => claims.connections.includes(op.connector) && operationAllowed(claims, op),
     )
     .map((op) => ({ name: op.name, effect: op.effect }));
 }

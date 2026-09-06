@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { Operation, OperationStep } from "./operation";
 import type { ResolvedScope } from "./resolved-scope";
 import { MissionStore, type CreateMission } from "./missions";
 import { verifyMissionToken } from "./token";
@@ -163,6 +164,60 @@ describe("mission store — create", () => {
     const store = new MissionStore(path, KEY);
     const { token } = store.create(INPUT, RESOLVED);
     expect(readFileSync(path, "utf8")).not.toContain(token);
+  });
+});
+
+/**
+ * THE M8 GRANT. `allow` keeps its two verbs for the raw read path and gains
+ * operation NAMES for writes. The default mint is unchanged; a name is added
+ * only when the caller asks, only when the catalogue this store was built with
+ * knows it, and the record says so — a write that is not on the grant's own
+ * description did not get granted.
+ */
+describe("mission store — name-level grants", () => {
+  const WRITE: Operation = {
+    name: "github.issue.comment.create",
+    connector: "github",
+    effect: "append",
+    needs: "github.repo",
+    plan: (): readonly OperationStep[] => [],
+  };
+
+  it("grants read and search, and nothing else, by default", () => {
+    const store = new MissionStore(statePath(), KEY, [WRITE]);
+    const { token, record } = store.create(INPUT, RESOLVED);
+    expect(verifyMissionToken(token, { key: KEY }).allow).toEqual(["read", "search"]);
+    expect(record.allow).toBeUndefined();
+  });
+
+  it("adds a catalogued write by name, on the token and on the record", () => {
+    const store = new MissionStore(statePath(), KEY, [WRITE]);
+    const { token, record } = store.create(
+      { ...INPUT, allow: ["github.issue.comment.create"] },
+      RESOLVED,
+    );
+    expect(verifyMissionToken(token, { key: KEY }).allow).toEqual([
+      "read",
+      "search",
+      "github.issue.comment.create",
+    ]);
+    expect(record.allow).toEqual(["github.issue.comment.create"]);
+  });
+
+  it("refuses a name the catalogue does not know, and mints nothing", () => {
+    const store = new MissionStore(statePath(), KEY, [WRITE]);
+    expect(() =>
+      store.create({ ...INPUT, allow: ["github.issue.comment.craete"] }, RESOLVED),
+    ).toThrow("unknown operation: github.issue.comment.craete");
+    expect(store.active()).toHaveLength(0);
+  });
+
+  it("refuses every name on a store built without a catalogue", () => {
+    const store = new MissionStore(statePath(), KEY);
+    expect(() =>
+      store.create({ ...INPUT, allow: ["github.issue.comment.create"] }, RESOLVED),
+    ).toThrow(/unknown operation/);
+    expect(store.active()).toHaveLength(0);
   });
 });
 
