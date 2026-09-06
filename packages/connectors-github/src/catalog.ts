@@ -1,4 +1,4 @@
-import type { CatalogDecision } from "@missura/core";
+import type { CatalogDecision, ViaOperation } from "@missura/core";
 
 /**
  * One allowlisted GitHub REST route. `pattern` matches the pathname against
@@ -7,44 +7,78 @@ import type { CatalogDecision } from "@missura/core";
  * mirrors the matched shape, dot-joined, e.g. `repos.issues.list`.
  */
 interface Route {
-  readonly method: "GET";
+  readonly method: "GET" | "POST";
   readonly segments: readonly string[];
   readonly operation: string;
+  readonly action: "read" | "append";
 }
 
 const PARAM = ":param";
 const REST = ":rest*";
 
+/** The raw catalog: what an agent's own request may reach. Reads, and only reads. */
 const ROUTES: readonly Route[] = [
-  { method: "GET", segments: ["repos", PARAM, PARAM], operation: "repos.get" },
-  { method: "GET", segments: ["repos", PARAM, PARAM, "issues"], operation: "repos.issues.list" },
+  { method: "GET", segments: ["repos", PARAM, PARAM], operation: "repos.get", action: "read" },
+  {
+    method: "GET",
+    segments: ["repos", PARAM, PARAM, "issues"],
+    operation: "repos.issues.list",
+    action: "read",
+  },
   {
     method: "GET",
     segments: ["repos", PARAM, PARAM, "issues", PARAM],
     operation: "repos.issues.get",
+    action: "read",
   },
   {
     method: "GET",
     segments: ["repos", PARAM, PARAM, "issues", PARAM, "comments"],
     operation: "repos.issues.comments.list",
+    action: "read",
   },
-  { method: "GET", segments: ["repos", PARAM, PARAM, "pulls"], operation: "repos.pulls.list" },
+  {
+    method: "GET",
+    segments: ["repos", PARAM, PARAM, "pulls"],
+    operation: "repos.pulls.list",
+    action: "read",
+  },
   {
     method: "GET",
     segments: ["repos", PARAM, PARAM, "pulls", PARAM],
     operation: "repos.pulls.get",
+    action: "read",
   },
   {
     method: "GET",
     segments: ["repos", PARAM, PARAM, "contents"],
     operation: "repos.contents.get",
+    action: "read",
   },
   {
     method: "GET",
     segments: ["repos", PARAM, PARAM, "contents", REST],
     operation: "repos.contents.get",
+    action: "read",
   },
-  { method: "GET", segments: ["search", "issues"], operation: "search.issues" },
+  { method: "GET", segments: ["search", "issues"], operation: "search.issues", action: "read" },
+];
+
+/**
+ * THE WRITE ROUTES (M8), reachable ONLY as the inner call of an operation.
+ * The executor is the one caller that sets `via`, in-process; the listener
+ * never does, so a raw request — whatever it sends — is decided against
+ * `ROUTES` alone and a POST stays refused exactly as it always was. One route
+ * per write operation: the write an operation plans is the only write that
+ * exists, and nothing here widens with the method.
+ */
+const WRITE_ROUTES: readonly Route[] = [
+  {
+    method: "POST",
+    segments: ["repos", PARAM, PARAM, "issues", PARAM, "comments"],
+    operation: "repos.issues.comments.create",
+    action: "append",
+  },
 ];
 
 /** Dummy base so `URL` can strip query strings and normalize the path safely. */
@@ -71,25 +105,35 @@ function deny(reason: string): CatalogDecision {
 }
 
 /**
- * Decide whether a raw GitHub REST request may reach the vendor. Deny by
- * default: only `GET` requests matching an allowlisted route shape pass, and
- * every denial names the exact method/path that was refused.
+ * Decide whether a GitHub REST request may reach the vendor. Deny by default:
+ * only requests matching an allowlisted route shape pass, and every denial
+ * names the exact method/path that was refused. Off the wire that is `GET`
+ * and nothing else; under an operation (`via`), the one write it plans too.
  */
-export function decideGithub(method: string, path: string): CatalogDecision {
-  if (method !== "GET") {
-    return deny(`method ${method} is not allowed — the M1 catalog is read-only (GET only)`);
+export function decideGithub(
+  method: string,
+  path: string,
+  via?: ViaOperation,
+): CatalogDecision {
+  const routes = via === undefined ? ROUTES : [...ROUTES, ...WRITE_ROUTES];
+  if (!routes.some((route) => route.method === method)) {
+    return deny(
+      `method ${method} is not allowed — the raw catalog is read-only (GET only); writes run only as operations`,
+    );
   }
 
   const segments = pathSegments(path);
-  const route = ROUTES.find((candidate) => matches(candidate, segments));
+  const route = routes.find(
+    (candidate) => candidate.method === method && matches(candidate, segments),
+  );
   if (route === undefined) {
-    return deny(`path /${segments.join("/")} is not in the GitHub read catalog`);
+    return deny(`${method} /${segments.join("/")} is not in the GitHub catalog`);
   }
 
   return {
     decision: "allow",
     operation: route.operation,
-    action: "read",
-    reason: `read request matching allowlisted route: ${route.operation}`,
+    action: route.action,
+    reason: `${route.action} request matching allowlisted route: ${route.operation}`,
   };
 }

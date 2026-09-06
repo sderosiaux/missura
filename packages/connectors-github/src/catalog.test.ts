@@ -97,3 +97,50 @@ describe("github rest catalog", () => {
     expect(d.reason).toContain("DELETE");
   });
 });
+
+/**
+ * THE WRITE ROUTE (M8) exists only for an inner call of an operation — the
+ * `via` the executor sets in-process. Off the wire there is no `via`, so the
+ * raw catalog stays what it was: GET only, and a POST is refused with the same
+ * verdict it always got. Nothing an agent puts in a request can produce one.
+ */
+describe("github rest catalog — the write route, inner calls only", () => {
+  const VIA = { operation: "github.issue.comment.create" };
+  const COMMENTS = "/repos/octocat/hello-world/issues/42/comments";
+
+  it("allows POST issue comments under an operation, as an append", () => {
+    const d = decideGithub("POST", COMMENTS, VIA);
+    expect(d).toEqual({
+      decision: "allow",
+      operation: "repos.issues.comments.create",
+      action: "append",
+      reason: "append request matching allowlisted route: repos.issues.comments.create",
+    });
+  });
+
+  it("refuses the same POST with no operation behind it — the raw path never writes", () => {
+    const raw = decideGithub("POST", COMMENTS);
+    expect(raw.decision).toBe("deny");
+    expect(raw.reason).toContain("POST");
+    expect(raw).toEqual(decideGithub("POST", "/repos/octocat/hello-world/issues"));
+  });
+
+  it("opens no other write under an operation: one route, one method", () => {
+    for (const [method, path] of [
+      ["POST", "/repos/octocat/hello-world/issues"],
+      ["POST", "/repos/octocat/hello-world/issues/42"],
+      ["POST", "/repos/octocat/hello-world/pulls/7/comments"],
+      ["PATCH", COMMENTS],
+      ["DELETE", "/repos/octocat/hello-world/issues/comments/1"],
+      ["PUT", COMMENTS],
+    ] as const) {
+      expect(decideGithub(method, path, VIA).decision).toBe("deny");
+    }
+  });
+
+  it("decides a GET under an operation exactly as it does off the wire", () => {
+    const path = "/repos/octocat/hello-world/issues?state=open";
+    expect(decideGithub("GET", path, VIA)).toEqual(decideGithub("GET", path));
+    expect(decideGithub("GET", "/user", VIA)).toEqual(decideGithub("GET", "/user"));
+  });
+});

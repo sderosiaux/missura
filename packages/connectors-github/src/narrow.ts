@@ -1,4 +1,4 @@
-import type { GithubRepoScope } from "@missura/core";
+import type { GithubRepoScope, ViaOperation } from "@missura/core";
 import { decideGithub } from "./catalog";
 import { canonicalize, isVendorName, type CanonicalRequest } from "./narrow-path";
 import { narrowPathScoped } from "./narrow-contents";
@@ -28,17 +28,35 @@ function entriesFor(
 }
 
 /**
- * Allows the canonical target — after showing it to the catalog again.
+ * The request behind the path: its method, and the operation it serves when
+ * it is an inner call. Defaulted to a raw GET — the shape every read has —
+ * so a caller that says nothing gets the read-only catalog, never the wider one.
+ */
+export interface GithubRequestOrigin {
+  method: string;
+  via?: ViaOperation;
+}
+
+const RAW_GET: GithubRequestOrigin = { method: "GET" };
+
+/**
+ * Allows the canonical target — after showing it to the catalog again, with
+ * the request's OWN method and origin.
  *
  * Collapsing `..` is ours, not GitHub's: the vendor would have read
  * `/repos/o/r/contents/..%2f..%2fcollaborators` as a filename, we read it as a
  * different route. Since we forward what we decided on, that route has never
- * faced the catalog, and an uncataloged endpoint must fail closed.
+ * faced the catalog, and an uncataloged endpoint must fail closed. The method
+ * travels with it because the forwarded request keeps it: a POST whose path
+ * collapsed onto a GET-only route would otherwise be forwarded as a POST to a
+ * route no catalog ever allowed a POST on.
  */
-function allowCanonical(canonical: CanonicalRequest): GithubNarrowResult {
+function allowCanonical(
+  canonical: CanonicalRequest,
+  origin: GithubRequestOrigin,
+): GithubNarrowResult {
   const target = `${canonical.path}${canonical.search}`;
-  // The method is GET by construction: NARROW runs behind a catalog ALLOW.
-  if (decideGithub("GET", target).decision === "deny") {
+  if (decideGithub(origin.method, target, origin.via).decision === "deny") {
     return deny(NOT_IN_CATALOG_SCOPE);
   }
   return { decision: "allow", path: target };
@@ -56,6 +74,7 @@ function allowCanonical(canonical: CanonicalRequest): GithubNarrowResult {
 function narrowRepoPath(
   canonical: CanonicalRequest,
   githubRepos: readonly GithubRepoScope[],
+  origin: GithubRequestOrigin,
 ): GithubNarrowResult {
   const owner = canonical.segments[1];
   const repo = canonical.segments[2];
@@ -65,9 +84,9 @@ function narrowRepoPath(
   const entries = entriesFor(owner, repo, githubRepos);
   if (entries.length === 0) return deny(REPO_NOT_IN_MISSION);
   if (entries.some((entry) => entry.pathPrefix === undefined)) {
-    return allowCanonical(canonical);
+    return allowCanonical(canonical, origin);
   }
-  return narrowPathScoped(canonical, entries, () => allowCanonical(canonical));
+  return narrowPathScoped(canonical, entries, () => allowCanonical(canonical, origin));
 }
 
 /**
@@ -80,24 +99,32 @@ function narrowRepoPath(
  * that same canonical request is what travels. Deciding on one spelling and
  * forwarding another is how a mission for one repo becomes a credentialed call
  * to a different one.
+ *
+ * A write (M8) is the same decision on the same path: the repository check is
+ * the one check a write gets, and it happens here, before anything leaves.
  */
 export function narrowGithub(
   path: string,
   scope: { githubRepos: readonly GithubRepoScope[] },
+  origin: GithubRequestOrigin = RAW_GET,
 ): GithubNarrowResult {
-  return withScopeSize(decide(path, scope.githubRepos), scope.githubRepos.length);
+  return withScopeSize(
+    decide(path, scope.githubRepos, origin),
+    scope.githubRepos.length,
+  );
 }
 
 function decide(
   path: string,
   githubRepos: readonly GithubRepoScope[],
+  origin: GithubRequestOrigin,
 ): GithubNarrowResult {
   const canonical = canonicalize(path);
   if (canonical === undefined) return deny(UNDECODABLE_PATH, "missura_invalid_target");
   const [first, second] = canonical.segments;
 
   if (first === "repos" && second !== undefined) {
-    return narrowRepoPath(canonical, githubRepos);
+    return narrowRepoPath(canonical, githubRepos, origin);
   }
   if (first === "search" && second === "issues") {
     return narrowSearchIssues(canonical, githubRepos);

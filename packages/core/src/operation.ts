@@ -45,6 +45,20 @@ export type OperationNeed =
   | "github.repo"
   | "zendesk.organization";
 
+/**
+ * A parameter a plan cannot build a vendor request from. The executor answers
+ * it as `missura_invalid_parameters`, naming the parameter and the shape it
+ * takes — the agent's own input, never a value and never a target.
+ */
+export class OperationParameterError extends Error {
+  readonly parameter: string;
+  constructor(parameter: string, shape: string) {
+    super(`parameter \`${parameter}\` ${shape}`);
+    this.name = "OperationParameterError";
+    this.parameter = parameter;
+  }
+}
+
 /** One inner vendor request, exactly as an agent would have sent it. */
 export interface OperationStep {
   method: string;

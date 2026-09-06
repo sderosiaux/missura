@@ -12,3 +12,23 @@ export interface CatalogDecision {
   action: string;
   reason: string;
 }
+
+/**
+ * The operation an inner call serves (M7/M8). It exists ONLY on requests the
+ * operation executor builds in-process and hands to the pipeline itself: the
+ * listener reads method, path, headers and body off the wire and nothing
+ * else, so no request from outside can carry one, whatever headers it sends.
+ * A route that exists only under it is therefore unreachable from the wire
+ * by construction — which is how the write routes are gated.
+ */
+export interface ViaOperation {
+  operation: string;
+}
+
+/** What a catalog and a NARROW decide on: the request, and where it came from. */
+export interface CatalogRequest {
+  method: string;
+  path: string;
+  body: string;
+  via?: ViaOperation;
+}
