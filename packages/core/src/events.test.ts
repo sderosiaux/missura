@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { appendEvent, formatEventLine, type DecisionEvent } from "./events";
+import { LOG_GENESIS } from "./events-chain";
 
 function tmpDir(): string {
   return mkdtempSync(join(tmpdir(), "missura-events-"));
@@ -29,7 +30,8 @@ describe("decision events", () => {
       .trimEnd()
       .split("\n");
     expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0] ?? "")).toEqual(EVENT);
+    // Plus the chain link the writer adds (`events-chain.ts`).
+    expect(JSON.parse(lines[0] ?? "")).toEqual({ ...EVENT, prev: LOG_GENESIS });
   });
 
   it("appends successive events to the same day file", () => {
@@ -77,7 +79,7 @@ describe("decision events", () => {
     expect(raw).not.toContain("body");
     expect(raw).not.toContain("supersecret");
     expect(raw).not.toContain("lin_api_secret");
-    expect(JSON.parse(raw.trimEnd())).toEqual(EVENT);
+    expect(JSON.parse(raw.trimEnd())).toEqual({ ...EVENT, prev: LOG_GENESIS });
   });
 
   it("serializes exactly the whitelisted key set", () => {
@@ -92,6 +94,7 @@ describe("decision events", () => {
       "latencyMs",
       "missionId",
       "operation",
+      "prev",
       "provider",
       "reason",
       "ts",

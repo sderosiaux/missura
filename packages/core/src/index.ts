@@ -7,6 +7,7 @@ export * from "./entity-graph-store";
 export * from "./entity-key";
 export * from "./entity-resolve";
 export * from "./events";
+export * from "./events-chain";
 export * from "./feasibility";
 export * from "./feasibility-text";
 export * from "./filter-plan";

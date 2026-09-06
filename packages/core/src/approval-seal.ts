@@ -20,6 +20,9 @@ export function sealRequest(
   key: Buffer,
   request: ApprovalRequest,
 ): Pick<ApprovalRecord, "requestHash" | "sealed"> {
+  // Hashed and sealed: the parameters and the plan. The connector and the
+  // effect ride on the record in the clear — they name the operation, not
+  // its content, and the decision log needs them after the purge.
   const text = canonicalApprovalRequest(request);
   if (Buffer.byteLength(text, "utf8") > MAX_APPROVAL_BYTES) {
     throw new ApprovalRefusedError(

@@ -6,6 +6,7 @@ import {
   loadOrCreateKey,
   openEntityGraph,
   verifyMissionToken,
+  type DecisionEvent,
   type VaultData,
 } from "@missura/core";
 import {
@@ -128,13 +129,16 @@ export async function runCommand(
   // The operator plane mints against the catalogue THIS proxy serves: a
   // name-grant for an operation with no listener here is refused at mint.
   const store = openStore(paths, operationCatalogue({ zendesk: zendesk !== undefined }));
+  // ONE decision log for the three planes: every line is chained onto the
+  // last one written, whoever wrote it (`events-chain.ts`).
+  const emit = (ev: DecisionEvent): void => {
+    appendEvent(paths.eventsDir, ev);
+    io.stdout(formatEventLine(ev));
+  };
   const servers = await createServers({
     signingKey,
     isRevoked: (jti: string): boolean => store.isRevoked(jti),
-    emit: (ev): void => {
-      appendEvent(paths.eventsDir, ev);
-      io.stdout(formatEventLine(ev));
-    },
+    emit,
     linear: {
       vendorAuthHeader: credential(vault, "linear"),
       narrow: linearNarrow(resolve),
@@ -158,6 +162,7 @@ export async function runCommand(
     operator = await startOperatorServer(
       {
         store,
+        emit,
         resolve,
         // The gap report, over the graph the mint resolves against and the
         // connections this very boot has (M9).

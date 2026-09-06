@@ -55,6 +55,8 @@ export function newApproval(
     id: `apr_${randomBytes(8).toString("hex")}`,
     missionId,
     operation: request.operation,
+    connector: request.connector,
+    effect: request.effect,
     requestedAt: Math.floor(now / 1000),
     ...sealRequest(key, request),
   };

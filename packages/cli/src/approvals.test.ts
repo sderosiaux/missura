@@ -1,4 +1,12 @@
-import { approvalState, type ApprovalRecord, type ApprovalRequest } from "@missura/core";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  approvalState,
+  LOG_GENESIS,
+  verifyLog,
+  type ApprovalRecord,
+  type ApprovalRequest,
+} from "@missura/core";
 import { operationCatalogue } from "@missura/proxy";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupHomes, initedHarness, type Harness } from "./harness.fixtures";
@@ -16,6 +24,8 @@ import { resolveHome } from "./paths";
 
 const REQUEST = {
   operation: "github.issue.comment.delete",
+  connector: "github" as const,
+  effect: "destroy" as const,
   params: { repo: "acme-corp/product", comment: 9001 },
   planned: [
     { method: "DELETE", path: "/repos/acme-corp/product/issues/comments/9001", body: "" },
@@ -27,6 +37,8 @@ const REPLY_TEXT =
   "Hi Dana, we have refunded the March invoice in full; it lands within 5 business days. Sorry again.";
 const REPLY = {
   operation: "zendesk.ticket.reply",
+  connector: "zendesk" as const,
+  effect: "egress" as const,
   params: { ticket: 35, body: REPLY_TEXT },
   planned: [
     {
@@ -149,6 +161,30 @@ describe("missura approve / deny", () => {
     expect(record?.consumedAt).toBeUndefined();
   });
 
+  /**
+   * M4: the decision is a line in the decision log — the same log the proxy
+   * writes, chained onto its last line — not only a field on the record.
+   */
+  it("approve writes the decision into the decision log, chained", async () => {
+    const h = await initedHarness();
+    const { id, missionId } = pending(h);
+    await run(["approve", id, "--actor", "ops@acme.example"], h.io);
+
+    const dir = resolveHome(h.io.env).eventsDir;
+    const [file] = readdirSync(dir);
+    const line = readFileSync(join(dir, file ?? ""), "utf8").trimEnd();
+    expect(JSON.parse(line)).toMatchObject({
+      decision: "approved",
+      actor: "ops@acme.example",
+      approvalId: id,
+      missionId,
+      operation: "missura.approval",
+      prev: LOG_GENESIS,
+    });
+    expect(line).not.toContain("acme-corp/product");
+    expect(verifyLog(dir)).toEqual({ ok: true, events: 1, files: 1 });
+  });
+
   it("deny records the same way, and the actor defaults to the shell user", async () => {
     const h = await initedHarness({ USER: "sam" });
     const { id } = pending(h);
@@ -178,5 +214,33 @@ describe("missura approve / deny", () => {
     const twice = await run(["approve", id], h.io);
     expect(twice.code).toBe(1);
     expect(h.err[0] ?? "").toContain("already denied");
+  });
+});
+
+describe("missura verify-log", () => {
+  it("reports an intact chain, and the first break of a tampered one", async () => {
+    const h = await initedHarness();
+    const { id } = pending(h);
+    await run(["approve", id], h.io);
+    const second = pending(h, REPLY);
+    await run(["deny", second.id], h.io);
+    h.out.length = 0;
+
+    const intact = await run(["verify-log"], h.io);
+    expect(intact.code).toBe(0);
+    expect(h.out.join("\n")).toMatch(/intact.*2 events/);
+
+    const dir = resolveHome(h.io.env).eventsDir;
+    const [file] = readdirSync(dir);
+    const path = join(dir, file ?? "");
+    const lines = readFileSync(path, "utf8").trimEnd().split("\n");
+    lines[0] = (lines[0] ?? "").replace('"approved"', '"denied"');
+    writeFileSync(path, `${lines.join("\n")}\n`);
+    h.out.length = 0;
+    h.err.length = 0;
+
+    const broken = await run(["verify-log"], h.io);
+    expect(broken.code).toBe(1);
+    expect(h.err.join("\n")).toContain(`${file ?? ""}:2`);
   });
 });

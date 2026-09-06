@@ -15,6 +15,8 @@ afterEach(closeAll);
 
 const REQUEST = {
   operation: "github.issue.comment.delete",
+  connector: "github" as const,
+  effect: "destroy" as const,
   params: { repo: "acme-corp/product", comment: 9001 },
   planned: [
     { method: "DELETE", path: "/repos/acme-corp/product/issues/comments/9001", body: "" },
@@ -74,6 +76,31 @@ describe("operator API — POST /v1/approvals/<id>", () => {
     // Nothing consumed it: the record still awaits the agent's own request.
     expect(record?.consumedAt).toBeUndefined();
     expect((await list(op.base)).approvals).toEqual([]);
+  });
+
+  /**
+   * PoC E (M4): the human's decision left no line in the decision log — it
+   * knew `pending` and `allow`, never who approved, when. Deciding on the
+   * operator plane now emits into the same log as the data plane.
+   */
+  it("writes the decision into the decision log: who, what, when, on which approval", async () => {
+    const op = await boot();
+    const { id, missionId } = await pending(op);
+    const before = op.events.length;
+    await post(op.base, `/v1/approvals/${id}`, JSON.stringify({ decision: "approved", actor: "ops@acme.io" }));
+
+    expect(op.events.length).toBe(before + 1);
+    expect(op.events.at(-1)).toMatchObject({
+      provider: "github",
+      operation: "missura.approval",
+      action: "destroy",
+      decision: "approved",
+      actor: "ops@acme.io",
+      approvalId: id,
+      missionId,
+      viaOperation: REQUEST.operation,
+    });
+    expect(JSON.stringify(op.events.at(-1))).not.toContain("acme-corp/product");
   });
 
   it("records a denial the same way", async () => {

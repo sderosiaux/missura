@@ -76,7 +76,7 @@ export function openApproval(gate: Gated): ResponseShape {
   try {
     approval = deps.operations.approvals.requestApproval(
       claims.id,
-      { operation: op.name, params, planned: steps },
+      { operation: op.name, connector: op.connector, effect: op.effect, params, planned: steps },
       ctx.startedAt,
     );
   } catch (err) {
@@ -128,10 +128,14 @@ export function spendApproval(gate: Gated, id: string): { id: string } | { refus
   }
   // THIS operation, THESE parameters, THIS plan — matched by the hash the
   // record keeps (M3): the data plane never opens the sealed request.
-  if (
-    approval.operation !== op.name ||
-    approval.requestHash !== hashApprovalRequest({ operation: op.name, params, planned: steps })
-  ) {
+  const asked = {
+    operation: op.name,
+    connector: op.connector,
+    effect: op.effect,
+    params,
+    planned: steps,
+  };
+  if (approval.operation !== op.name || approval.requestHash !== hashApprovalRequest(asked)) {
     return refuse("approval was opened for a different operation or parameters");
   }
   const state = approvalState(approval);

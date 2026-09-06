@@ -1,4 +1,10 @@
-import type { ApprovalRecord, ApprovalView, MissionStore } from "@missura/core";
+import {
+  approvalDecisionEvent,
+  type ApprovalRecord,
+  type ApprovalView,
+  type DecisionEvent,
+  type MissionStore,
+} from "@missura/core";
 import { FieldError } from "./operator-request";
 
 /**
@@ -38,18 +44,23 @@ function readActor(value: unknown): string {
 
 /**
  * The fields first, then the store: an unknown id, a decided approval and a
- * dead mission are all the id's fault, in the store's own words.
+ * dead mission are all the id's fault, in the store's own words. Recorded,
+ * then LOGGED (M4): the decision is a line of the decision log, and a log
+ * that cannot be written fails the decision — never the other way round.
  */
 export function decideApproval(
-  store: MissionStore,
+  deps: { store: MissionStore; emit(ev: DecisionEvent): void },
   id: string,
   body: Record<string, unknown>,
 ): { approval: ApprovalRecord } {
   const decision = readDecision(body.decision);
   const actor = readActor(body.actor);
+  let approval: ApprovalRecord;
   try {
-    return { approval: store.decideApproval(id, decision, actor) };
+    approval = deps.store.decideApproval(id, decision, actor);
   } catch (err) {
     throw new FieldError("id", err instanceof Error ? err.message : "approval cannot be decided");
   }
+  deps.emit(approvalDecisionEvent(approval, Date.now()));
+  return { approval };
 }

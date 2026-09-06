@@ -41,6 +41,8 @@ const RESOLVED: ResolvedScope = { githubRepos: [{ repo: "acme-corp/product" }] }
 
 const REQUEST = {
   operation: "github.issue.comment.delete",
+  connector: "github" as const,
+  effect: "destroy" as const,
   params: { repo: "acme-corp/product", comment: 9001 },
   planned: [
     { method: "DELETE", path: "/repos/acme-corp/product/issues/comments/9001", body: "" },
@@ -99,6 +101,8 @@ describe("mission store — requesting an approval", () => {
 describe("mission store — one pending approval per target, few per mission", () => {
   const REPLY = {
     operation: "zendesk.ticket.reply",
+    connector: "zendesk" as const,
+    effect: "egress" as const,
     params: { ticket: 35, body: "first wording" },
     planned: [{ method: "PUT", path: "/api/v2/tickets/35", body: '{"a":1}' }],
   };
@@ -261,6 +265,8 @@ describe("mergeApprovals — the further-along record wins", () => {
     missionId: "msn_1",
     requestedAt: 1,
     operation: REQUEST.operation,
+    connector: "github",
+    effect: "destroy",
     requestHash: hashApprovalRequest(REQUEST),
   };
   const approved: ApprovalRecord = {

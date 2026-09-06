@@ -10,6 +10,7 @@ import {
   type ScopeResolution,
 } from "./entity-resolve";
 import { appendEvent, type DecisionEvent } from "./events";
+import { LOG_GENESIS } from "./events-chain";
 import { MissionStore } from "./missions";
 import { scopeProvenance } from "./scope-provenance";
 
@@ -102,6 +103,7 @@ describe("decision events carry the provenance", () => {
     );
     expect(line).toEqual({
       ...EVENT,
+      prev: LOG_GENESIS,
       scopeVia: "entity",
       scopeEntity: "customer:adeo",
       scopeLinks: provenance.links,
@@ -140,9 +142,10 @@ describe("decision events carry the provenance", () => {
     const dir = tmpDir();
     appendEvent(dir, EVENT);
     const file = readdirSync(dir)[0] ?? "";
-    expect(JSON.parse(readFileSync(join(dir, file), "utf8").trimEnd())).toEqual(
-      EVENT,
-    );
+    expect(JSON.parse(readFileSync(join(dir, file), "utf8").trimEnd())).toEqual({
+      ...EVENT,
+      prev: LOG_GENESIS,
+    });
   });
 });
 

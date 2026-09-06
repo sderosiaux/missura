@@ -129,6 +129,8 @@ describe("a destroy waits for a human — github.issue.comment.delete through th
     // An approval opened for another operation, same parameters.
     const foreign = rig.store.requestApproval(rig.claims.id, {
       operation: "zendesk.ticket.reply",
+      connector: "zendesk",
+      effect: "egress",
       params: DELETE_PARAMS,
       planned: [{ method: "DELETE", path: COMMENT_PATH, body: "" }],
     });

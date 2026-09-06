@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { OperationStep } from "./operation";
+import type { LinkSystem } from "./entity-graph";
+import type { OperationEffect, OperationStep } from "./operation";
 import { isSealedText, type SealedText } from "./seal";
 
 /**
@@ -31,6 +32,9 @@ export type ApprovalState = "pending" | ApprovalDecision | "consumed";
 /** What the agent asked for, and the exact inner call(s) that would go. */
 export interface ApprovalRequest {
   operation: string;
+  /** The operation's connector and effect, so the decision log can name what was approved. */
+  connector: LinkSystem;
+  effect: OperationEffect;
   params: Readonly<Record<string, unknown>>;
   planned: readonly OperationStep[];
 }
@@ -39,6 +43,8 @@ export interface ApprovalRecord {
   id: string;
   missionId: string;
   operation: string;
+  connector: LinkSystem;
+  effect: OperationEffect;
   /** Epoch seconds, like the mission's own stamps. */
   requestedAt: number;
   /**
@@ -173,6 +179,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isLinkSystem(value: unknown): value is LinkSystem {
+  return value === "linear" || value === "github" || value === "zendesk";
+}
+
+function isEffect(value: unknown): value is OperationEffect {
+  return (
+    value === "read" ||
+    value === "append" ||
+    value === "mutate" ||
+    value === "destroy" ||
+    value === "egress"
+  );
+}
+
 function isDecision(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -192,6 +212,8 @@ export function parseApprovals(value: unknown): ApprovalRecord[] {
       typeof entry.id !== "string" ||
       typeof entry.missionId !== "string" ||
       typeof entry.operation !== "string" ||
+      !isLinkSystem(entry.connector) ||
+      !isEffect(entry.effect) ||
       typeof entry.requestedAt !== "number" ||
       typeof entry.requestHash !== "string" ||
       (entry.sealed !== undefined && !isSealedText(entry.sealed)) ||

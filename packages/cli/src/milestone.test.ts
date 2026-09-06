@@ -40,7 +40,9 @@ import {
   proof,
   type Call,
 } from "./milestone.fixtures";
+import { verifyLog } from "@missura/core";
 import { run } from "./index";
+import { resolveHome } from "./paths";
 
 /**
  * The proofs, one describe per milestone, on one rig (`milestone.fixtures`).
@@ -285,6 +287,16 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
         [p.ids.second, "denied", "ops@acme.example", false],
         [p.ids.zendesk, undefined, undefined, false],
       ]);
+      // And the log: the two human decisions are lines of it (M4), and the
+      // whole of it — proxy lines and `missura approve` lines interleaved,
+      // two writers on one file — is one intact chain.
+      expect(events(h)).toContainEqual(
+        expect.objectContaining({ decision: "approved", actor: "ops@acme.example", approvalId: p.ids.first }),
+      );
+      expect(events(h)).toContainEqual(
+        expect.objectContaining({ decision: "denied", actor: "ops@acme.example", approvalId: p.ids.second }),
+      );
+      expect(verifyLog(resolveHome(h.io.env).eventsDir)).toMatchObject({ ok: true, files: 1 });
       expect(p.mission.operations).toContainEqual({ name: M10_DESTROY, effect: "destroy" });
       expect(p.mission.operations).toContainEqual({ name: M10_EGRESS, effect: "egress" });
     } finally {

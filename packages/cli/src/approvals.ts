@@ -1,4 +1,10 @@
-import type { ApprovalDecision, ApprovalView } from "@missura/core";
+import {
+  appendEvent,
+  approvalDecisionEvent,
+  verifyLog,
+  type ApprovalDecision,
+  type ApprovalView,
+} from "@missura/core";
 import type { CliIo } from "./io";
 import { formatTtl, openStore } from "./missions";
 import { resolveHome } from "./paths";
@@ -15,9 +21,10 @@ import { resolveHome } from "./paths";
  * one whole. This is the operator's terminal: unlike everything an agent is
  * answered, nothing here is redacted.
  *
- * Deciding writes a name and a time; nothing in this process can run the
- * call, and that is the point of the design — the run is the agent's, on
- * the data plane, under its own token.
+ * Deciding writes a name and a time — on the record, and as a line of the
+ * decision log the proxy writes, chained onto its last line (M4). Nothing
+ * in this process can run the call, and that is the point of the design —
+ * the run is the agent's, on the data plane, under its own token.
  */
 
 const HEADERS = ["ID", "MISSION", "OPERATION", "CALL", "BODY", "AGE"];
@@ -119,7 +126,27 @@ export function decideCommand(
       `missura ${decision === "approved" ? "approve" : "deny"} needs an approval id (see: missura approvals)`,
     );
   }
-  const record = openStore(resolveHome(io.env)).decideApproval(id.trim(), decision, actor);
+  const paths = resolveHome(io.env);
+  const record = openStore(paths).decideApproval(id.trim(), decision, actor);
+  appendEvent(paths.eventsDir, approvalDecisionEvent(record, Date.now()));
   io.stdout(`${decision} ${record.id} (by ${actor})`);
   return 0;
+}
+
+/**
+ * `missura verify-log`: walks the whole decision log and reports the first
+ * break of its hash chain — file and line — or that it is intact, and how
+ * long it is. Exit 1 on a break: a log that does not verify is a finding.
+ */
+export function verifyLogCommand(io: CliIo): number {
+  const dir = resolveHome(io.env).eventsDir;
+  const verdict = verifyLog(dir);
+  if (verdict.ok) {
+    io.stdout(
+      `chain intact: ${String(verdict.events)} events across ${String(verdict.files)} files in ${dir}`,
+    );
+    return 0;
+  }
+  io.stderr(`chain broken at ${verdict.file}:${String(verdict.line)}: ${verdict.reason}`);
+  return 1;
 }

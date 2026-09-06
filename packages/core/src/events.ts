@@ -1,7 +1,9 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import type { ApprovalRecord } from "./approvals";
 import type { LinkSystem } from "./entity-graph";
 import type { LinkUse, ScopeDegradation } from "./entity-resolve";
+import { chainHead } from "./events-chain";
 import { redactDegradation, redactLinkUse } from "./scope-provenance";
 
 /**
@@ -14,8 +16,10 @@ export type Provider = LinkSystem;
 /**
  * `pending` is the third verdict (M10): the request was proven and refused
  * nothing, and it still ran nothing — an approval is waiting on a human.
+ * `approved` and `denied` are the human's own lines (M4), written from the
+ * operator plane into this same log.
  */
-export type Decision = "allow" | "deny" | "pending";
+export type Decision = "allow" | "deny" | "pending" | "approved" | "denied";
 
 export interface DecisionEvent {
   ts: string;
@@ -56,6 +60,12 @@ export interface DecisionEvent {
   scopeVia?: "entity" | "native";
   /** The entity the scope was widened through, when there was one. */
   scopeEntity?: string;
+  /**
+   * The chain link (M4): sha256 of the previous line of the log, set by the
+   * writer and by nothing else — a caller's value is dropped with the rest
+   * of the non-whitelisted fields.
+   */
+  prev?: string;
   /** The confirmed links the scope was built from — a wrong mapping's trail. */
   scopeLinks?: readonly LinkUse[];
   /**
@@ -119,11 +129,47 @@ function dayOf(ts: string): string {
   return iso.slice(0, 10);
 }
 
-/** Appends one redacted JSONL record to `<dir>/<YYYY-MM-DD>.jsonl`. */
+/**
+ * Appends one redacted JSONL record, chained onto the log's last line
+ * (`events-chain.ts`). The day file is a partition of one sequence, not an
+ * index: an event whose own day is behind the log's latest file is filed
+ * into the latest file, after the line it names as previous.
+ */
 export function appendEvent(dir: string, ev: DecisionEvent): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const line = `${JSON.stringify(redact(ev))}\n`;
-  appendFileSync(join(dir, `${dayOf(ev.ts)}.jsonl`), line, { mode: 0o600 });
+  const { prev, latest } = chainHead(dir);
+  const day = `${dayOf(ev.ts)}.jsonl`;
+  const file = latest !== undefined && latest > day ? latest : day;
+  const line = `${JSON.stringify({ ...redact(ev), prev })}\n`;
+  appendFileSync(join(dir, file), line, { mode: 0o600 });
+}
+
+/** The route name every human decision is logged under. */
+export const APPROVAL_DECISION_OPERATION = "missura.approval";
+
+/**
+ * The human's decision as a line of this log (M4): who decided what, when,
+ * on which approval of which mission — beside the `pending` that opened it
+ * and the `allow` that ran it. No body: the record holds none in the clear
+ * and the log must not either.
+ */
+export function approvalDecisionEvent(record: ApprovalRecord, now: number): DecisionEvent {
+  if (record.decision === undefined) {
+    throw new Error(`approval ${record.id} has not been decided`);
+  }
+  return {
+    ts: new Date(now).toISOString(),
+    provider: record.connector,
+    operation: APPROVAL_DECISION_OPERATION,
+    action: record.effect,
+    decision: record.decision.decision,
+    reason: "decided by a human on the operator plane",
+    missionId: record.missionId,
+    latencyMs: 0,
+    actor: record.decision.actor,
+    viaOperation: record.operation,
+    approvalId: record.id,
+  };
 }
 
 /** Human-readable one-liner for the CLI, built only from whitelisted fields. */

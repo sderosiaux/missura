@@ -37,6 +37,8 @@ const RESOLVED: ResolvedScope = { githubRepos: [], zendeskOrganizationIds: ["420
 const REPLY_TEXT = "Hi Dana, the March invoice is refunded in full. Sorry again — Sam";
 const REPLY: ApprovalRequest = {
   operation: "zendesk.ticket.reply",
+  connector: "zendesk",
+  effect: "egress",
   params: { ticket: 35, body: REPLY_TEXT },
   planned: [
     {

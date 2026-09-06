@@ -9,6 +9,7 @@ import {
   assertGrantable,
   OperationGapError,
   OperationGrantError,
+  type DecisionEvent,
   type FeasibilityReport,
   type MissionClaims,
   type MissionRecord,
@@ -38,6 +39,12 @@ export const MAX_OPERATOR_BODY_BYTES = 64 * 1024;
 
 export interface OperatorDeps {
   store: MissionStore;
+  /**
+   * The decision log — the SAME log the data planes write (M4). A human's
+   * approve or deny is a decision like any other and lands beside the
+   * `pending` that asked for it and the `allow` that ran it.
+   */
+  emit(ev: DecisionEvent): void;
   /**
    * Turns a business scope into vendor targets through the entity graph; throws
    * on an unknown entity. It answers with the graph's account of the scope as
@@ -260,7 +267,7 @@ function route(
     }
     const approvalId = approvalIdOf(path);
     if (method === "POST" && approvalId !== undefined) {
-      return { status: 200, payload: decideApproval(deps.store, approvalId, parseJson(raw)) };
+      return { status: 200, payload: decideApproval(deps, approvalId, parseJson(raw)) };
     }
     return { status: 404, payload: { error: { code: "missura_not_found" } } };
   } catch (err) {

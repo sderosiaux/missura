@@ -11,6 +11,7 @@ import {
   parseEntityGraph,
   resolveMissionScope,
   verifyMissionToken,
+  type DecisionEvent,
   type FeasibilityReport,
   type LinkSystem,
   type MissionClaims,
@@ -92,6 +93,8 @@ export interface TokenBody {
 export interface Operator {
   base: string;
   store: MissionStore;
+  /** What the operator plane wrote to the decision log. */
+  events: DecisionEvent[];
 }
 
 const servers: Server[] = [];
@@ -105,8 +108,12 @@ export async function boot(): Promise<Operator> {
     { signing: SIGNING_KEY, seal: SEAL_KEY },
     operationCatalogue({ zendesk: false }),
   );
+  const events: DecisionEvent[] = [];
   const deps: OperatorDeps = {
     store,
+    emit: (ev): void => {
+      events.push(ev);
+    },
     resolve: (scope: MissionScope): MissionResolution =>
       resolveMissionScope(GRAPH, scope),
     feasibility: (entity: string, allow: readonly string[]): FeasibilityReport =>
@@ -124,7 +131,7 @@ export async function boot(): Promise<Operator> {
   const server = await startOperatorServer(deps, 0);
   servers.push(server);
   const { port } = server.address() as AddressInfo;
-  return { base: `http://127.0.0.1:${String(port)}`, store };
+  return { base: `http://127.0.0.1:${String(port)}`, store, events };
 }
 
 export async function closeAll(): Promise<void> {

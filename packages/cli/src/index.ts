@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import type { ProxyServers } from "@missura/proxy";
-import { approvalsCommand, decideCommand } from "./approvals";
+import { approvalsCommand, decideCommand, verifyLogCommand } from "./approvals";
 import { entityCommand, type EntityOptions } from "./entity";
 import { execCommand, type ExecOptions } from "./exec";
 import { initCommand } from "./init";
@@ -81,6 +81,8 @@ const USAGE = [
   "                                   runs here: the agent re-requests the operation",
   "                                   with the id, and it runs under its own token,",
   "                                   once, through the same pipeline as everything",
+  "  missura verify-log               walk the decision log's hash chain and report",
+  "                                   the first break, or that it is intact",
   "  missura token --dev [--ttl 30m]  unscoped dev token (deprecated, use exec)",
   "",
   "MISSURA_HOME overrides ~/.missura for every file.",
@@ -205,6 +207,8 @@ async function dispatch(
       return { code: decideCommand(io, "approved", positionals[1], actorOf(values, io)) };
     case "deny":
       return { code: decideCommand(io, "denied", positionals[1], actorOf(values, io)) };
+    case "verify-log":
+      return { code: verifyLogCommand(io) };
     case "entity": {
       const options: EntityOptions = { json: values.json === true, actor: actorOf(values, io) };
       const entities = text(values, "entities");

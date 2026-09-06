@@ -101,6 +101,8 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
     // targets, the executor does, and it must do so again at execution.
     const { id } = rig.store.requestApproval(rig.claims.id, {
       operation: REPLY_OP,
+      connector: "zendesk",
+      effect: "egress",
       params: { ...REPLY_PARAMS, ticket: 77 },
       planned: [
         {
