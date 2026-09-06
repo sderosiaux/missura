@@ -5,6 +5,8 @@ export * from "./entity-graph-store";
 export * from "./entity-key";
 export * from "./entity-resolve";
 export * from "./events";
+export * from "./feasibility";
+export * from "./feasibility-text";
 export * from "./filter-plan";
 export * from "./github-scope";
 export * from "./introspection";

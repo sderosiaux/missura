@@ -91,6 +91,13 @@ export interface Operation {
 export type OperationListing = Pick<Operation, "name" | "effect">;
 
 /**
+ * The two claims the grant rule reads. Narrower than `MissionClaims` so the
+ * same rule answers for a mission that does not exist yet — the feasibility
+ * report asks "what would a mission on this entity run" before any is minted.
+ */
+export type Grant = Pick<MissionClaims, "connections" | "allow">;
+
+/**
  * Whether the resolved scope holds what the need names. Absent and empty read
  * the same — nothing — because "no target" must never mean "every target".
  */
@@ -117,7 +124,7 @@ export function scopeSatisfies(
  * a token saying `append` grants exactly what one that does not says, so the
  * only way to a write is an operator naming the one operation they meant.
  */
-export function operationAllowed(claims: MissionClaims, op: Operation): boolean {
+export function operationAllowed(claims: Grant, op: OperationListing): boolean {
   return op.effect === "read"
     ? claims.allow.includes("read")
     : claims.allow.includes(op.name);
@@ -180,7 +187,7 @@ export function grantableOperations(
  * would name the system, which is the introspection answer's job, by reason.
  */
 export function operationsFor(
-  claims: MissionClaims,
+  claims: Grant,
   catalogue: readonly Operation[],
 ): OperationListing[] {
   return catalogue
