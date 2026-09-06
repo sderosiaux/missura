@@ -4,8 +4,8 @@
  *
  * Three directions, and the third is the one that keeps the graph honest:
  *
- *   1. FORWARD  — an entity key to its confirmed links. Today's `resolveScope`,
- *      restricted to `confirmed`.
+ *   1. FORWARD  — an entity key to the links a human signed off, and only
+ *      those.
  *   2. REVERSE  — a native system id to the entity holding a CONFIRMED link to
  *      it, and from there to that entity's other confirmed links. This is what
  *      an event-driven agent needs: a Zendesk webhook hands you an
@@ -36,7 +36,7 @@
  * become an unscoped one. A malformed graph threw earlier still, at load.
  */
 
-import type { ResolvedScope } from "./entities";
+import type { ResolvedScope } from "./resolved-scope";
 import { assertEntityKey } from "./entity-key";
 import {
   LINK_SYSTEMS,

@@ -8,9 +8,9 @@ import {
 import type {
   MissionClaims,
   MissionRecord,
+  MissionResolution,
   MissionScope,
   MissionStore,
-  ResolvedScope,
 } from "@missura/core";
 import {
   FieldError,
@@ -27,8 +27,13 @@ export const MAX_OPERATOR_BODY_BYTES = 64 * 1024;
 
 export interface OperatorDeps {
   store: MissionStore;
-  /** Turns a business scope into vendor targets; throws on an unknown entity. */
-  resolve(scope: MissionScope): ResolvedScope;
+  /**
+   * Turns a business scope into vendor targets through the entity graph; throws
+   * on an unknown entity. It answers with the graph's account of the scope as
+   * well as the scope, so a mission minted here records what the graph declined
+   * to use — the operator plane must not be the one path that loses it.
+   */
+  resolve(scope: MissionScope): MissionResolution;
   /** Compared against the presented bearer, never echoed anywhere. */
   operatorKey: Buffer;
   verifyToken(token: string): MissionClaims;
@@ -100,7 +105,7 @@ function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
   // Resolution runs before minting: a mission whose entity is unknown must not
   // exist at all, not exist and resolve to nothing at request time. What it
   // resolves to is also what decides the mission's connections.
-  let resolved: ResolvedScope;
+  let resolved: MissionResolution;
   try {
     resolved = deps.resolve(input.scope);
   } catch (err) {
@@ -109,8 +114,11 @@ function mint(deps: OperatorDeps, body: Record<string, unknown>): unknown {
       err instanceof Error ? err.message : "unresolvable scope",
     );
   }
-  const created: { record: MissionRecord; token: string } =
-    deps.store.create(input, resolved);
+  const created: { record: MissionRecord; token: string } = deps.store.create(
+    input,
+    resolved.scope,
+    resolved.resolution,
+  );
   return {
     mission_id: created.record.id,
     access_token: created.token,

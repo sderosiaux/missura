@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ResolvedScope } from "./entities";
+import type { ResolvedScope } from "./resolved-scope";
 import { MissionStore, type CreateMission } from "./missions";
 import { verifyMissionToken } from "./token";
 
@@ -41,7 +41,7 @@ describe("mission store — create", () => {
     expect(record.expiresAt - record.createdAt).toBe(900);
   });
 
-  it("derives both connections when the scope has a customer and repos", () => {
+  it("derives both connections when the scope has an entity and repos", () => {
     const store = new MissionStore(statePath(), KEY);
     const { token } = store.create(INPUT, RESOLVED);
     expect(verifyMissionToken(token, { key: KEY }).connections).toEqual([
@@ -50,7 +50,7 @@ describe("mission store — create", () => {
     ]);
   });
 
-  it("derives linear only when the scope resolves to a customer and no repo", () => {
+  it("derives linear only when the scope resolves to a linear id and no repo", () => {
     const store = new MissionStore(statePath(), KEY);
     const { token } = store.create(
       { ...INPUT, scope: { entity: "customer:acme" } },
@@ -61,7 +61,7 @@ describe("mission store — create", () => {
     ]);
   });
 
-  it("derives github only when the scope resolves to repos and no customer", () => {
+  it("derives github only when the scope resolves to repos and no linear id", () => {
     const store = new MissionStore(statePath(), KEY);
     const { token } = store.create(
       { ...INPUT, scope: { repos: ["acme-corp/product"] } },
@@ -72,8 +72,8 @@ describe("mission store — create", () => {
     ]);
   });
 
-  it("derives github for a customer-only scope whose entity carries repos", () => {
-    // The business scope names no repo; the entity map does. Derived from the
+  it("derives github for an entity-only scope whose entity carries repos", () => {
+    // The business scope names no repo; the graph does. Derived from the
     // scope as typed, this mission would carry `linear` alone and refuse every
     // GitHub call on the connection check.
     const store = new MissionStore(statePath(), KEY);

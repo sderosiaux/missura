@@ -6,7 +6,7 @@ import {
   writeState,
   type StateFile,
 } from "./mission-state";
-import type { ResolvedScope } from "./entities";
+import type { ResolvedScope } from "./resolved-scope";
 import type { ScopeResolution } from "./entity-resolve";
 import { scopeProvenance, type ScopeProvenance } from "./scope-provenance";
 import {
@@ -146,8 +146,8 @@ export class MissionStore {
 
   /**
    * Mints a mission. The RESOLVED scope is required, not derived here: which
-   * connections a mission carries depends on what its entity maps to, and this
-   * store does not hold the entity map. Both call sites — the CLI and the
+   * connections a mission carries depends on what its entity links to, and this
+   * store does not hold the entity graph. Both call sites — the CLI and the
    * operator API — resolve before minting anyway, because an unresolvable
    * scope must fail before a token exists.
    */
@@ -293,12 +293,12 @@ export class MissionStore {
 /**
  * A connection is granted only if the RESOLVED scope proves a target for it.
  *
- * Read off the business scope instead, a mission scoped `{customer: "acme"}`
- * whose entity maps `github.repos` would carry `linear` and not `github`:
- * every GitHub call refused on the connection check, and the entity map's
- * `github.repos` looking load-bearing while doing nothing. The mirror case is
- * a customer with no `linear.customer`, which now carries no linear connection
- * — there is no customer to narrow to, so there is nothing to grant.
+ * Read off the business scope instead, a mission scoped
+ * `{entity: "customer:acme"}` would carry whichever connections the KEY looked
+ * like it implied, which is none of them: an entity name says nothing about
+ * which systems a human has confirmed for it. The mirror case is an entity
+ * whose Linear link is only proposed — it carries no linear connection, because
+ * there is no customer id to narrow to and so nothing to grant.
  */
 export function connectionsFor(scope: ResolvedScope): string[] {
   const connections: string[] = [];

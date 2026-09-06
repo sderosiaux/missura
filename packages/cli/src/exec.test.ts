@@ -1,9 +1,13 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanupHomes, initedHarness, type Harness } from "./harness.fixtures";
+import {
+  cleanupHomes,
+  initedHarness,
+  writeEntityGraph,
+  type Harness,
+} from "./harness.fixtures";
 import { run } from "./index";
-import { resolveHome } from "./paths";
 
 /**
  * Written by the child, read by the test: the child's own view of its env.
@@ -13,20 +17,9 @@ import { resolveHome } from "./paths";
 const DUMP =
   'require("node:fs").writeFileSync(process.env.MISSURA_HOME + "/child-env.json", JSON.stringify(process.env))';
 
-const ENTITIES = {
-  "customer:acme": {
-    "linear.customer": "c_18",
-    "github.repos": ["acme-corp/product"],
-  },
-};
-
 async function inited(env: Record<string, string> = {}): Promise<Harness> {
   const h = await initedHarness(env);
-  writeFileSync(
-    resolveHome(h.io.env).entitiesPath,
-    JSON.stringify(ENTITIES),
-    "utf8",
-  );
+  writeEntityGraph(h);
   return h;
 }
 
@@ -152,6 +145,39 @@ describe("missura exec", () => {
     expect(result.code).toBe(1);
     expect(h.err.join("\n")).toContain("type:name");
   });
+
+  /**
+   * The mission runs narrow, and says so. A degraded mission that recorded
+   * nothing is the failure mode the graph exists to avoid: "this run never saw
+   * Linear" has to be answerable afterwards, from the record, by name.
+   */
+  it("records the link it declined to use, and mints without that system", async () => {
+    const h = await inited();
+
+    const result = await run(
+      execArgv(["--entity", "customer:zoetis", "--purpose", "p"], DUMP),
+      h.io,
+    );
+
+    expect(result.code).toBe(0);
+    const token = childEnv(h).MISSION_TOKEN ?? "";
+    const payload = JSON.parse(
+      Buffer.from(token.slice(4).split(".")[0] ?? "", "base64url").toString(
+        "utf8",
+      ),
+    ) as { connections: string[] };
+    expect(payload.connections).toEqual(["github"]);
+
+    const state = JSON.parse(
+      readFileSync(join(h.home, "missions.json"), "utf8"),
+    ) as { missions: { resolution?: unknown }[] };
+    expect(state.missions[0]?.resolution).toEqual({
+      via: "entity",
+      entityKey: "customer:zoetis",
+      links: [{ system: "github", id: "acme-corp/zoetis", status: "confirmed" }],
+      degraded: [{ system: "linear", reason: "link_proposed", id: "c_77" }],
+    });
+  }, 30_000);
 
   it("takes repeated --repo into the mission scope", async () => {
     const h = await inited();

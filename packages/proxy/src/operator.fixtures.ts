@@ -5,13 +5,14 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  entityGraphReader,
   MissionStore,
-  resolveScope,
+  parseEntityGraph,
+  resolveMissionScope,
   verifyMissionToken,
-  type EntityMapping,
   type MissionClaims,
+  type MissionResolution,
   type MissionScope,
-  type ResolvedScope,
 } from "@missura/core";
 import { startOperatorServer, type OperatorDeps } from "./operator";
 
@@ -25,12 +26,36 @@ export const OPERATOR_KEY = randomBytes(32);
 export const OPERATOR_HEX = OPERATOR_KEY.toString("hex");
 export const OPERATOR_BEARER = `Bearer ${OPERATOR_HEX}`;
 
-export const ENTITIES = new Map<string, EntityMapping>([
-  [
-    "customer:acme",
-    { linearCustomerId: "c_18", githubRepos: [{ repo: "acme-corp/product" }] },
-  ],
-]);
+const CONFIRMED = {
+  method: "manual",
+  status: "confirmed",
+  confirmedBy: "ops@missura.dev",
+} as const;
+
+/** The real graph shape, in memory — no file, so no operator test owns a path. */
+export const GRAPH = entityGraphReader(
+  parseEntityGraph(
+    {
+      version: 1,
+      entities: {
+        "customer:acme": {
+          displayName: "Acme",
+          domains: ["acme.example"],
+          links: [
+            { system: "linear", id: "c_18", evidence: "operator", ...CONFIRMED },
+            {
+              system: "github",
+              id: "acme-corp/product",
+              evidence: "operator",
+              ...CONFIRMED,
+            },
+          ],
+        },
+      },
+    },
+    "operator fixtures",
+  ),
+);
 
 export interface TokenBody {
   mission_id: string;
@@ -51,8 +76,8 @@ export async function boot(): Promise<Operator> {
   const store = new MissionStore(join(dir, "missions.json"), SIGNING_KEY);
   const deps: OperatorDeps = {
     store,
-    resolve: (scope: MissionScope): ResolvedScope =>
-      resolveScope(ENTITIES, scope),
+    resolve: (scope: MissionScope): MissionResolution =>
+      resolveMissionScope(GRAPH, scope),
     operatorKey: OPERATOR_KEY,
     verifyToken: (token: string): MissionClaims =>
       verifyMissionToken(token, { key: SIGNING_KEY }),

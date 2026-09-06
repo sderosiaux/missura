@@ -3,9 +3,24 @@
  * M2 proof, run by a human on a real workspace.
  *
  * Prerequisites:
- *   1. ~/.missura/entities.json maps a REAL customer of your Linear workspace
- *      and one of your repos, e.g.
- *      { "customer:acme": { "linear.customer": "<uuid>", "github.repos": ["you/your-repo"] } }
+ *   1. ~/.missura/entities.json is an entity graph linking a REAL customer of
+ *      your Linear workspace and one of your repos. Only a `confirmed` link
+ *      widens a mission, so both must say so:
+ *      {
+ *        "version": 1,
+ *        "entities": {
+ *          "customer:acme": {
+ *            "displayName": "Acme",
+ *            "domains": ["acme.example"],
+ *            "links": [
+ *              { "system": "linear", "id": "<uuid>", "evidence": "you said so",
+ *                "method": "manual", "status": "confirmed", "confirmedBy": "you" },
+ *              { "system": "github", "id": "you/your-repo", "evidence": "you said so",
+ *                "method": "manual", "status": "confirmed", "confirmedBy": "you" }
+ *            ]
+ *          }
+ *        }
+ *      }
  *   2. missura run                                     # terminal 1
  *   3. missura exec --entity customer:acme --repo you/your-repo \
  *        --purpose "m2 proof" -- pnpm demo:m2          # terminal 2

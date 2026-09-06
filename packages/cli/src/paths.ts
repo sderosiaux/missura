@@ -16,7 +16,7 @@ export interface MissuraPaths {
   operatorKeyPath: string;
   /** Missions and their revocations — descriptions of grants, never bearers. */
   missionsPath: string;
-  /** Business entity → vendor ids. The only place a mission's scope resolves. */
+  /** The entity graph: business entity → the vendor ids a human confirmed. */
   entitiesPath: string;
   eventsDir: string;
 }

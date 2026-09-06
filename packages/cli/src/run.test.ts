@@ -1,18 +1,16 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanupHomes, initedHarness, type Harness } from "./harness.fixtures";
+import {
+  cleanupHomes,
+  initedHarness,
+  writeEntityGraph,
+  type Harness,
+} from "./harness.fixtures";
 import { revokeCommand } from "./missions";
 import { resolveHome } from "./paths";
 import { runCommand, type RunningProxy } from "./run";
-
-const ENTITIES = {
-  "customer:acme": {
-    "linear.customer": "c_18",
-    "github.repos": ["acme-corp/product"],
-  },
-};
 
 interface Upstream {
   url: string;
@@ -49,11 +47,7 @@ function stubFetch(calls: Upstream[]): typeof fetch {
 }
 
 async function boot(h: Harness, calls: Upstream[]): Promise<RunningProxy> {
-  writeFileSync(
-    resolveHome(h.io.env).entitiesPath,
-    JSON.stringify(ENTITIES),
-    "utf8",
-  );
+  writeEntityGraph(h);
   return runCommand(h.io, {
     linearPort: 0,
     githubPort: 0,
@@ -155,7 +149,7 @@ describe("missura run — operator plane and NARROW wired", () => {
       expect(calls).toHaveLength(1);
       expect(calls[0]?.url).toContain("/repos/acme-corp/product");
 
-      // Linear: the entity map's customer id is injected into the document.
+      // Linear: the graph's confirmed linear id is injected into the document.
       const issues = await fetch(`${minted.origins.linear}/graphql`, {
         method: "POST",
         headers: { ...auth, "content-type": "application/json" },
@@ -217,13 +211,13 @@ describe("missura run — operator plane and NARROW wired", () => {
     }
   }, 30_000);
 
-  it("gives a customer-only mission the repos its entity carries", async () => {
+  it("gives an entity-only mission the repos the graph confirms for it", async () => {
     const h = await initedHarness();
     const calls: Upstream[] = [];
     const servers = await boot(h, calls);
 
     try {
-      // The scope names no repo; the entity map maps one to this customer. A
+      // The scope names no repo; the graph confirms one for this entity. A
       // connection derived from the business scope rather than the resolved
       // one would leave `github` off the token, 403 every GitHub call on the
       // connection check, and make `github.repos` look load-bearing while

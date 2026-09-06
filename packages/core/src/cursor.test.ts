@@ -49,8 +49,14 @@ describe("cursor store — handles stand in for vendor positions", () => {
     const inside = store.issue(MISSION, { vendorCursor: "c1", served: 41 });
 
     expect(inside).toHaveLength(boundary.length);
-    expect(inside).not.toContain("41");
     expect(inside).not.toBe(boundary);
+    // Not a function of the offset, stated as the property rather than by
+    // hunting for "41" in the handle: a random 32-hex-digit uuid contains any
+    // given two-digit string about one time in nine, so that assertion failed
+    // for the wrong reason roughly every ninth run.
+    expect(store.issue(MISSION, { vendorCursor: "c1", served: 41 })).not.toBe(
+      inside,
+    );
     expect(store.resolve(MISSION, inside)).toEqual({
       vendorCursor: "c1",
       served: 41,

@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import {
   assertEntityKey,
-  loadEntityMap,
-  resolveScope,
+  openEntityGraph,
+  resolveMissionScope,
   type MissionScope,
 } from "@missura/core";
 import { DEFAULT_GITHUB_PORT, DEFAULT_LINEAR_PORT } from "@missura/proxy";
@@ -106,8 +106,9 @@ function spawnChild(
  * revokes on the way out — including on Ctrl-C, so an interrupted agent run
  * never leaves a live grant behind.
  *
- * The mission is minted through the entity map first: an unresolvable scope
- * must fail before a token exists, not resolve to nothing at request time.
+ * The mission is minted through the entity graph first: an unresolvable scope
+ * must fail before a token exists, not resolve to nothing at request time. What
+ * the graph declined to use travels onto the record beside it.
  */
 export async function execCommand(
   io: CliIo,
@@ -115,8 +116,8 @@ export async function execCommand(
 ): Promise<number> {
   const paths = resolveHome(io.env);
   const scope = scopeOf(options);
-  const map = loadEntityMap(options.entitiesPath ?? paths.entitiesPath);
-  const resolved = resolveScope(map, scope);
+  const graph = openEntityGraph(options.entitiesPath ?? paths.entitiesPath);
+  const { scope: resolved, resolution } = resolveMissionScope(graph, scope);
 
   const store = openStore(paths);
   const { record, token } = store.create(
@@ -127,6 +128,9 @@ export async function execCommand(
       ttlSeconds: options.ttlSeconds,
     },
     resolved,
+    // The graph's own account of the scope, degradations included. Dropped
+    // here, "this run never saw Linear" would be unanswerable afterwards.
+    resolution,
   );
   const revoke = (): void => {
     try {

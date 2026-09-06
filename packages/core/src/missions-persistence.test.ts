@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ResolvedScope } from "./entities";
+import type { ResolvedScope } from "./resolved-scope";
 import {
   MissionStore,
   type CreateMission,

@@ -1,11 +1,75 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "./index";
 import type { CliIo } from "./io";
+import { resolveHome } from "./paths";
 
 export const LINEAR_KEY = "lin_api_test_key";
 export const GITHUB_TOKEN = "ghp_test_token";
+
+const CONFIRMED = {
+  method: "manual",
+  status: "confirmed",
+  confirmedBy: "ops@missura.dev",
+  confirmedAt: "2026-08-14T09:12:03.000Z",
+} as const;
+
+/**
+ * The graph the CLI tests mint against — the real file shape, not the flat map
+ * that preceded it, so a stale fixture fails at the loader rather than quietly
+ * resolving to nothing.
+ *
+ * `customer:acme` is whole: every system confirmed. `customer:zoetis` is the
+ * degraded one — its Linear link exists and nobody has signed it off, which is
+ * exactly the case a mission must survive narrower rather than refuse.
+ */
+export const ENTITY_GRAPH = {
+  version: 1,
+  entities: {
+    "customer:acme": {
+      displayName: "Acme",
+      domains: ["acme.example"],
+      links: [
+        { system: "linear", id: "c_18", evidence: "operator", ...CONFIRMED },
+        {
+          system: "github",
+          id: "acme-corp/product",
+          evidence: "operator",
+          ...CONFIRMED,
+        },
+      ],
+    },
+    "customer:zoetis": {
+      displayName: "Zoetis",
+      domains: ["zoetis.example"],
+      links: [
+        {
+          system: "linear",
+          id: "c_77",
+          evidence: "Linear customer name matches the display name",
+          method: "inferred",
+          status: "proposed",
+        },
+        {
+          system: "github",
+          id: "acme-corp/zoetis",
+          evidence: "operator",
+          ...CONFIRMED,
+        },
+      ],
+    },
+  },
+};
+
+/** Installs the graph into a harness's `MISSURA_HOME`. */
+export function writeEntityGraph(h: Harness, graph: unknown = ENTITY_GRAPH): void {
+  writeFileSync(
+    resolveHome(h.io.env).entitiesPath,
+    JSON.stringify(graph),
+    "utf8",
+  );
+}
 
 export interface Harness {
   io: CliIo;

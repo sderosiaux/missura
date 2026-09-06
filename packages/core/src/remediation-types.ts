@@ -57,7 +57,7 @@ export interface DenialInput {
   /**
    * How many targets the mission resolves to for this connector — never which.
    * The count is a property of the agent's own grant; the list is not, because
-   * it is resolved from the entity map and the token does not carry it.
+   * it is resolved from the entity graph and the token does not carry it.
    */
   scopeSize?: number | undefined;
   /** The action THIS call needed, read off the catalog verdict (the agent's own request). */

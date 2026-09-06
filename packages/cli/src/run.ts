@@ -7,8 +7,6 @@ import {
   loadOrCreateKey,
   loadVault,
   verifyMissionToken,
-  type MissionScope,
-  type ResolvedScope,
   type VaultData,
 } from "@missura/core";
 import {
@@ -19,7 +17,12 @@ import {
 } from "@missura/proxy";
 import type { CliIo } from "./io";
 import { openStore } from "./missions";
-import { githubNarrow, linearNarrow, scopeResolver } from "./narrow-wiring";
+import {
+  githubNarrow,
+  linearNarrow,
+  scopeResolver,
+  type Resolver,
+} from "./narrow-wiring";
 import { resolveHome, type MissuraPaths } from "./paths";
 
 export interface RunOptions {
@@ -62,11 +65,11 @@ function origin(server: Server): string {
  * vault once, here — they live in the proxy process only — and the operator
  * plane beside them, on its own port.
  *
- * The three share one mission store and one entity map: a mission minted on
+ * The three share one mission store and one entity graph: a mission minted on
  * 8480 is enforced by the data planes, and a revoke lands on the very next
  * request because `isRevoked` reads that same store rather than a cache.
  *
- * The entity map is read once at boot; a mission's scope is resolved per
+ * The graph is read once at boot; a mission's scope is resolved per
  * request from its own claims, so no vendor identifier ever travels in a token.
  */
 export async function runCommand(
@@ -77,7 +80,7 @@ export async function runCommand(
   const vault = openVault(paths);
   const signingKey = loadOrCreateKey(paths.signingKeyPath);
   const store = openStore(paths);
-  const resolve: (scope: MissionScope) => ResolvedScope = scopeResolver(
+  const resolve: Resolver = scopeResolver(
     options.entitiesPath ?? paths.entitiesPath,
   );
 

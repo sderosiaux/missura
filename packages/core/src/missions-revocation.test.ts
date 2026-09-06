@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { ResolvedScope } from "./entities";
+import type { ResolvedScope } from "./resolved-scope";
 import { MissionStore, type CreateMission } from "./missions";
 
 const KEY = Buffer.alloc(32, 3);

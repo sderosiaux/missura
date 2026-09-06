@@ -9,16 +9,30 @@
  *
  * SET UP FIRST — all four, or checks below will SKIP rather than pass:
  *
- *  1. ~/.missura/entities.json maps a REAL customer of YOUR Linear workspace
- *     and one of YOUR repos. The Linear value is the customer's UUID (Linear's
- *     `Customer.id`, not its name), and the customer must have at least THREE
- *     issues linked to it through customer NEEDS — that is the only link
- *     `@linear/sdk` 90 exposes, there is no `Issue.customer`:
+ *  1. ~/.missura/entities.json is an entity graph linking a REAL customer of
+ *     YOUR Linear workspace and one of YOUR repos. The Linear id is the
+ *     customer's UUID (Linear's `Customer.id`, not its name), and the customer
+ *     must have at least THREE issues linked to it through customer NEEDS —
+ *     that is the only link `@linear/sdk` 90 exposes, there is no
+ *     `Issue.customer`. Both links must be `confirmed`: nothing else widens a
+ *     mission, so a `proposed` link here makes that vendor's checks SKIP.
  *
  *        {
- *          "customer:acme": {
- *            "linear.customer": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
- *            "github.repos": ["you/your-repo"]
+ *          "version": 1,
+ *          "entities": {
+ *            "customer:acme": {
+ *              "displayName": "Acme",
+ *              "domains": ["acme.example"],
+ *              "links": [
+ *                { "system": "linear",
+ *                  "id": "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+ *                  "evidence": "you said so", "method": "manual",
+ *                  "status": "confirmed", "confirmedBy": "you" },
+ *                { "system": "github", "id": "you/your-repo",
+ *                  "evidence": "you said so", "method": "manual",
+ *                  "status": "confirmed", "confirmedBy": "you" }
+ *              ]
+ *            }
  *          }
  *        }
  *
