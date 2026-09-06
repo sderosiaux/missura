@@ -27,14 +27,39 @@ function zendesk(url: string, init: RequestInit): Promise<Response> {
 }
 
 describe("an egress waits for a human — zendesk.ticket.reply through the executor", () => {
-  it("answers 202 for a ticket in scope, and nothing reaches the vendor — not even the probe", async () => {
+  /**
+   * The ticket is proven at request time (M2): a Zendesk ticket's owner is
+   * only knowable through the ticket, so the one read the mission already
+   * holds runs BEFORE anything is written down. Zero vendor writes — not
+   * zero vendor calls.
+   */
+  it("answers 202 for a ticket in scope after proving it, and nothing is written at the vendor", async () => {
     const rig = approvalRig("zendesk", { vendor: zendesk });
     const res = await requestOp(rig, REPLY_OP, REPLY_PARAMS);
     expect(res.status).toBe(202);
-    expect(rig.connector.fetchCount()).toBe(0);
+    expect(rig.connector.calls.map((c) => [c.init.method ?? "GET", c.url])).toEqual([
+      ["GET", "https://acme.zendesk.com/api/v2/tickets/35"],
+    ]);
     expect(rig.outer.events).toEqual([
       expect.objectContaining({ action: "egress", decision: "pending", viaOperation: REPLY_OP }),
     ]);
+  });
+
+  /**
+   * PoC A, inverted: a ticket outside the mission answered `202` and left an
+   * approval behind, so the human was asked to approve a target that was not
+   * theirs — and became the ownership oracle. Now the probe refuses it at
+   * request time, not-found shaped, and no record exists.
+   */
+  it("refuses a foreign ticket at request time, not-found shaped, with no approval left behind", async () => {
+    const rig = approvalRig("zendesk", { vendor: zendesk });
+    const res = await requestOp(rig, REPLY_OP, { ...REPLY_PARAMS, ticket: 77 });
+    expect(res.status).toBe(404);
+    expect(JSON.parse(bodyText(res.body))).toMatchObject({ error: "RecordNotFound" });
+    expect(bodyText(res.body)).not.toContain("77");
+    expect(rig.connector.calls.map((c) => c.init.method ?? "GET")).toEqual(["GET"]);
+    expect(rig.store.pendingApprovals()).toEqual([]);
+    expect(rig.outer.events.at(-1)).toMatchObject({ decision: "deny", viaOperation: REPLY_OP });
   });
 
   it("once approved, proves the ticket then writes the public comment, credentialed by the vault", async () => {
@@ -66,9 +91,21 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
     expect(rig.outer.events.at(-1)).toMatchObject({ decision: "allow", approvalId: id });
   });
 
-  it("never writes on a ticket outside the mission: the probe refuses it, not-found shaped", async () => {
+  it("never writes on a ticket outside the mission, even under an approval written for it", async () => {
     const rig = approvalRig("zendesk", { vendor: zendesk });
-    const id = await opened(rig, REPLY_OP, { ...REPLY_PARAMS, ticket: 77 });
+    // Written down behind the executor's back — the store does not prove
+    // targets, the executor does, and it must do so again at execution.
+    const { id } = rig.store.requestApproval(rig.claims.id, {
+      operation: REPLY_OP,
+      params: { ...REPLY_PARAMS, ticket: 77 },
+      planned: [
+        {
+          method: "PUT",
+          path: "/api/v2/tickets/77",
+          body: '{"ticket":{"comment":{"body":"Thanks — we are on it.","public":true}}}',
+        },
+      ],
+    });
     rig.store.decideApproval(id, "approved", "ops@acme.io");
 
     const res = await requestOp(rig, REPLY_OP, { ...REPLY_PARAMS, ticket: 77, approval: id });
@@ -96,7 +133,15 @@ describe("an egress waits for a human — zendesk.ticket.reply through the execu
   });
 
   it("caps the pending approvals one mission may hold", async () => {
-    const rig = approvalRig("zendesk", { vendor: zendesk });
+    // Every ticket is the mission's here: the cap, not the proof, is under test.
+    const ours = (url: string): Promise<Response> =>
+      Promise.resolve(
+        new Response(ticket(/\/tickets\/(\d+)/.exec(url)?.[1] ?? "0", 4200), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    const rig = approvalRig("zendesk", { vendor: ours });
     for (let ticket = 1; ticket <= MAX_PENDING_APPROVALS_PER_MISSION; ticket += 1) {
       await opened(rig, REPLY_OP, { ...REPLY_PARAMS, ticket });
     }

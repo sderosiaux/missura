@@ -220,6 +220,8 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
       );
 
       // 2. Approved: exactly one DELETE at the double, the vault's credential.
+      // The whole run costs the double two calls: this DELETE, and the GET
+      // the egress proves its ticket with (point 4) — never a PUT.
       expect(JSON.parse(p.approved.body)).toEqual({ id: p.ids.first, state: "approved" });
       expect(p.run.status).toBe(200);
       expect(calls).toEqual([
@@ -228,6 +230,12 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
           url: expect.stringMatching(new RegExp(`${M10_COMMENT_PATH}$`)) as string,
           body: "",
           authorization: `Bearer ${GITHUB_TOKEN}`,
+        },
+        {
+          method: "GET",
+          url: "https://acme.zendesk.com/api/v2/tickets/35",
+          body: "",
+          authorization: expect.stringMatching(/^Basic /) as string,
         },
       ]);
       expect(calls[0]?.authorization).not.toMatch(/msr_/);
@@ -251,24 +259,25 @@ describe("M10 — destroy and egress run once, after a human, under the agent's 
       );
       expect(p.again.status).toBe(403);
       expect(p.again.body).toContain("missura_approval_refused");
-      expect(calls).toHaveLength(1);
+      expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
 
       // 3. Denied: polled as such, and the re-request runs nothing.
       expect(p.second.status).toBe(202);
       expect(JSON.parse(p.denied.body)).toEqual({ id: p.ids.second, state: "denied" });
       expect(p.runDenied.status).toBe(403);
       expect(p.runDenied.body).toContain("missura_approval_refused");
-      expect(calls).toHaveLength(1);
+      expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
 
-      // 4. The egress, in scope and granted, still waits — nothing reached the double.
+      // 4. The egress, in scope and granted, still waits — only its proof
+      // reached the double (M2): one GET of the ticket, no PUT.
       expect(p.zendesk.status).toBe(202);
       expect(JSON.parse(p.zendesk.body)).toEqual({ id: p.ids.zendesk, state: "pending" });
-      expect(calls).toHaveLength(1);
+      expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
 
       // 7. The raw DELETE is not in the catalog.
       expect(p.raw.status).toBe(403);
       expect(p.raw.body).toContain("missura_operation_not_in_catalog");
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2);
 
       // The operator's record: who decided what, and the one consumption.
       expect(approvals(h).map((a) => [a.id, a.decision?.decision, a.decision?.actor, a.consumedAt !== undefined])).toEqual([

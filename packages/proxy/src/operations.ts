@@ -27,6 +27,7 @@ import {
   spendApproval,
   splitApproval,
 } from "./operations-approval";
+import { proveStep } from "./operations-proof";
 import type { PipelineDeps } from "./pipeline";
 import { wasReduced } from "./reduced";
 import { JSON_HEADERS, type IncomingShape, type ResponseShape } from "./transport";
@@ -309,12 +310,21 @@ export async function executeOperation(
   if (gated) {
     // Proven BEFORE anything is written down or spent, on the target's own
     // pipeline: a foreign target is the refusal a foreign read gets, with
-    // zero vendor calls and no approval left behind.
+    // zero vendor WRITES and no approval left behind. The proof may cost a
+    // read (M2): a Zendesk ticket's owner is only knowable through the
+    // ticket, and that read is one the mission already holds — the
+    // alternative is asking the human to approve a target that is not
+    // theirs, which makes them the ownership oracle.
     for (const step of plan.steps) {
       const proof = admit(target, { ...step, via }, claims, opCtx, ctx.startedAt);
       if ("refusal" in proof) {
         emitEvent(deps, opCtx, claimsDenial(verdict, STEP_REFUSED_REASON));
         return proof.refusal;
+      }
+      const unproven = await proveStep(target, innerRequest(req, step), proof, opCtx, claims);
+      if (unproven !== undefined) {
+        emitEvent(deps, opCtx, claimsDenial(verdict, STEP_REFUSED_REASON));
+        return unproven;
       }
     }
     const gate = { deps, ctx: opCtx, claims, op, params, steps: plan.steps, verdict };

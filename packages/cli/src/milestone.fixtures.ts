@@ -87,8 +87,13 @@ export function stubFetch(calls: Call[]): typeof fetch {
     });
     // A deleted comment answers as GitHub does — nothing, 204.
     if (method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+    // A ticket by id answers as Zendesk does — the ticket, owned by acme's
+    // organization: it is what the egress proves itself against (M2).
+    const ticket = /\/api\/v2\/tickets\/(\d+)$/.exec(url)?.[1];
     // A posted comment answers as GitHub does — the created object.
-    const body = url.includes("/api/v2/")
+    const body = ticket !== undefined
+      ? JSON.stringify({ ticket: { id: Number(ticket), organization_id: 4200 } })
+      : url.includes("/api/v2/")
       ? '{"tickets":[]}'
       : method === "POST" && url.includes("/comments")
         ? '{"id":9001}'
