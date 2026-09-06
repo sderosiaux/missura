@@ -4,19 +4,21 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { decideGithub } from "@missura/connectors-github";
-import { decideLinear } from "@missura/connectors-linear";
-import { decideZendesk } from "@missura/connectors-zendesk";
+import { decideGithub, GITHUB_OPERATIONS } from "@missura/connectors-github";
+import { decideLinear, LINEAR_OPERATIONS } from "@missura/connectors-linear";
+import { decideZendesk, ZENDESK_OPERATIONS } from "@missura/connectors-zendesk";
 import {
   createCursorStore,
   createParentProofStore,
   verifyMissionToken,
   type CatalogDecision,
   type DecisionEvent,
+  type Operation,
   type Provider,
 } from "@missura/core";
 import { denialResponse } from "./deny";
 import type { NarrowFn } from "./narrow";
+import type { OperationsDeps } from "./operations";
 import {
   handle,
   type IncomingShape,
@@ -210,12 +212,26 @@ function listener(
   };
 }
 
+/**
+ * The operations this proxy can run: each connector's own, for the connectors
+ * that have a listener. A Zendesk operation on a proxy without a Zendesk
+ * connection is not "unavailable to this mission" — it does not exist here.
+ */
+function catalogueFor(config: ProxyConfig): readonly Operation[] {
+  return [
+    ...LINEAR_OPERATIONS,
+    ...GITHUB_OPERATIONS,
+    ...(config.zendesk === undefined ? [] : ZENDESK_OPERATIONS),
+  ];
+}
+
 function deps(
   provider: Provider,
   config: ProxyConfig,
   connection: ConnectionConfig,
   decide: PipelineDeps["decide"],
   defaultUpstream: string,
+  operations: OperationsDeps,
 ): PipelineDeps {
   return {
     provider,
@@ -237,7 +253,7 @@ function deps(
     emit: (ev): void => {
       config.emit(ev);
     },
-    operations: { catalogue: [] },
+    operations,
   };
 }
 
@@ -269,6 +285,7 @@ function shutdown(server: Server): Promise<void> {
 export async function createServers(
   config: ProxyConfig,
 ): Promise<ProxyServers> {
+  const operations: OperationsDeps = { catalogue: catalogueFor(config) };
   const linear = createServer(
     listener(
       deps(
@@ -277,6 +294,7 @@ export async function createServers(
         config.linear,
         (req): CatalogDecision => decideLinear(req.method, req.path, req.body),
         DEFAULT_LINEAR_UPSTREAM,
+        operations,
       ),
     ),
   );
@@ -288,6 +306,7 @@ export async function createServers(
         config.github,
         (req): CatalogDecision => decideGithub(req.method, req.path),
         DEFAULT_GITHUB_UPSTREAM,
+        operations,
       ),
     ),
   );
@@ -303,6 +322,7 @@ export async function createServers(
               zendeskConfig,
               (req): CatalogDecision => decideZendesk(req.method, req.path),
               zendeskConfig.upstreamBase,
+              operations,
             ),
           ),
         );

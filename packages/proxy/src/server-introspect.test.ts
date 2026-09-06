@@ -38,6 +38,8 @@ describe("proxy server — GET /missura/mission", () => {
         entity: "customer:zoetis",
         systems: ["github"],
         degraded: [{ system: "linear", reason: "link_proposed" }],
+        // The proxy's real catalogue, cut to the mission: GitHub's read only.
+        operations: [{ name: "github.issues.for_entity", effect: "read" }],
       });
     }
     expect(live.upstream?.received).toEqual([]);
