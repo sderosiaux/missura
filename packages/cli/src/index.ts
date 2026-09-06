@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import type { ProxyServers } from "@missura/proxy";
+import { approvalsCommand, decideCommand } from "./approvals";
 import { entityCommand, type EntityOptions } from "./entity";
 import { execCommand, type ExecOptions } from "./exec";
 import { initCommand } from "./init";
@@ -49,6 +50,10 @@ const USAGE = [
   "              is refused before a mission exists; a name the entity",
   "              cannot run is refused as its gap — the cause and the",
   "              command that closes it (see: missura entity show KEY).",
+  "              A destroy (github.issue.comment.delete) or an egress",
+  "              (zendesk.ticket.reply) is granted the same way and still",
+  "              waits for you: the agent gets a 202 and an approval id,",
+  "              you approve or deny it, the agent asks again with the id.",
   "              the child runs as your user: vendor keys are removed from its",
   "              environment, but nothing stops it reading ~/.missura — run it",
   "              in a container or as another user if you need containment",
@@ -64,6 +69,13 @@ const USAGE = [
   "                                   (SYSTEM is linear, github or zendesk)",
   "  missura missions                 active missions (no token material)",
   "  missura revoke <mission_id>      revoke a mission — effective on the next request",
+  "  missura approvals [--json]       what agents are waiting on you for: the",
+  "                                   operation, the exact vendor call it would make",
+  "  missura approve <id> [--actor WHO]",
+  "  missura deny <id> [--actor WHO]  record your decision, in your name. Nothing",
+  "                                   runs here: the agent re-requests the operation",
+  "                                   with the id, and it runs under its own token,",
+  "                                   once, through the same pipeline as everything",
   "  missura token --dev [--ttl 30m]  unscoped dev token (deprecated, use exec)",
   "",
   "MISSURA_HOME overrides ~/.missura for every file.",
@@ -179,6 +191,12 @@ async function dispatch(
       return { code: missionsCommand(io) };
     case "revoke":
       return { code: revokeCommand(io, positionals[1]) };
+    case "approvals":
+      return { code: approvalsCommand(io, values.json === true) };
+    case "approve":
+      return { code: decideCommand(io, "approved", positionals[1], actorOf(values, io)) };
+    case "deny":
+      return { code: decideCommand(io, "denied", positionals[1], actorOf(values, io)) };
     case "entity": {
       const options: EntityOptions = { json: values.json === true, actor: actorOf(values, io) };
       const entities = text(values, "entities");

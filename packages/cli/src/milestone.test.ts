@@ -1,26 +1,29 @@
 import { existsSync } from "node:fs";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cleanupHomes,
   GITHUB_TOKEN,
   initedHarness,
-  ZENDESK_EMAIL,
   ZENDESK_INIT_ENV,
-  ZENDESK_TOKEN,
 } from "./harness.fixtures";
 import {
-  childM7,
-  unclocked,
-  type ProofM7,
-} from "./milestone-m7.fixtures";
-import {
-  childM8,
-  M8_BODY,
-  M8_OPERATION,
-  restUnclocked,
-  type ProofM8,
-} from "./milestone-m8.fixtures";
+  approvals,
+  childM10,
+  childM10Foreign,
+  childM10Ungranted,
+  handedOver,
+  M10_COMMENT_PATH,
+  M10_DESTROY,
+  M10_EGRESS,
+  M10_PARAMS,
+  unclockedM10,
+  type ProofM10,
+  type ProofM10Foreign,
+} from "./milestone-m10.fixtures";
+import { childM7, type ProofM7 } from "./milestone-m7.fixtures";
+import { M8_OPERATION } from "./milestone-m8.fixtures";
 import {
   feasibility,
   mint,
@@ -32,212 +35,20 @@ import {
   boot,
   events,
   exec,
+  execArgv,
   missions,
+  proof,
   type Call,
 } from "./milestone.fixtures";
 import { run } from "./index";
 
 /**
- * The proofs, one describe per milestone. M5 and M6 — the graph and the
- * agent's introspection of it — live in `milestone-m5.test.ts`, on the same
- * rig; from M7 on, the operations, the write and the gap are here.
+ * The proofs, one describe per milestone, on one rig (`milestone.fixtures`).
+ * M5/M6, M7 and M8 live in their own files beside this one; the gap (M9) and
+ * the approvals (M10) are here.
  */
 
 afterEach(cleanupHomes);
-
-/**
- * THE M7 PROOF: missura executing an operation is not missura bypassing
- * itself. The child asks for the entity's tickets by NAME, and the vendor
- * double sees the very call the raw path makes — same org-scoped route, same
- * vault credential — with the decision log naming both. A mission that lacks
- * Linear asking for the Linear operation gets the raw GraphQL refusal, byte
- * for byte, and is never told the operation exists.
- */
-describe("M7 — an operation runs through the same pipeline as a raw call", () => {
-  it("asks the vendor exactly what the raw path asks, and logs it under the operation", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const calls: Call[] = [];
-    const servers = await boot(h, calls);
-
-    try {
-      const proof = await exec<ProofM7>(h, servers, "customer:acme", childM7("4200"));
-
-      expect(proof.raw.status).toBe(200);
-      expect(proof.op.status).toBe(200);
-      expect(JSON.parse(proof.op.body)).toEqual({
-        operation: "zendesk.tickets.for_entity",
-        effect: "read",
-        results: [{ tickets: [] }],
-      });
-
-      // 1. The vendor double received the raw call and the operation's inner
-      // call as the SAME call: org-scoped route, vault credential, no token.
-      const [raw, inner] = calls;
-      expect(inner).toEqual(raw);
-      expect(inner?.url).toContain("/api/v2/organizations/4200/tickets");
-      expect(inner?.authorization).toBe(
-        `Basic ${Buffer.from(`${ZENDESK_EMAIL}/token:${ZENDESK_TOKEN}`, "utf8").toString("base64")}`,
-      );
-      expect(inner?.authorization).not.toMatch(/msr_/);
-
-      // 2. The inner call is a decision of its own, attributed to the mission
-      // and naming the operation it served — beside the route it cost.
-      const record = missions(h).at(-1);
-      const served = events(h).filter(
-        (ev) => ev.viaOperation === "zendesk.tickets.for_entity",
-      );
-      expect(served).toContainEqual(
-        expect.objectContaining({
-          provider: "zendesk",
-          operation: "organizations.tickets.list",
-          action: "read",
-          decision: "allow",
-          missionId: record?.id,
-        }),
-      );
-
-      // 4. Introspection lists the three operations this whole mission runs.
-      expect(proof.mission.operations).toEqual([
-        { name: "linear.issues.for_entity", effect: "read" },
-        { name: "github.issues.for_entity", effect: "read" },
-        { name: "zendesk.tickets.for_entity", effect: "read" },
-      ]);
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-
-  it("refuses an operation on a degraded connector with the raw call's own bytes", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const calls: Call[] = [];
-    const servers = await boot(h, calls);
-
-    try {
-      const proof = await exec<ProofM7>(h, servers, "customer:zoetis", childM7("4300"));
-
-      // 3. Status, body and the missura-relevant headers, equal. The clock is
-      // the one field two calls a moment apart may not share.
-      expect(proof.linearOp.status).toBe(403);
-      expect(proof.linearOp.status).toBe(proof.linearRaw.status);
-      expect(proof.linearOp.headers).toEqual(proof.linearRaw.headers);
-      const op = unclocked(proof.linearOp.body);
-      const raw = unclocked(proof.linearRaw.body);
-      expect(op.rest).toBe(raw.rest);
-      expect(Math.abs(op.expiresIn - raw.expiresIn)).toBeLessThanOrEqual(1);
-      expect(proof.linearOp.body).toContain("missura_connection_not_in_mission");
-      expect(calls.map((c) => c.url).some((u) => u.includes("graphql"))).toBe(false);
-
-      // 4. Two operations listed, and the Linear one is not named anywhere.
-      expect(proof.mission.operations).toHaveLength(2);
-      expect(JSON.stringify(proof.mission.operations)).not.toContain("linear");
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-});
-
-/**
- * THE M8 PROOF: the first write, and the two things that make it safe. The
- * child, under a mission that NAMES the operation, posts one comment on the
- * entity's repository — the vendor double sees one POST, vault-credentialed,
- * and the log says append/allow under the operation and the mission. Then
- * the same operation aimed at a foreign repository is refused with the bytes
- * a foreign READ gets, the agent's own POST to the vendor route is refused
- * at the catalog, and the double has seen nothing since the first call:
- * writes happen only through operations, and a write is proven before it
- * happens or it does not happen.
- */
-describe("M8 — the first write: proven before, operation-only, on the record", () => {
-  it("posts one comment on the mission's repo, refuses the rest before the vendor", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const calls: Call[] = [];
-    const servers = await boot(h, calls);
-
-    try {
-      const proof = await exec<ProofM8>(h, servers, "customer:acme", childM8(), [
-        "--allow",
-        M8_OPERATION,
-      ]);
-
-      // 1. One write, and exactly one vendor call: the comments route on the
-      // entity's repository, the vault's GitHub credential, the agent's body.
-      expect(proof.write.status).toBe(200);
-      expect(JSON.parse(proof.write.body)).toEqual({
-        operation: M8_OPERATION,
-        effect: "append",
-        results: [{ id: 9001 }],
-      });
-      expect(calls).toEqual([
-        {
-          method: "POST",
-          url: expect.stringMatching(/\/repos\/acme-corp\/product\/issues\/7\/comments$/) as string,
-          body: JSON.stringify({ body: M8_BODY }),
-          authorization: `Bearer ${GITHUB_TOKEN}`,
-        },
-      ]);
-      expect(calls[0]?.authorization).not.toMatch(/msr_/);
-      const record = missions(h).at(-1);
-      expect(events(h)).toContainEqual(
-        expect.objectContaining({
-          provider: "github",
-          operation: "repos.issues.comments.create",
-          action: "append",
-          decision: "allow",
-          viaOperation: M8_OPERATION,
-          missionId: record?.id,
-        }),
-      );
-
-      // 2. A foreign repository: the not-found a foreign read gets, byte for
-      // byte but for the clock — and the double saw nothing further.
-      expect(proof.foreign.status).toBe(404);
-      expect(proof.foreign.status).toBe(proof.foreignRead.status);
-      const foreign = restUnclocked(proof.foreign.body);
-      const read = restUnclocked(proof.foreignRead.body);
-      expect(foreign.rest).toBe(read.rest);
-      expect(Math.abs(foreign.expiresIn - read.expiresIn)).toBeLessThanOrEqual(1);
-      expect(proof.foreign.body).toContain('"message":"Not Found"');
-      expect(proof.foreign.body).toContain("missura_out_of_mission_scope");
-
-      // 3. THE RAW PATH NEVER WRITES. The agent's own POST, same token, same
-      // route the operation just used, is not in the catalog — and no vendor
-      // call happened for it. This is the assertion that makes writes
-      // operation-only.
-      expect(proof.raw.status).toBe(403);
-      expect(proof.raw.body).toContain("missura_operation_not_in_catalog");
-      expect(calls).toHaveLength(1);
-
-      // 4. Introspection lists the write, by name and effect.
-      expect(proof.mission.allow).toEqual(["read", "search", M8_OPERATION]);
-      expect(proof.mission.operations).toContainEqual({
-        name: M8_OPERATION,
-        effect: "append",
-      });
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-
-  it("refuses the write under a mission that does not name it, and never lists it", async () => {
-    const h = await initedHarness(ZENDESK_INIT_ENV);
-    const calls: Call[] = [];
-    const servers = await boot(h, calls);
-
-    try {
-      const proof = await exec<ProofM8>(h, servers, "customer:acme", childM8());
-
-      expect(proof.write.status).toBe(403);
-      expect(proof.write.body).toContain("missura_action_not_allowed");
-      expect(proof.foreign.status).toBe(403);
-      expect(proof.raw.status).toBe(403);
-      expect(calls).toEqual([]);
-      expect(proof.mission.allow).toEqual(["read", "search"]);
-      expect(JSON.stringify(proof.mission.operations)).not.toContain(M8_OPERATION);
-    } finally {
-      await servers.close();
-    }
-  }, 30_000);
-});
 
 /**
  * THE M9 PROOF: when something is not possible, the answer is the GAP — the
@@ -349,6 +160,189 @@ describe("M9 — the gap is specific and actionable, and it names the next conne
       };
       const known = new Set([...mission.systems, ...mission.degraded.map((d) => d.system)]);
       for (const system of systemsNamed(body)) expect(known.has(system), system).toBe(true);
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+});
+
+/**
+ * THE M10 PROOF: a destroy and an egress wait for a human, and nothing else
+ * changes. The child asks; the vendor double sees nothing; the operator —
+ * this test, typing `missura approve` — decides, and the record says who.
+ * The child comes back with the id and the double sees exactly one DELETE,
+ * vault-credentialed, logged under the approval; comes back again and is
+ * refused with the double unmoved. A denial runs nothing. The egress inside
+ * scope waits too. Another mission's id is the not-found an id that never
+ * existed gets. The ungranted destroy is M8's own refusal and leaves no
+ * record. The raw DELETE never reaches the catalog.
+ */
+describe("M10 — destroy and egress run once, after a human, under the agent's own token", () => {
+  const ALLOW = ["--allow", M10_DESTROY, "--allow", M10_EGRESS];
+
+  it("202 and poll, approve and run once, deny and run nothing, egress waits, raw DELETE refused", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const running = run(execArgv(servers, "customer:acme", childM10(), ALLOW), h.io);
+
+      // 2. The operator approves the first request, in their own name.
+      const first = await handedOver(h, "approval-1");
+      expect(calls).toEqual([]);
+      const approve = await run(["approve", first, "--actor", "ops@acme.example"], h.io);
+      expect(approve.code, h.err.join("\n")).toBe(0);
+      expect(calls).toEqual([]);
+
+      // 3. And denies the second.
+      const second = await handedOver(h, "approval-2");
+      const deny = await run(["deny", second, "--actor", "ops@acme.example"], h.io);
+      expect(deny.code, h.err.join("\n")).toBe(0);
+
+      expect((await running).code).toBe(0);
+      const p = proof(h) as ProofM10;
+      const record = missions(h).at(-1);
+
+      // 1. The request answers 202 with the id and its state, nothing else.
+      expect(p.first.status).toBe(202);
+      expect(JSON.parse(p.first.body)).toEqual({ id: p.ids.first, state: "pending" });
+      expect(JSON.parse(p.pending.body)).toEqual({ id: p.ids.first, state: "pending" });
+      expect(events(h)).toContainEqual(
+        expect.objectContaining({
+          operation: "missura.op",
+          action: "destroy",
+          decision: "pending",
+          viaOperation: M10_DESTROY,
+          approvalId: p.ids.first,
+          missionId: record?.id,
+        }),
+      );
+
+      // 2. Approved: exactly one DELETE at the double, the vault's credential.
+      expect(JSON.parse(p.approved.body)).toEqual({ id: p.ids.first, state: "approved" });
+      expect(p.run.status).toBe(200);
+      expect(calls).toEqual([
+        {
+          method: "DELETE",
+          url: expect.stringMatching(new RegExp(`${M10_COMMENT_PATH}$`)) as string,
+          body: "",
+          authorization: `Bearer ${GITHUB_TOKEN}`,
+        },
+      ]);
+      expect(calls[0]?.authorization).not.toMatch(/msr_/);
+      expect(events(h)).toContainEqual(
+        expect.objectContaining({
+          provider: "github",
+          operation: "repos.issues.comments.delete",
+          action: "destroy",
+          decision: "allow",
+          viaOperation: M10_DESTROY,
+          missionId: record?.id,
+        }),
+      );
+      expect(events(h)).toContainEqual(
+        expect.objectContaining({
+          operation: "missura.op",
+          decision: "allow",
+          approvalId: p.ids.first,
+          missionId: record?.id,
+        }),
+      );
+      expect(p.again.status).toBe(403);
+      expect(p.again.body).toContain("missura_approval_refused");
+      expect(calls).toHaveLength(1);
+
+      // 3. Denied: polled as such, and the re-request runs nothing.
+      expect(p.second.status).toBe(202);
+      expect(JSON.parse(p.denied.body)).toEqual({ id: p.ids.second, state: "denied" });
+      expect(p.runDenied.status).toBe(403);
+      expect(p.runDenied.body).toContain("missura_approval_refused");
+      expect(calls).toHaveLength(1);
+
+      // 4. The egress, in scope and granted, still waits — nothing reached the double.
+      expect(p.zendesk.status).toBe(202);
+      expect(JSON.parse(p.zendesk.body)).toEqual({ id: p.ids.zendesk, state: "pending" });
+      expect(calls).toHaveLength(1);
+
+      // 7. The raw DELETE is not in the catalog.
+      expect(p.raw.status).toBe(403);
+      expect(p.raw.body).toContain("missura_operation_not_in_catalog");
+      expect(calls).toHaveLength(1);
+
+      // The operator's record: who decided what, and the one consumption.
+      expect(approvals(h).map((a) => [a.id, a.decision?.decision, a.decision?.actor, a.consumedAt !== undefined])).toEqual([
+        [p.ids.first, "approved", "ops@acme.example", true],
+        [p.ids.second, "denied", "ops@acme.example", false],
+        [p.ids.zendesk, undefined, undefined, false],
+      ]);
+      expect(p.mission.operations).toContainEqual({ name: M10_DESTROY, effect: "destroy" });
+      expect(p.mission.operations).toContainEqual({ name: M10_EGRESS, effect: "egress" });
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("another mission's approval id is the not-found shape on the poll and on the re-request", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      // 5. Minted under acme on the operator plane, opened and approved there.
+      const acme = await mint(h, servers, "customer:acme", [M10_DESTROY]);
+      expect(acme.status).toBe(200);
+      const github = `http://127.0.0.1:${String((servers.github.address() as AddressInfo).port)}`;
+      const opened = await fetch(`${github}/missura/op/${M10_DESTROY}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${acme.access_token ?? ""}`, "content-type": "application/json" },
+        body: JSON.stringify(M10_PARAMS),
+      });
+      expect(opened.status).toBe(202);
+      const { id } = (await opened.json()) as { id: string };
+      expect((await run(["approve", id, "--actor", "ops@acme.example"], h.io)).code).toBe(0);
+
+      h.io.env.MISSURA_FOREIGN_APPROVAL = id;
+      const p = await exec<ProofM10Foreign>(h, servers, "customer:zoetis", childM10Foreign(), [
+        "--allow",
+        M10_DESTROY,
+      ]);
+      expect(p.polled.status).toBe(404);
+      expect(p.never.status).toBe(404);
+      expect(unclockedM10(p.polled.body)).toBe(unclockedM10(p.never.body));
+      expect(p.polled.body).toContain("missura_approval_unknown");
+      expect(p.polled.body).not.toContain(id);
+      expect(p.run.status).toBe(404);
+      expect(p.run.body).toContain("missura_approval_unknown");
+      expect(calls).toEqual([]);
+      // Still acme's, still approved, never spent.
+      expect(approvals(h).find((a) => a.id === id)).toMatchObject({
+        decision: { decision: "approved" },
+      });
+      expect(approvals(h).find((a) => a.id === id)?.consumedAt).toBeUndefined();
+    } finally {
+      await servers.close();
+    }
+  }, 30_000);
+
+  it("the same destroy without --allow is M8's refusal, and no approval is recorded", async () => {
+    const h = await initedHarness(ZENDESK_INIT_ENV);
+    const calls: Call[] = [];
+    const servers = await boot(h, calls);
+
+    try {
+      const p = await exec<{ first: { status: number; body: string } }>(
+        h,
+        servers,
+        "customer:acme",
+        childM10Ungranted(),
+      );
+      // 6. The allow denial, naming the grant that would open it.
+      expect(p.first.status).toBe(403);
+      expect(p.first.body).toContain("missura_action_not_allowed");
+      expect(p.first.body).toContain(M10_DESTROY);
+      expect(calls).toEqual([]);
+      expect(approvals(h)).toEqual([]);
     } finally {
       await servers.close();
     }

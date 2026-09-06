@@ -85,6 +85,8 @@ export function stubFetch(calls: Call[]): typeof fetch {
       body: typeof init?.body === "string" ? init.body : "",
       authorization: authorizationOf(init),
     });
+    // A deleted comment answers as GitHub does — nothing, 204.
+    if (method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
     // A posted comment answers as GitHub does — the created object.
     const body = url.includes("/api/v2/")
       ? '{"tickets":[]}'
@@ -116,10 +118,46 @@ export async function boot(h: Harness, calls: Call[]): Promise<RunningProxy> {
 }
 
 /**
- * Runs `missura exec --entity <entity> [flags] -- node -e <child>` and reads
- * its proof. `flags` is what a milestone adds to the command a human types —
- * M8's `--allow NAME`.
+ * The command a human types: `missura exec --entity <entity> [flags] -- node
+ * -e <child>`, aimed at the booted ports. `flags` is what a milestone adds
+ * — M8's `--allow NAME`.
  */
+export function execArgv(
+  servers: RunningProxy,
+  entity: string,
+  child: string,
+  flags: readonly string[] = [],
+): string[] {
+  const zendesk = servers.zendesk;
+  if (zendesk === undefined) throw new Error("no zendesk listener was booted");
+  return [
+    "exec",
+    "--entity",
+    entity,
+    ...flags,
+    "--ttl",
+    "30m",
+    "--purpose",
+    "m5 proof",
+    "--linear-port",
+    port(servers.linear),
+    "--github-port",
+    port(servers.github),
+    "--zendesk-port",
+    port(zendesk),
+    "--",
+    process.execPath,
+    "-e",
+    child,
+  ];
+}
+
+/** The child's proof, as it wrote it; the caller names the shape it expects. */
+export function proof(h: Harness): unknown {
+  return JSON.parse(readFileSync(join(h.home, "proof.json"), "utf8"));
+}
+
+/** Runs the command and reads its proof. */
 export async function exec<T>(
   h: Harness,
   servers: RunningProxy,
@@ -127,33 +165,9 @@ export async function exec<T>(
   child: string,
   flags: readonly string[] = [],
 ): Promise<T> {
-  const zendesk = servers.zendesk;
-  if (zendesk === undefined) throw new Error("no zendesk listener was booted");
-  const code = await run(
-    [
-      "exec",
-      "--entity",
-      entity,
-      ...flags,
-      "--ttl",
-      "30m",
-      "--purpose",
-      "m5 proof",
-      "--linear-port",
-      port(servers.linear),
-      "--github-port",
-      port(servers.github),
-      "--zendesk-port",
-      port(zendesk),
-      "--",
-      process.execPath,
-      "-e",
-      child,
-    ],
-    h.io,
-  );
+  const code = await run(execArgv(servers, entity, child, flags), h.io);
   expect(code.code).toBe(0);
-  return JSON.parse(readFileSync(join(h.home, "proof.json"), "utf8")) as T;
+  return proof(h) as T;
 }
 
 export interface Recorded {

@@ -56,6 +56,8 @@ function operatorBearer(h: Harness): string {
 export interface MintRefusal {
   status: number;
   error: { field: string; reason: string; gap?: Record<string, unknown> };
+  /** Present when the mint went through: the token, for a test that plays the agent. */
+  access_token?: string;
 }
 
 /** `POST /v1/token` for an entity with a name-grant, read as the refusal it may be. */

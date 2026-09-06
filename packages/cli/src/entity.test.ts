@@ -140,11 +140,18 @@ describe("missura entity show", () => {
   });
 });
 
-function graphFile(h: Harness): {
-  entities: Record<string, { links: { system: string; id: string; status: string; confirmedBy?: string; method: string }[] }>;
-} {
+interface GraphLink {
+  system: string;
+  id: string;
+  status: string;
+  confirmedBy?: string;
+  method: string;
+  evidence?: string;
+}
+
+function graphFile(h: Harness): { entities: Record<string, { links: GraphLink[] }> } {
   return JSON.parse(readFileSync(resolveHome(h.io.env).entitiesPath, "utf8")) as {
-    entities: Record<string, { links: { system: string; id: string; status: string; confirmedBy?: string; method: string }[] }>;
+    entities: Record<string, { links: GraphLink[] }>;
   };
 }
 
@@ -213,5 +220,36 @@ describe("missura entity link — the command the no_link gap names", () => {
     const result = await run(["entity", "link", "customer:initech", "github"], h.io);
     expect(result.code).toBe(1);
     expect(h.err[0] ?? "").toContain("<id>");
+  });
+
+  /**
+   * A human said no to this id once. `link` re-confirming it in passing would
+   * be the one path where an explicit decision is overridden implicitly, so
+   * it refuses, names the status, and points at the explicit command.
+   */
+  it("refuses an id whose link is rejected, naming the status and the command that overrides it", async () => {
+    const h = await inited();
+    const graph = graphFile(h);
+    graph.entities["customer:initech"]?.links.push({
+      system: "github",
+      id: "initech-inc/product",
+      status: "rejected",
+      method: "inferred",
+      evidence: "name matches",
+    });
+    writeEntityGraph(h, graph);
+    const before = readFileSync(resolveHome(h.io.env).entitiesPath, "utf8");
+
+    const result = await run(
+      ["entity", "link", "customer:initech", "github", "initech-inc/product"],
+      h.io,
+    );
+
+    expect(result.code).toBe(1);
+    expect(h.err[0] ?? "").toContain("rejected");
+    expect(h.err[0] ?? "").toContain(
+      "missura entity confirm customer:initech github initech-inc/product",
+    );
+    expect(readFileSync(resolveHome(h.io.env).entitiesPath, "utf8")).toBe(before);
   });
 });

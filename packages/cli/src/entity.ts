@@ -136,12 +136,23 @@ function confirm(io: CliIo, args: readonly string[], options: EntityOptions): nu
  * recorded `manual` and confirmed in one step. On an id the entity already
  * holds, `propose` leaves the existing link alone and the confirmation
  * applies to it — so `link` on a proposed id is `confirm`, spelled longer.
+ *
+ * Not on a REJECTED one. A human said no to that id; overriding a decision
+ * must be a decision, so `link` refuses and names the command that is one.
  */
 function link(io: CliIo, args: readonly string[], options: EntityOptions): number {
   const key = requireKey(args[0]);
   const system = requireSystem(args[1]);
   const id = requireId(system, args[2]);
   const graph = open(io, options);
+  const held = graph
+    .entity(key)
+    ?.links.find((l) => l.system === system && linkKey(system, l.id) === linkKey(system, id));
+  if (held?.status === "rejected") {
+    throw new Error(
+      `${key} ${system} ${id} is rejected — to override that explicitly: missura entity confirm ${key} ${system} ${id}`,
+    );
+  }
   graph.propose(key, { system, id, evidence: `linked by ${options.actor}`, method: "manual" });
   graph.setStatus(key, system, id, "confirmed", options.actor);
   io.stdout(`linked ${system} ${id} to ${key}, confirmed (by ${options.actor})`);
