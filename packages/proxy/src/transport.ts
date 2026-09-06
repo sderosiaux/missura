@@ -32,6 +32,11 @@ export interface ResponseShape {
  * implementation owns the negotiation — we hand back a decoded body without a
  * `content-encoding` header. `traceparent` is deliberately absent: the agent's
  * trace context must reach the vendor so one request is one trace end to end.
+ *
+ * The method-override family is dropped as defense in depth: the catalog and
+ * NARROW decided on the METHOD the request carried, and a vendor that honours
+ * `X-HTTP-Method-Override: DELETE` on a POST would run a method nothing here
+ * ever saw. Neither vendor is known to honour them; none of them travels.
  */
 const DROPPED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
   "authorization",
@@ -45,6 +50,9 @@ const DROPPED_REQUEST_HEADERS: ReadonlySet<string> = new Set([
   "transfer-encoding",
   "upgrade",
   "accept-encoding",
+  "x-http-method-override",
+  "x-method-override",
+  "x-http-method",
 ]);
 
 /**

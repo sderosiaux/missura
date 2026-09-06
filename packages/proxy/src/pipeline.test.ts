@@ -160,6 +160,32 @@ describe("pipeline — allow + forward (step 3)", () => {
     expect(Object.keys(headers)).not.toContain("connection");
   });
 
+  /**
+   * A method-override header asks the vendor to treat this request as
+   * another method. The catalog decided on the method it saw; a vendor that
+   * honoured the override would run one it never saw. Every spelling is
+   * stripped, whatever the vendor does with it.
+   */
+  it("strips method-override headers in every spelling", async () => {
+    const h = harness();
+    await handle(
+      h.deps,
+      request({
+        headers: {
+          authorization: "Bearer msr_mission",
+          "x-http-method-override": "DELETE",
+          "X-Method-Override": "PUT",
+          "x-http-method": "PATCH",
+          "user-agent": "octokit/1.0",
+        },
+      }),
+    );
+
+    const headers = h.calls[0]?.init.headers as Record<string, string>;
+    expect(Object.keys(headers)).toEqual(["user-agent", "authorization"]);
+    expect(h.calls[0]?.init.method).toBe("GET");
+  });
+
   it("returns the upstream status, content-type and body verbatim", async () => {
     const h = harness({}, async () =>
       Promise.resolve(
