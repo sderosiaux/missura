@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
   mkdirSync,
+  openSync,
   renameSync,
   statSync,
   unlinkSync,
@@ -103,6 +105,78 @@ export function fileStamp(path: string): string | undefined {
     return `${String(stats.mtimeMs)}:${String(stats.size)}`;
   } catch {
     return undefined;
+  }
+}
+
+/** How long a writer waits for the lock before failing closed. */
+export const LOCK_TIMEOUT_MS = 2_000;
+/** A lock this old belongs to a process that died holding it: broken, not honoured. */
+export const STALE_LOCK_MS = 10_000;
+const LOCK_POLL_MS = 5;
+
+export function lockPath(path: string): string {
+  return `${path}.lock`;
+}
+
+/** A synchronous pause: the store is synchronous, and a busy loop is worse. */
+function pause(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * THE WRITE LOCK (L7). `persist` reads the file, merges, and renames over
+ * it; two processes interleaving inside that window — `missura approve`
+ * reading before `missura run`'s rename and writing after — could put an
+ * "approved" back over a "consumed", and on the next restart disk wins. The
+ * forward-only merge cannot close that window on its own, so the window is
+ * held: one writer at a time, by an `O_EXCL` lock file beside the state.
+ *
+ * A lock is honoured for `STALE_LOCK_MS` at most: a process that died
+ * holding it must not wedge every operator command after it. A writer that
+ * cannot get the lock in `LOCK_TIMEOUT_MS` throws — a proxy request then
+ * fails closed (500) rather than writing blind.
+ */
+export function withStateLock<T>(path: string, timeoutMs: number, fn: () => T): T {
+  const lock = lockPath(path);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    let fd: number | undefined;
+    try {
+      fd = openSync(lock, "wx", SECRET_FILE_MODE);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      let age = 0;
+      try {
+        age = Date.now() - statSync(lock).mtimeMs;
+      } catch {
+        // Released between our open and our stat: try again at once.
+        continue;
+      }
+      if (age > STALE_LOCK_MS) {
+        try {
+          unlinkSync(lock);
+        } catch {
+          // Someone else broke it first; try again.
+        }
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`mission state file is locked by another process: ${lock}`);
+      }
+      pause(LOCK_POLL_MS);
+      continue;
+    }
+    try {
+      return fn();
+    } finally {
+      closeSync(fd);
+      try {
+        unlinkSync(lock);
+      } catch {
+        // Broken as stale by another process meanwhile: nothing to release.
+      }
+    }
   }
 }
 

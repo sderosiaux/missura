@@ -11,7 +11,9 @@ import {
 import { newApproval, pendingViews, purgeUnreadable } from "./mission-approvals";
 import {
   fileStamp,
+  LOCK_TIMEOUT_MS,
   parseState,
+  withStateLock,
   writeState,
   type StateFile,
 } from "./mission-state";
@@ -36,6 +38,11 @@ const ALLOW = ["read", "search"] as const;
 export interface MissionKeys {
   signing: Buffer;
   seal: Buffer;
+}
+
+export interface MissionStoreOptions {
+  /** How long a write waits for the state file's lock (`mission-state.ts`). */
+  lockTimeoutMs?: number;
 }
 
 /**
@@ -71,6 +78,7 @@ export class MissionStore {
    * be talked into granting it.
    */
   private readonly catalogue: readonly Operation[];
+  private readonly lockTimeoutMs: number;
   private records: MissionRecord[];
   /** The approvals hanging on those missions (M10). Merged forward-only. */
   private approvals: ApprovalRecord[] = [];
@@ -83,11 +91,13 @@ export class MissionStore {
     stateFile: string,
     keys: MissionKeys,
     catalogue: readonly Operation[] = [],
+    options: MissionStoreOptions = {},
   ) {
     this.stateFile = stateFile;
     this.signingKey = keys.signing;
     this.sealKey = keys.seal;
     this.catalogue = catalogue;
+    this.lockTimeoutMs = options.lockTimeoutMs ?? LOCK_TIMEOUT_MS;
     this.records = [];
     if (existsSync(stateFile)) {
       // Stamped before the read: a write landing in between costs one redundant
@@ -406,19 +416,25 @@ export class MissionStore {
   }
 
   /**
-   * Writes the whole file, so it first merges what the file holds.
+   * Writes the whole file, so it first merges what the file holds — under
+   * the state file's lock (L7).
    *
    * `refresh` is a read optimisation guarded by a stat, not a lock: the file
    * can have moved since — inside the same millisecond, at the same size, or
    * between this store's last read and this write. Overwriting blind is how
    * two processes minting at once drop one of the two missions, whose token
-   * then keeps verifying with nothing left to revoke.
-   *
-   * This narrows that window to the merge-and-rename itself; it does not close
-   * it. Two writers can still interleave inside it — a real fix is a lock file
-   * or a single writer, and neither is M2.
+   * then keeps verifying with nothing left to revoke, and how a stale
+   * "approved" lands over a "consumed". So the read-merge-rename is one
+   * critical section: the file is re-read here, after the lock, and what it
+   * holds is merged forward-only before it is replaced.
    */
   private persist(now: number = Date.now()): void {
+    withStateLock(this.stateFile, this.lockTimeoutMs, () => {
+      this.persistLocked(now);
+    });
+  }
+
+  private persistLocked(now: number): void {
     const disk = this.onDisk();
     for (const entry of disk.revoked) this.noteRevoked(entry.jti, entry.revokedAt);
     for (const record of disk.missions) {
