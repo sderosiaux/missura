@@ -206,6 +206,19 @@ function planned(
   }
 }
 
+/**
+ * Whether the token tells the agent this system exists at all: as a
+ * connection it holds, or as a degraded one it was told the reason for.
+ * The introspection answer lists exactly these, and a refusal may not say
+ * more than it does.
+ */
+function tokenNames(claims: MissionClaims, connector: Provider): boolean {
+  return (
+    claims.connections.includes(connector) ||
+    claims.degraded.some((entry) => entry.system === connector)
+  );
+}
+
 const UNKNOWN_VERDICT: CatalogDecision = {
   decision: "deny",
   operation: OPERATION_ROUTE_NAME,
@@ -230,10 +243,19 @@ export async function executeOperation(
   const mission = { claims, now: ctx.startedAt };
   const op = deps.operations.catalogue.find((entry) => entry.name === name);
   const target = op === undefined ? undefined : deps.operations.pipelineFor(op.connector);
-  // Unknown name, or a connector with no pipeline here: the same refusal, in
-  // the listener's own envelope, naming neither the name nor a connector.
-  if (op === undefined || target === undefined) {
-    emitEvent(deps, opCtx, UNKNOWN_VERDICT);
+  // Unknown name, a connector with no pipeline here, or a connector the
+  // TOKEN NEVER NAMES (L6): the same refusal, in the listener's own
+  // envelope, naming neither the name nor a connector. A mission that holds
+  // `[linear, github]` and asks for a Zendesk operation must not learn from
+  // the answer that Zendesk is connected — so the answer is the one a name
+  // outside the catalogue gets. The log still says which it was.
+  const unknown = op === undefined || target === undefined;
+  if (unknown || !tokenNames(claims, op.connector)) {
+    emitEvent(
+      deps,
+      opCtx,
+      unknown ? UNKNOWN_VERDICT : claimsDenial(verdictFor(op), CONNECTION_REASON),
+    );
     return denialResponse(deps.provider, {
       status: 404,
       code: "missura_operation_unknown",
@@ -244,7 +266,9 @@ export async function executeOperation(
   const verdict = verdictFor(op);
   // The two claims checks the raw call would hit first, decided here with the
   // same builders and in the connector's own envelope — so the refusal an
-  // operation gets is the refusal the raw call gets, byte for byte.
+  // operation gets is the refusal the raw call gets, byte for byte. The
+  // connection check is reached only for a connector the token names as
+  // degraded: the agent knows the system exists, and the cause (M9) is its.
   if (!claims.connections.includes(op.connector)) {
     emitEvent(deps, opCtx, claimsDenial(verdict, CONNECTION_REASON));
     return denialResponse(op.connector, connectionDenial(mission));

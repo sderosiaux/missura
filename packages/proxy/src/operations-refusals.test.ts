@@ -1,5 +1,6 @@
-import type { ResolvedScope } from "@missura/core";
+import type { MissionClaims, ResolvedScope } from "@missura/core";
 import { describe, expect, it } from "vitest";
+import { approvalRig } from "./approvals.fixtures";
 import { LINEAR_QUERY, post, rig } from "./operations.fixtures";
 import { handle } from "./pipeline";
 import {
@@ -34,8 +35,17 @@ describe("the executor refuses like the pipeline refuses", () => {
     });
   });
 
-  it("refuses a connector outside the mission exactly as the raw call is refused", async () => {
-    const narrow = { ...CLAIMS, connections: ["github"] };
+  /**
+   * A connector the TOKEN NAMES — in `degraded`, with its reason — is one
+   * the agent already knows about, so the refusal may say "not in mission"
+   * and carry the cause (M9). The same bytes as the raw call.
+   */
+  it("refuses a connector the token names as degraded exactly as the raw call is refused", async () => {
+    const narrow = {
+      ...CLAIMS,
+      connections: ["github"],
+      degraded: [{ system: "linear" as const, reason: "link_proposed" as const }],
+    };
     const { outer, linear } = rig({ claims: narrow });
     const op = await handle(outer.deps, post("linear.issues.for_entity"));
     const raw = await handle(
@@ -49,6 +59,30 @@ describe("the executor refuses like the pipeline refuses", () => {
     expect(bodyText(op.body)).toBe(bodyText(raw.body));
     expect(op.headers).toEqual(raw.headers);
     expect(linear.fetchCount()).toBe(0);
+  });
+
+  /**
+   * L6 — PoC D'. A connector the token does NOT name — not in
+   * `connections`, not in `degraded` — is one the agent must not learn
+   * exists from a refusal: a `[linear, github]` mission asking for a
+   * zendesk operation must read exactly as one asking for a name that is
+   * not in the catalogue. Status, code, envelope, body: the same bytes.
+   */
+  it("refuses a connector the token never names exactly as an unknown name", async () => {
+    const zendeskRig = approvalRig("zendesk", { allow: [] });
+    const narrowed = { ...zendeskRig.claims, connections: ["linear", "github"], degraded: [] };
+    zendeskRig.outer.deps.verifyToken = (): MissionClaims => narrowed;
+    const known = await handle(zendeskRig.outer.deps, post("zendesk.ticket.reply", "{}"));
+    const unknown = await handle(zendeskRig.outer.deps, post("zendesk.ticket.nope", "{}"));
+
+    expect(known.status).toBe(404);
+    expect(known.status).toBe(unknown.status);
+    expect(known.headers).toEqual(unknown.headers);
+    expect(bodyText(known.body)).toBe(bodyText(unknown.body));
+    expect(graphqlDenial(known.body).code).toBe("missura_operation_unknown");
+    expect(bodyText(known.body)).not.toContain("zendesk");
+    expect(zendeskRig.connector.fetchCount()).toBe(0);
+    expect(zendeskRig.store.pendingApprovals()).toEqual([]);
   });
 
   it("refuses an effect outside `allow` exactly as the raw call is refused", async () => {
